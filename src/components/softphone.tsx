@@ -161,18 +161,32 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
 
-  if (!state.twilioDevice) {
+  if (!state.twilioDevice && !state.audioPermissionsGranted) {
     return (
         <div className="p-4">
-            <Alert>
+            <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Softphone Offline</AlertTitle>
+                <AlertTitle>Microphone Access Required</AlertTitle>
                 <AlertDescription>
-                    Please grant microphone permissions to enable the softphone.
+                    Please grant microphone permissions to enable the softphone. You may need to refresh and try again.
                 </AlertDescription>
             </Alert>
         </div>
     )
+  }
+  
+  if (!state.twilioDevice && state.audioPermissionsGranted) {
+      return (
+          <div className="p-4">
+              <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Softphone Initializing...</AlertTitle>
+                  <AlertDescription>
+                      The softphone is getting ready. Please wait a moment.
+                  </AlertDescription>
+              </Alert>
+          </div>
+      )
   }
 
   return (
@@ -285,22 +299,28 @@ const ActiveCallView = () => {
 export default function Softphone() {
   const { state, dispatch } = useCall();
   const { toast } = useToast();
-  const { activeCall, softphoneOpen, twilioDevice, audioPermissionsGranted } = state;
+  const { activeCall, softphoneOpen, audioPermissionsGranted } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
+  
+  // Local state to track if we've attempted to get permissions
+  const [permissionRequested, setPermissionRequested] = useState(false);
 
   const handleCall = (number: string) => {
     dispatch({ type: 'START_OUTGOING_CALL', payload: { to: number } });
   };
   
   const handleToggle = async (open: boolean) => {
-    if (!audioPermissionsGranted && open) {
+    // Only request permissions if opening and haven't requested yet.
+    if (open && !audioPermissionsGranted && !permissionRequested) {
+        setPermissionRequested(true);
         try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
             // This is a workaround to ensure the audio context is resumed.
             // The Twilio SDK should handle this, but some browsers are strict.
+            await navigator.mediaDevices.getUserMedia({ audio: true });
             await Device.audio.availableDevices.get('input');
             await Device.audio.availableDevices.get('output');
+            
             dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
             toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
         } catch (err) {
@@ -308,10 +328,11 @@ export default function Softphone() {
             toast({
                 variant: 'destructive',
                 title: 'Permission Denied',
-                description: 'Microphone access is required to use the softphone.'
+                description: 'Microphone access is required. Please enable it in your browser settings and refresh the page.'
             });
             dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
-            // Don't open the softphone if permissions are denied
+            // Don't open the softphone if permissions are denied, but allow re-trying
+            setPermissionRequested(false); 
             return;
         }
     }
@@ -327,7 +348,6 @@ export default function Softphone() {
     return <Phone className="h-6 w-6" />;
   };
   
-  const isTriggerDisabled = !audioPermissionsGranted;
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
 
   return (
@@ -344,8 +364,7 @@ export default function Softphone() {
             <Button
               className={cn(
                 'h-16 w-16 rounded-full shadow-lg transition-colors duration-300',
-                isTriggerDisabled && 'bg-gray-500 hover:bg-gray-600',
-                !isTriggerDisabled && (activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90'),
+                activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90',
                 isRinging && 'animate-pulse'
               )}
               size="icon"
