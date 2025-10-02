@@ -99,7 +99,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
           <Image
-            src="https://storage.googleapis.com/aifire.appspot.com/project-assets/bigfoot-logo.png"
+            src="/saasquatchleads_logo_notext.png"
             alt="Caprae Capital Partners Logo"
             width={50}
             height={50}

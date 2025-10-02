@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const agentsEndpoint = process.env.NEXT_PUBLIC_AGENTS_API_ENDPOINT;
+  const agentsEndpoint = "https://7948d6a4aad9.ngrok-free.app/api/v1/agents";
 
   if (!agentsEndpoint) {
     return NextResponse.json(

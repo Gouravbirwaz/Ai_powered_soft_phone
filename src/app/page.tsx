@@ -35,22 +35,23 @@ export default function Home() {
   return (
     <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center space-x-4">
-        <Image
-          src="https://storage.googleapis.com/aifire.appspot.com/project-assets/bigfoot-logo.png"
-          alt="Caprae Capital Partners Logo"
-          width={40}
-          height={40}
-        />
-        <div>
-          <h1 className="text-3xl font-bold font-headline tracking-tight">
+    <Image
+        // FIX: The path must start at the root (/) and use forward slashes
+        src="/saasquatchleads_logo_notext.png" 
+        alt="Caprae Capital Partners Logo"
+        width={40}
+        height={40}
+    />
+    <div>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">
             Caprae Capital Partners
-          </h1>
-          <p className="text-sm text-muted-foreground">
+        </h1>
+        <p className="text-sm text-muted-foreground">
             Welcome, {state.currentAgent.name} | Your AI-powered softphone for
             enhanced productivity.
-          </p>
-        </div>
-      </div>
+        </p>
+    </div>
+</div>
 
       <Card>
         <CardHeader>
