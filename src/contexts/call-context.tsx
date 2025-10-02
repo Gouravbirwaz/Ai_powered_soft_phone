@@ -158,6 +158,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
              if (data && Array.isArray(data.leads)) {
                 return data.leads as Lead[];
             }
+             if (Array.isArray(data)) {
+                return data as Lead[];
+            }
         } catch (e) {
              if (e instanceof SyntaxError) {
                 const errorDetail = text.includes("<!DOCTYPE")
