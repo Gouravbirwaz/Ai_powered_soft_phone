@@ -1,0 +1,33 @@
+'use client';
+
+import { CallProvider, useCall } from '@/contexts/call-context';
+import { Toaster } from '@/components/ui/toaster';
+import Softphone from '@/components/softphone';
+import IncomingCallDialog from '@/components/incoming-call-dialog';
+import PostCallSheet from '@/components/post-call-sheet';
+
+function AppShell({ children }: { children: React.ReactNode }) {
+  const { state } = useCall();
+  const postCall = state.showPostCallSheetForId ? state.callHistory.find(c => c.id === state.showPostCallSheetForId) : null;
+
+  return (
+    <>
+      {children}
+      <Softphone />
+      <Toaster />
+      {state.showIncomingCall && state.activeCall && <IncomingCallDialog call={state.activeCall} />}
+      {postCall && <PostCallSheet call={postCall} />}
+    </>
+  );
+}
+
+
+export function AppProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <CallProvider>
+      <AppShell>
+        {children}
+      </AppShell>
+    </CallProvider>
+  );
+}

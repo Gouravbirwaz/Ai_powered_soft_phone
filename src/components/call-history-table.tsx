@@ -1,0 +1,195 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from './ui/button';
+import { ArrowDown, ArrowUp, Edit, PhoneIncoming, PhoneOutgoing, Voicemail } from 'lucide-react';
+import { useCall } from '@/contexts/call-context';
+import type { Call, CallDirection, CallStatus } from '@/lib/types';
+import { formatDuration } from '@/lib/utils';
+import { format, formatRelative } from 'date-fns';
+
+const StatusBadge = ({ status }: { status: CallStatus }) => {
+  const variant: { [key in CallStatus]?: 'default' | 'secondary' | 'destructive' | 'outline' } = {
+    completed: 'default',
+    'in-progress': 'default',
+    'voicemail-dropped': 'outline',
+    busy: 'secondary',
+    failed: 'destructive',
+    canceled: 'destructive',
+  };
+
+  const text: { [key in CallStatus]?: string } = {
+    'ringing-outgoing': 'Ringing',
+    'ringing-incoming': 'Ringing',
+    'in-progress': 'In Progress',
+    'voicemail-dropping': 'Voicemail Left',
+    'voicemail-dropped': 'Voicemail Left',
+  }
+
+  return (
+    <Badge variant={variant[status] || 'secondary'} className="capitalize">
+      {text[status] || status}
+    </Badge>
+  );
+};
+
+export default function CallHistoryTable() {
+  const { state, dispatch } = useCall();
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [directionFilter, setDirectionFilter] = useState<CallDirection | 'all'>('all');
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
+
+  const handleSort = (key: keyof Call) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const handleEditNotes = (callId: string) => {
+    dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
+  }
+
+  const filteredAndSortedCalls = useMemo(() => {
+    let filtered = [...state.callHistory];
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((call) => call.status === statusFilter);
+    }
+    if (directionFilter !== 'all') {
+      filtered = filtered.filter((call) => call.direction === directionFilter);
+    }
+    if (sortConfig !== null) {
+      filtered.sort((a, b) => {
+        if (a[sortConfig.key]! < b[sortConfig.key]!) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (a[sortConfig.key]! > b[sortConfig.key]!) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [state.callHistory, statusFilter, directionFilter, sortConfig]);
+
+  const allStatuses = useMemo(() => ['all', ...Array.from(new Set(state.callHistory.map(c => c.status)))], [state.callHistory]);
+
+  const SortableHeader = ({ tkey, label }: { tkey: keyof Call; label: string }) => (
+    <TableHead onClick={() => handleSort(tkey)} className="cursor-pointer">
+      <div className="flex items-center gap-2">
+        {label}
+        {sortConfig?.key === tkey && (sortConfig.direction === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />)}
+      </div>
+    </TableHead>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center space-x-2">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            {allStatuses.map(status => (
+              <SelectItem key={status} value={status} className="capitalize">{status}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as CallDirection | 'all')}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by direction" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Directions</SelectItem>
+            <SelectItem value="incoming">Incoming</SelectItem>
+            <SelectItem value="outgoing">Outgoing</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px]">Type</TableHead>
+              <TableHead>Contact</TableHead>
+              <SortableHeader tkey="status" label="Status" />
+              <SortableHeader tkey="duration" label="Duration" />
+              <SortableHeader tkey="startTime" label="Timestamp" />
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredAndSortedCalls.length > 0 ? (
+              filteredAndSortedCalls.map((call) => (
+                <TableRow key={call.id}>
+                  <TableCell>
+                    {call.direction === 'incoming' ? (
+                      <PhoneIncoming className="h-5 w-5 text-blue-500" />
+                    ) : (
+                      <PhoneOutgoing className="h-5 w-5 text-green-500" />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
+                        <AvatarFallback>{(call.direction === 'incoming' ? call.from[0] : call.to[0]) || '?'}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium">{call.direction === 'incoming' ? call.from : call.to}</div>
+                        {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={call.status} />
+                  </TableCell>
+                  <TableCell>{formatDuration(call.duration)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                        <span className='font-medium'>{formatRelative(new Date(call.startTime), new Date())}</span>
+                        <span className='text-sm text-muted-foreground'>{format(new Date(call.startTime), 'p')}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)}>
+                      <Edit className="h-4 w-4" />
+                      <span className="sr-only">Edit Notes</span>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center">
+                  No calls found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
