@@ -141,50 +141,32 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, []);
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
-    const endpoint = process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT;
-    if (!endpoint) {
-        toast({ variant: 'destructive', title: 'Configuration Error', description: 'Leads API endpoint is not configured.' });
-        return [];
-    }
     try {
-        const response = await fetch(endpoint, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          }
-        });
+        const response = await fetch('/api/leads');
+        
         if (!response.ok) {
             throw new Error(`Failed to fetch leads. Status: ${response.status}`);
         }
-        const text = await response.text();
         
-        try {
-            const data = JSON.parse(text);
-            console.log("Fetched data:", data); // Log the data to see what we received
+        const data = await response.json();
+        console.log("Fetched data:", data);
 
-            if (data && Array.isArray(data.leads)) {
-                return data.leads as Lead[];
-            }
-            // This handles cases where the API might just return an array of leads directly
-            if (Array.isArray(data)) {
-                return data as Lead[];
-            }
-        } catch (e) {
-             if (e instanceof SyntaxError) {
-                const errorDetail = text.includes("<!DOCTYPE")
-                    ? `The API returned an HTML page instead of JSON. This might be an ngrok error page. Please check if your local server and ngrok tunnel are running correctly.`
-                    : `An unexpected error occurred while parsing the server response.`;
-                console.error("Fetch leads error: SyntaxError: " + e.message, "Response was:", text);
-                toast({
-                    variant: 'destructive',
-                    title: 'API Error',
-                    description: errorDetail
-                });
-                return [];
-             }
-             throw e;
+        if (data && Array.isArray(data.leads)) {
+            return data.leads as Lead[];
         }
-
+        
+        if (Array.isArray(data)) {
+            return data as Lead[];
+        }
+        
+        console.error("API response is not in the expected format.", data);
+        toast({
+            variant: 'destructive',
+            title: 'API Error',
+            description: 'Received unexpected data format from the leads API.'
+        });
         return [];
+
     } catch (error: any) {
         console.error("Fetch leads error:", error);
         
