@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -28,6 +29,9 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import type { Lead } from '@/lib/types';
+import LeadsDialog from './leads-dialog';
+
 
 const DialpadButton = ({
   digit,
@@ -108,30 +112,31 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 
 
 const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
-    const { state, fetchLeads, startOutgoingCall } = useCall();
+    const { state, fetchLeads } = useCall();
     const { toast } = useToast();
+    const [isFetching, setIsFetching] = useState(false);
+    const [showLeadsDialog, setShowLeadsDialog] = useState(false);
+    const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
     
-    const handleFetchAndCall = async () => {
+    const handleFetchLeads = async () => {
         if (state.activeCall) {
-            toast({ title: 'Already in a call', variant: 'destructive' });
+            toast({ title: 'Finish current call first', variant: 'destructive' });
             return;
         }
+        setIsFetching(true);
         const leads = await fetchLeads();
         if(leads && leads.length > 0) {
-            const lead = leads[0];
-            const phoneNumber = lead.phone || lead.company_phone;
-            if (phoneNumber) {
-                startOutgoingCall(phoneNumber);
-            } else {
-                toast({ title: 'No phone number for lead', variant: 'destructive' });
-            }
+            setFetchedLeads(leads);
+            setShowLeadsDialog(true);
         } else {
-            toast({ title: 'No leads available', variant: 'destructive' });
+            toast({ title: 'No leads available', description: 'Could not fetch any leads at this time.', variant: 'destructive' });
         }
+        setIsFetching(false);
     }
 
 
   return (
+      <>
       <div className="p-4">
           <Card>
               <CardContent className="p-4">
@@ -144,15 +149,21 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleFetchAndCall}>
-                              <List className="mr-2" />
-                              Fetch Next Lead
+                          <Button variant="secondary" onClick={handleFetchLeads} disabled={isFetching || !!state.activeCall}>
+                              {isFetching ? <Loader2 className="mr-2 animate-spin"/> : <List className="mr-2" />}
+                              Fetch Leads
                           </Button>
                       </div>
                   </div>
               </CardContent>
           </Card>
       </div>
+      <LeadsDialog 
+        open={showLeadsDialog}
+        onOpenChange={setShowLeadsDialog}
+        leads={fetchedLeads}
+      />
+      </>
   );
 };
 
