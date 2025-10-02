@@ -73,8 +73,9 @@ export interface Lead {
 }
 
 export interface Agent {
-    agent_id: string;
+    id: number;
     name: string;
     email: string;
-    phone_number: string;
+    phone: string;
+    status: string;
 }

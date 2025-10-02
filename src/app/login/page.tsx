@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -22,16 +23,9 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
-// Define a simplified Agent type for the component's internal state
-// to ensure the 'id' is treated as a string for React keys/values.
-interface AgentStringId extends Omit<Agent, 'agent_id'> {
-    id: string;
-    agent_id: string;
-}
-
 export default function LoginPage() {
   const { fetchAgents, loginAsAgent, state } = useCall();
-  const [agents, setAgents] = useState<AgentStringId[]>([]); // Use the string ID interface
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string>(''); 
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -46,19 +40,11 @@ export default function LoginPage() {
     const getAgents = async () => {
       setIsLoading(true);
       const fetchedData = await fetchAgents();
-      // Ensure we access the correct key from the API response
       const fetchedAgents = fetchedData || [];
       
-      // Filter out agents with invalid ID and map to ensure ID is a string
-      const validAgents: AgentStringId[] = fetchedAgents
-        .filter(agent => 
-            agent.agent_id !== undefined && agent.agent_id !== null && String(agent.agent_id).trim() !== ''
-        )
-        .map(agent => ({
-            ...agent,
-            // CRITICAL FIX: Ensure the ID is a string for React/Select component compatibility
-            id: String(agent.agent_id) 
-        }));
+      const validAgents = fetchedAgents.filter(agent => 
+          agent.id !== undefined && agent.id !== null
+      );
 
       if (process.env.NODE_ENV === 'development') {
           if (validAgents.length !== fetchedAgents.length) {
@@ -69,7 +55,7 @@ export default function LoginPage() {
       setAgents(validAgents);
       
       if (validAgents.length > 0) {
-        setSelectedId(validAgents[0].id);
+        setSelectedId(String(validAgents[0].id));
       } else {
         setSelectedId('');
       }
@@ -80,11 +66,8 @@ export default function LoginPage() {
   }, [fetchAgents]);
 
   const handleLogin = () => {
-    // Find the original agent object based on the selected string ID
-    const agentToLogin = agents.find((agent) => agent.id === selectedId);
+    const agentToLogin = agents.find((agent) => String(agent.id) === selectedId);
     
-    // We assume loginAsAgent expects the original 'Agent' type, 
-    // so we pass the object retrieved from our mapped list.
     if (agentToLogin) {
       loginAsAgent(agentToLogin);
       router.push('/');
@@ -113,7 +96,6 @@ export default function LoginPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Ensure the Select component is controlled by the string state */}
               <Select value={selectedId} onValueChange={setSelectedId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select an agent..." />
@@ -121,9 +103,8 @@ export default function LoginPage() {
                 <SelectContent>
                   {agents.map((agent) => (
                       <SelectItem 
-                          // Both key and value must be strings
                           key={agent.id} 
-                          value={agent.id}
+                          value={String(agent.id)}
                       >
                         {agent.name}
                       </SelectItem>
@@ -133,7 +114,6 @@ export default function LoginPage() {
               <Button
                 className="w-full"
                 onClick={handleLogin}
-                // Check if a valid ID (non-empty string) is selected
                 disabled={!selectedId}
               >
                 Login
