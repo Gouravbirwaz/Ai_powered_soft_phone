@@ -10,22 +10,19 @@ import {
   Voicemail,
   Clock,
   CircleDotDashed,
+  Move,
 } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useCall } from '@/contexts/call-context';
 import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Badge } from './ui/badge';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 
 const DialpadButton = ({
   digit,
@@ -165,6 +162,8 @@ const ActiveCallView = () => {
 export default function Softphone() {
   const { state, dispatch } = useCall();
   const { activeCall, softphoneOpen } = state;
+  const dragControls = useDragControls();
+  const constraintsRef = useRef(null);
 
   const handleCall = (number: string) => {
     dispatch({ type: 'START_OUTGOING_CALL', payload: { to: number } });
@@ -185,53 +184,69 @@ export default function Softphone() {
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
 
   return (
-    <Popover open={softphoneOpen} onOpenChange={handleToggle}>
-      <PopoverTrigger asChild>
-        <Button
-          className={cn(
-            'fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg z-50 transition-colors duration-300',
-            activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary hover:bg-primary/90',
-            isRinging && 'animate-pulse'
-          )}
-          size="icon"
-        >
-          {getTriggerIcon()}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="end"
-        className="w-80 rounded-2xl shadow-2xl p-0 border-0 mb-2"
-        sideOffset={16}
+    <div ref={constraintsRef} className="fixed inset-0 pointer-events-none">
+      <motion.div
+        drag
+        dragControls={dragControls}
+        dragConstraints={constraintsRef}
+        dragListener={false}
+        className="absolute bottom-6 right-6 z-50 pointer-events-auto"
       >
-          <Card className="border-0 shadow-none">
-            <CardContent className="p-0">
-              <AnimatePresence mode="wait">
-                {activeCall ? (
-                  <motion.div
-                    key="active-call"
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ActiveCallView />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="dialpad"
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <DialpadView onCall={handleCall} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </CardContent>
-          </Card>
-      </PopoverContent>
-    </Popover>
+        <Popover open={softphoneOpen} onOpenChange={handleToggle}>
+          <PopoverTrigger asChild>
+            <Button
+              className={cn(
+                'h-16 w-16 rounded-full shadow-lg transition-colors duration-300',
+                activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                isRinging && 'animate-pulse'
+              )}
+              size="icon"
+            >
+              {getTriggerIcon()}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="end"
+            className="w-80 rounded-2xl shadow-2xl p-0 border-0 mb-2"
+            sideOffset={16}
+          >
+              <Card className="border-0 shadow-none">
+                <div
+                  onPointerDown={(e) => dragControls.start(e)}
+                  className="absolute top-2 right-2 cursor-grab active:cursor-grabbing p-2 text-muted-foreground"
+                >
+                  <Move className="h-4 w-4" />
+                </div>
+                <CardContent className="p-0">
+                  <AnimatePresence mode="wait">
+                    {activeCall ? (
+                      <motion.div
+                        key="active-call"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ActiveCallView />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="dialpad"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <DialpadView onCall={handleCall} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+              </Card>
+          </PopoverContent>
+        </Popover>
+      </motion.div>
+    </div>
   );
 }
