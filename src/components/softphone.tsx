@@ -11,6 +11,7 @@ import {
   Clock,
   CircleDotDashed,
   Move,
+  List,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { useCall } from '@/contexts/call-context';
 import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
+import { useToast } from '@/hooks/use-toast';
 
 const DialpadButton = ({
   digit,
@@ -43,7 +45,7 @@ const DialpadButton = ({
   </Button>
 );
 
-const DialpadView = ({ onCall }: { onCall: (number: string) => void }) => {
+const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onBack: () => void }) => {
   const [number, setNumber] = useState('');
 
   const handleKeyPress = (digit: string) => {
@@ -79,17 +81,94 @@ const DialpadView = ({ onCall }: { onCall: (number: string) => void }) => {
         <DialpadButton digit="0" letters="+" onPress={handleKeyPress} />
         <DialpadButton digit="#" letters="" onPress={handleKeyPress} />
       </div>
-      <Button
-        size="lg"
-        className="w-full bg-green-500 hover:bg-green-600 rounded-full h-14"
-        onClick={handleCall}
-        disabled={!number}
-      >
-        <Phone className="mr-2 h-5 w-5" /> Call
-      </Button>
+      <div className="flex w-full gap-2">
+         <Button
+            size="lg"
+            variant="secondary"
+            className="flex-1 rounded-full h-14"
+            onClick={onBack}
+          >
+            Back
+          </Button>
+        <Button
+          size="lg"
+          className="flex-1 bg-green-500 hover:bg-green-600 rounded-full h-14"
+          onClick={handleCall}
+          disabled={!number}
+        >
+          <Phone className="mr-2 h-5 w-5" /> Call
+        </Button>
+      </div>
     </div>
   );
 };
+
+
+const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: () => void }) => {
+  return (
+      <div className="p-4">
+          <Card>
+              <CardContent className="p-4">
+                  <div className="flex flex-col items-center justify-center gap-4">
+                      <p className="text-center sm:text-left text-muted-foreground">
+                          Start a new call:
+                      </p>
+                      <div className="flex flex-col gap-2 w-full">
+                          <Button onClick={onDial}>
+                              <Phone className="mr-2" />
+                              Dial Number
+                          </Button>
+                          <Button variant="secondary" onClick={onFetchLead}>
+                              <List className="mr-2" />
+                              Fetch Next Lead
+                          </Button>
+                      </div>
+                  </div>
+              </CardContent>
+          </Card>
+      </div>
+  );
+};
+
+
+const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
+  const [view, setView] = useState<'choice' | 'dialpad'>('choice');
+  const { toast } = useToast();
+
+  const handleFetchLead = () => {
+    toast({
+      title: 'Feature Coming Soon',
+      description: 'Fetching leads from a database is not yet implemented.',
+    });
+  };
+
+  return (
+    <AnimatePresence mode="wait">
+      {view === 'choice' ? (
+        <motion.div
+          key="choice"
+          initial={{ opacity: 0, x: -50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 50 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChoiceView onDial={() => setView('dialpad')} onFetchLead={handleFetchLead} />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="dialpad"
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.2 }}
+        >
+          <DialpadView onCall={onCall} onBack={() => setView('choice')} />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 
 const ActiveCallView = () => {
   const { state, dispatch } = useCall();
@@ -122,7 +201,7 @@ const ActiveCallView = () => {
   const statusInfo = getStatusInfo();
   
   return (
-    <div className="flex flex-col items-center justify-between p-4 h-full">
+    <div className="flex flex-col items-center justify-between p-4 h-full min-h-[500px]">
       <div className="text-center mt-8">
         <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
         <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
@@ -178,7 +257,7 @@ export default function Softphone() {
   const getTriggerIcon = () => {
     if (activeCall?.status === 'ringing-incoming') return <PhoneIncoming className="h-6 w-6" />;
     if (activeCall) return <Phone className="h-6 w-6" />;
-    return <Grid3x3 className="h-6 w-6" />;
+    return <Phone className="h-6 w-6" />;
   };
 
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
@@ -231,15 +310,7 @@ export default function Softphone() {
                         <ActiveCallView />
                       </motion.div>
                     ) : (
-                      <motion.div
-                        key="dialpad"
-                        initial={{ opacity: 0, x: 50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -50 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <DialpadView onCall={handleCall} />
-                      </motion.div>
+                       <DialerContainer onCall={handleCall} />
                     )}
                   </AnimatePresence>
                 </CardContent>

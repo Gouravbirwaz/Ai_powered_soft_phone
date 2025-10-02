@@ -1,5 +1,4 @@
 import CallHistoryTable from '@/components/call-history-table';
-import LeadActions from '@/components/lead-actions';
 import { AppLogo } from '@/components/icons';
 import {
   Card,
@@ -23,8 +22,6 @@ export default function Home() {
           </p>
         </div>
       </div>
-
-      <LeadActions />
 
       <Card>
         <CardHeader>
