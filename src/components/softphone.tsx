@@ -13,6 +13,7 @@ import {
   Move,
   List,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,7 @@ import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { Call as TwilioCall, Device } from '@twilio/voice-sdk';
+import { Call as TwilioCall } from '@twilio/voice-sdk';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 const DialpadButton = ({
@@ -107,7 +108,7 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 };
 
 
-const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: () => void }) => {
+const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
     const { state, fetchLeads, dispatch } = useCall();
     const { toast } = useToast();
     
@@ -159,7 +160,7 @@ const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: 
 
 const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
-  const { state } = useCall();
+  const { state, dispatch } = useCall();
 
   if (!state.audioPermissionsGranted) {
     return (
@@ -175,14 +176,22 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
     )
   }
   
-  if (!state.twilioDevice) {
+  if (state.twilioDeviceStatus !== 'ready') {
       return (
           <div className="p-4">
               <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Softphone Initializing...</AlertTitle>
+                  {state.twilioDeviceStatus === 'initializing' ? 
+                    <Loader2 className="h-4 w-4 animate-spin" /> : 
+                    <AlertCircle className="h-4 w-4" />}
+                  <AlertTitle>
+                    {state.twilioDeviceStatus === 'initializing' && 'Softphone Initializing...'}
+                    {state.twilioDeviceStatus === 'error' && 'Initialization Failed'}
+                    {state.twilioDeviceStatus === 'uninitialized' && 'Softphone Not Ready'}
+                  </AlertTitle>
                   <AlertDescription>
-                      The softphone is getting ready. Please wait a moment.
+                    {state.twilioDeviceStatus === 'initializing' && 'The softphone is getting ready. Please wait a moment.'}
+                    {state.twilioDeviceStatus === 'error' && 'Could not connect to the calling service. Please try again.'}
+                    {state.twilioDeviceStatus === 'uninitialized' && 'Click the phone icon to start.'}
                   </AlertDescription>
               </Alert>
           </div>
@@ -199,7 +208,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
           exit={{ opacity: 0, x: 50 }}
           transition={{ duration: 0.2 }}
         >
-          <ChoiceView onDial={() => setView('dialpad')} onFetchLead={() => {}} />
+          <ChoiceView onDial={() => setView('dialpad')} />
         </motion.div>
       ) : (
         <motion.div
@@ -226,14 +235,15 @@ const ActiveCallView = () => {
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (activeCall?.status === 'in-progress' && activeCall.startTime) {
+      setDuration(Math.floor((Date.now() - activeCall.startTime) / 1000));
       interval = setInterval(() => {
-        setDuration(Math.floor((Date.now() - activeCall.startTime) / 1000));
+        setDuration(d => d + 1);
       }, 1000);
     }
     return () => {
         if(interval) clearInterval(interval);
     };
-  }, [activeCall]);
+  }, [activeCall?.status, activeCall?.startTime]);
   
   useEffect(() => {
     if (activeCall?.twilioInstance) {
@@ -310,7 +320,7 @@ const ActiveCallView = () => {
 
 
 export default function Softphone() {
-  const { state, dispatch } = useCall();
+  const { state, dispatch, initializeTwilioDevice } = useCall();
   const { toast } = useToast();
   const { activeCall, softphoneOpen, audioPermissionsGranted } = state;
   const dragControls = useDragControls();
@@ -321,20 +331,27 @@ export default function Softphone() {
   };
   
   const handleToggle = async (open: boolean) => {
-    if (open && !audioPermissionsGranted) {
-        try {
-            await navigator.mediaDevices.getUserMedia({ audio: true });
-            dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
-            toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
-        } catch (err) {
-            console.error('Error getting audio permissions:', err);
-            toast({
-                variant: 'destructive',
-                title: 'Permission Denied',
-                description: 'Microphone access is required. Please enable it in your browser settings.'
-            });
-            dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
-            return; // Don't open the popover if permission is denied
+    if (open) {
+        if (!audioPermissionsGranted) {
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
+                toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
+                initializeTwilioDevice();
+            } catch (err) {
+                console.error('Error getting audio permissions:', err);
+                toast({
+                    variant: 'destructive',
+                    title: 'Permission Denied',
+                    description: 'Microphone access is required. Please enable it in your browser settings.'
+                });
+                dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
+                dispatch({ type: 'TOGGLE_SOFTPHONE' }); // Close the popover
+                return;
+            }
+        }
+        if (state.twilioDeviceStatus === 'uninitialized') {
+          initializeTwilioDevice();
         }
     }
     
