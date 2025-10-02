@@ -3,7 +3,7 @@ import './globals.css';
 import { AppProvider } from '@/components/app-provider';
 
 export const metadata: Metadata = {
-  title: 'Twilio Talk',
+  title: 'Caprae Capital Partners',
   description: 'AI-powered softphone for your business.',
 };
 

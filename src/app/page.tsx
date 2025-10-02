@@ -15,7 +15,7 @@ export default function Home() {
         <AppLogo className="h-10 w-10 text-primary" />
         <div>
           <h1 className="text-3xl font-bold font-headline tracking-tight">
-            Twilio Talk
+            Caprae Capital Partners
           </h1>
           <p className="text-sm text-muted-foreground">
             Your recent call activity.
