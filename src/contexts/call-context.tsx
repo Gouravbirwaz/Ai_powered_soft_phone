@@ -147,7 +147,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return [];
     }
     try {
-        const response = await fetch(endpoint);
+        const response = await fetch(endpoint, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
         if (!response.ok) {
             throw new Error(`Failed to fetch leads. Status: ${response.status}`);
         }
