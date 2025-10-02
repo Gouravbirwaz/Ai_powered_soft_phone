@@ -15,18 +15,10 @@ import { Phone, PhoneIncoming, PhoneOff } from 'lucide-react';
 import React from 'react';
 
 export default function IncomingCallDialog({ call }: { call: Call }) {
-  const { dispatch } = useCall();
-
-  const handleAccept = () => {
-    dispatch({ type: 'ACCEPT_CALL' });
-  };
-
-  const handleReject = () => {
-    dispatch({ type: 'REJECT_CALL' });
-  };
+  const { acceptIncomingCall, rejectIncomingCall } = useCall();
 
   return (
-    <AlertDialog open={true} onOpenChange={(open) => !open && handleReject()}>
+    <AlertDialog open={true} onOpenChange={(open) => !open && rejectIncomingCall()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center justify-center text-center gap-2 text-xl">
@@ -40,14 +32,14 @@ export default function IncomingCallDialog({ call }: { call: Call }) {
         <AlertDialogFooter className="sm:justify-center gap-4 pt-4">
           <Button
             variant="destructive"
-            onClick={handleReject}
+            onClick={rejectIncomingCall}
             className="w-full sm:w-auto"
           >
             <PhoneOff className="mr-2 h-4 w-4" />
             Reject
           </Button>
           <Button
-            onClick={handleAccept}
+            onClick={acceptIncomingCall}
             className="w-full sm:w-auto bg-green-500 hover:bg-green-600"
           >
             <Phone className="mr-2 h-4 w-4" />

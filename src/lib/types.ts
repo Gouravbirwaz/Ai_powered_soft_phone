@@ -1,4 +1,4 @@
-import { Call as TwilioCall } from '@twilio/voice-sdk';
+import { type Call as TwilioCall } from '@twilio/voice-sdk';
 
 export type CallStatus =
   | 'queued'
@@ -26,7 +26,7 @@ export interface Call {
   notes?: string;
   summary?: string;
   avatarUrl?: string;
-  twilioInstance?: TwilioCall;
+  // twilioInstance is removed from here to prevent putting non-serializable objects in state
 }
 
 export interface Lead {
@@ -48,7 +48,7 @@ export interface Lead {
     edited_by: string | null;
     employees: number;
     industry: string;
-    is_edited: boolean;
+    is_edited: false;
     lead_id: string;
     owner_email: string;
     owner_first_name: string;

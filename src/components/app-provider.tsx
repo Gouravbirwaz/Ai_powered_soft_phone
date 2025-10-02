@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 import Softphone from '@/components/softphone';
 import IncomingCallDialog from '@/components/incoming-call-dialog';
 import PostCallSheet from '@/components/post-call-sheet';
+import { useEffect } from 'react';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { state } = useCall();

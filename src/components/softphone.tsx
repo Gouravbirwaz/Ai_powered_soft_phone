@@ -27,7 +27,6 @@ import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { Call as TwilioCall } from '@twilio/voice-sdk';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 const DialpadButton = ({
@@ -109,7 +108,7 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 
 
 const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
-    const { state, fetchLeads, dispatch } = useCall();
+    const { state, fetchLeads, startOutgoingCall } = useCall();
     const { toast } = useToast();
     
     const handleFetchAndCall = async () => {
@@ -122,7 +121,7 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
             const lead = leads[0];
             const phoneNumber = lead.phone || lead.company_phone;
             if (phoneNumber) {
-                dispatch({ type: 'START_OUTGOING_CALL', payload: { to: phoneNumber } });
+                startOutgoingCall(phoneNumber);
             } else {
                 toast({ title: 'No phone number for lead', variant: 'destructive' });
             }
@@ -160,7 +159,7 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
 
 const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
-  const { state, dispatch } = useCall();
+  const { state } = useCall();
 
   if (!state.audioPermissionsGranted) {
     return (
@@ -227,10 +226,11 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
 
 
 const ActiveCallView = () => {
-  const { state, dispatch } = useCall();
+  const { state, endActiveCall, getActiveTwilioCall } = useCall();
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const twilioCall = getActiveTwilioCall();
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -246,25 +246,24 @@ const ActiveCallView = () => {
   }, [activeCall?.status, activeCall?.startTime]);
   
   useEffect(() => {
-    if (activeCall?.twilioInstance) {
-        const twilioCall = activeCall.twilioInstance;
+    const currentTwilioCall = getActiveTwilioCall();
+    if (currentTwilioCall) {
         const handleMute = (muted: boolean) => setIsMuted(muted);
-        twilioCall.on('mute', handleMute);
-        setIsMuted(twilioCall.isMuted());
+        currentTwilioCall.on('mute', handleMute);
+        setIsMuted(currentTwilioCall.isMuted());
         return () => {
-            twilioCall.off('mute', handleMute);
+            currentTwilioCall.off('mute', handleMute);
         }
     }
-  }, [activeCall?.twilioInstance])
+  }, [getActiveTwilioCall, activeCall]);
 
 
   if (!activeCall) return null;
   
-  const twilioCall = activeCall.twilioInstance;
-
   const handleMute = () => {
-    if (twilioCall) {
-        twilioCall.mute(!isMuted);
+    const currentTwilioCall = getActiveTwilioCall();
+    if (currentTwilioCall) {
+      currentTwilioCall.mute(!isMuted);
     }
   }
 
@@ -310,7 +309,7 @@ const ActiveCallView = () => {
         size="lg"
         variant="destructive"
         className="w-full rounded-full h-14"
-        onClick={() => dispatch({ type: 'END_CALL' })}
+        onClick={endActiveCall}
       >
         <PhoneOff className="mr-2 h-5 w-5" /> End Call
       </Button>
@@ -320,14 +319,14 @@ const ActiveCallView = () => {
 
 
 export default function Softphone() {
-  const { state, dispatch, initializeTwilioDevice } = useCall();
+  const { state, dispatch, startOutgoingCall, initializeTwilio } = useCall();
   const { toast } = useToast();
-  const { activeCall, softphoneOpen, audioPermissionsGranted } = state;
+  const { activeCall, softphoneOpen, audioPermissionsGranted, twilioDeviceStatus } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
   
   const handleCall = (number: string) => {
-    dispatch({ type: 'START_OUTGOING_CALL', payload: { to: number } });
+    startOutgoingCall(number);
   };
   
   const handleToggle = async (open: boolean) => {
@@ -337,7 +336,8 @@ export default function Softphone() {
                 await navigator.mediaDevices.getUserMedia({ audio: true });
                 dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
                 toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
-                initializeTwilioDevice();
+                // Now that we have permission, initialize Twilio
+                initializeTwilio();
             } catch (err) {
                 console.error('Error getting audio permissions:', err);
                 toast({
@@ -346,18 +346,15 @@ export default function Softphone() {
                     description: 'Microphone access is required. Please enable it in your browser settings.'
                 });
                 dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
-                dispatch({ type: 'TOGGLE_SOFTPHONE' }); // Close the popover
-                return;
+                return; // Don't open popover
             }
-        }
-        if (state.twilioDeviceStatus === 'uninitialized') {
-          initializeTwilioDevice();
+        } else if (twilioDeviceStatus === 'uninitialized') {
+          // Permissions were already granted, but device isn't set up.
+          initializeTwilio();
         }
     }
     
-    if(softphoneOpen !== open) {
-      dispatch({ type: 'TOGGLE_SOFTPHONE' });
-    }
+    dispatch({ type: 'TOGGLE_SOFTPHONE' });
   }
 
   const getTriggerIcon = () => {
