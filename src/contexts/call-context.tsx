@@ -182,6 +182,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const initializeTwilio = useCallback(async () => {
     if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || state.twilioDeviceStatus === 'ready') {
+      console.log('Twilio already initialized or in progress.');
       return;
     }
     
@@ -194,8 +195,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const { token } = await tokenRes.json();
       
       const device = new Device(token, { codecPreferences: ['opus', 'pcmu'] });
-      setupTwilioListeners(device);
+      await device.register();
+
       twilioDeviceRef.current = device;
+      setupTwilioListeners(device);
       
     } catch (error: any) {
       console.error("Twilio initialization error:", error);
@@ -227,10 +230,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       
       twilioCall.on('disconnect', () => {
         console.log('Outgoing call disconnected');
+        const currentCall = activeTwilioCallRef.current;
+        const callStartTime = state.activeCall?.startTime || newCall.startTime;
+
         const finalCall = {
-            ...newCall,
+            ...(state.activeCall || newCall),
             status: 'completed' as const,
-            duration: Math.floor((Date.now() - newCall.startTime) / 1000)
+            duration: Math.floor((Date.now() - callStartTime) / 1000)
         };
         activeTwilioCallRef.current = null;
         handleCallEnded(finalCall);
@@ -247,7 +253,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         console.error("Error starting outgoing call:", error);
         toast({ title: 'Failed to start call', variant: 'destructive' });
     }
-  }, [state.twilioDeviceStatus, toast, createCallObjectFromTwilio, handleCallEnded]);
+  }, [state.twilioDeviceStatus, toast, createCallObjectFromTwilio, handleCallEnded, state.activeCall]);
 
   const acceptIncomingCall = useCallback(() => {
     if (!activeTwilioCallRef.current || !state.activeCall) return;
