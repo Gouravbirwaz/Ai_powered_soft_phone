@@ -155,10 +155,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         
         try {
             const data = JSON.parse(text);
-             if (data && Array.isArray(data.leads)) {
+            console.log("Fetched data:", data); // Log the data to see what we received
+
+            if (data && Array.isArray(data.leads)) {
                 return data.leads as Lead[];
             }
-             if (Array.isArray(data)) {
+            // This handles cases where the API might just return an array of leads directly
+            if (Array.isArray(data)) {
                 return data as Lead[];
             }
         } catch (e) {
