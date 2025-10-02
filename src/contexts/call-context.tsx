@@ -185,12 +185,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   // 1. Fetch token when permissions are granted
   useEffect(() => {
-    if (state.audioPermissionsGranted) {
+    if (state.audioPermissionsGranted && !token) {
       const fetchToken = async () => {
         try {
           const response = await fetch('/api/token');
           if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Server responded with ${response.status}`);
           }
           const data = await response.json();
           if (data.token) {
@@ -198,24 +199,32 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           } else {
             toast({ variant: 'destructive', title: 'Token Error', description: data.error || 'Could not fetch Twilio token.' });
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Fetch token error:', error);
-          toast({ variant: 'destructive', title: 'Network Error', description: 'Could not fetch Twilio token.' });
+          toast({ variant: 'destructive', title: 'Network Error', description: error.message || 'Could not fetch Twilio token.' });
         }
       };
       fetchToken();
     }
-  }, [state.audioPermissionsGranted, toast]);
+  }, [state.audioPermissionsGranted, token, toast]);
   
   // 2. Initialize device when token is available
   useEffect(() => {
-    if (!token) return;
+    if (!token || state.twilioDevice) return;
 
-    const device = new Device(token, {
-      codecPreferences: ['opus', 'pcmu'],
-      // @ts-ignore
-      debug: process.env.NODE_ENV === 'development',
-    });
+    let device: Device;
+    try {
+        device = new Device(token, {
+            codecPreferences: ['opus', 'pcmu'],
+            // @ts-ignore
+            debug: process.env.NODE_ENV === 'development',
+        });
+    } catch (e) {
+        console.error("Error initializing Twilio Device:", e);
+        toast({ variant: 'destructive', title: 'Twilio Error', description: "Failed to create Twilio device." });
+        return;
+    }
+
 
     const onReady = (d: Device) => {
         dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: d } });
@@ -225,7 +234,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const onError = (error: any) => {
         console.error('Twilio Device Error:', error);
         toast({ variant: 'destructive', title: 'Twilio Error', description: error.message });
-        // Maybe try to re-register
         device.destroy();
         dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
         setToken(null); // This will trigger a re-fetch
@@ -282,8 +290,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     device.on('incoming', onIncoming);
     device.on('connect', onOutgoing); // For outgoing calls
 
-    // Set device immediately for UI feedback
-    dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device } });
+    // Set device immediately for UI feedback, though 'ready' is the true indicator
+    // dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device } });
 
     return () => {
       device.off('ready', onReady);
@@ -293,25 +301,31 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       device.destroy();
       dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
     }
-  }, [token, toast]); // Removed state dependency to avoid re-runs
+  }, [token, toast, state.twilioDevice, state.activeCall]); // Added dependencies
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
-    if (!process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT) {
+    const endpoint = process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT;
+    if (!endpoint) {
         toast({ variant: 'destructive', title: 'Configuration Error', description: 'Leads API endpoint is not configured.' });
         return [];
     }
     try {
-        const response = await fetch(process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT);
+        const response = await fetch(endpoint);
         if (!response.ok) {
-            throw new Error('Failed to fetch leads');
+            throw new Error(`Failed to fetch leads. Status: ${response.status}`);
         }
         const data = await response.json();
-        return data.leads as Lead[];
+        // Check if the 'leads' property exists and is an array
+        if (data && Array.isArray(data.leads)) {
+          return data.leads as Lead[];
+        }
+        // Handle cases where the API returns a success status but no 'leads' array
+        return [];
     } catch (error) {
-        console.error(error);
+        console.error("Fetch leads error:", error);
         toast({
             variant: 'destructive',
-            title: 'Error',
+            title: 'API Error',
             description: (error as Error).message || 'Could not fetch leads.'
         });
         return [];
@@ -332,5 +346,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
