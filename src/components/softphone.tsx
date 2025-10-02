@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Dialpad,
+  Grid3x3,
   Phone,
   PhoneIncoming,
   PhoneOff,
@@ -140,7 +140,7 @@ const ActiveCallView = () => {
           <span className="text-xs mt-1">Mute</span>
         </Button>
         <Button variant="outline" className="h-16 w-16 rounded-full flex-col">
-          <Dialpad />
+          <Grid3x3 />
           <span className="text-xs mt-1">Keypad</span>
         </Button>
         <Button variant="outline" className="h-16 w-16 rounded-full flex-col">
@@ -179,7 +179,7 @@ export default function Softphone() {
   const getTriggerIcon = () => {
     if (activeCall?.status === 'ringing-incoming') return <PhoneIncoming className="h-6 w-6" />;
     if (activeCall) return <Phone className="h-6 w-6" />;
-    return <Dialpad className="h-6 w-6" />;
+    return <Grid3x3 className="h-6 w-6" />;
   };
 
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
