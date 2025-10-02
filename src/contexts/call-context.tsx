@@ -1,15 +1,17 @@
 'use client';
 
-import type { Call, CallDirection, CallStatus } from '@/lib/types';
-import { MOCK_CALLS } from '@/lib/mock-calls';
+import type { Call, CallDirection, CallStatus, Lead } from '@/lib/types';
 import React, {
   createContext,
   useContext,
   useReducer,
   ReactNode,
   useCallback,
+  useEffect,
+  useState,
 } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
 
 interface CallState {
   callHistory: Call[];
@@ -17,78 +19,85 @@ interface CallState {
   softphoneOpen: boolean;
   showIncomingCall: boolean;
   showPostCallSheetForId: string | null;
+  twilioDevice: Device | null;
 }
 
 type CallAction =
   | { type: 'TOGGLE_SOFTPHONE' }
   | { type: 'START_OUTGOING_CALL'; payload: { to: string } }
-  | { type: 'SIMULATE_INCOMING_CALL' }
   | { type: 'ACCEPT_CALL' }
   | { type: 'REJECT_CALL' }
   | { type: 'END_CALL' }
   | { type: 'UPDATE_CALL_STATUS'; payload: { status: CallStatus } }
   | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
-  | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string } };
+  | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string } }
+  | { type: 'SET_TWILIO_DEVICE'; payload: { device: Device } }
+  | { type: 'SET_ACTIVE_TWILIO_CALL'; payload: { twilioCall: TwilioCall, direction: CallDirection, to?: string, from?: string } };
 
 const initialState: CallState = {
-  callHistory: MOCK_CALLS,
+  callHistory: [],
   activeCall: null,
   softphoneOpen: false,
   showIncomingCall: false,
   showPostCallSheetForId: null,
+  twilioDevice: null,
 };
 
 const CallContext = createContext<
   | {
       state: CallState;
       dispatch: React.Dispatch<CallAction>;
+      fetchLeads: () => Promise<Lead[]>;
     }
   | undefined
 >(undefined);
-
-// --- SIMULATION HELPERS ---
-let callInterval: NodeJS.Timeout | null = null;
-const clearCallInterval = () => {
-  if (callInterval) clearInterval(callInterval);
-  callInterval = null;
-};
 
 const callReducer = (state: CallState, action: CallAction): CallState => {
   switch (action.type) {
     case 'TOGGLE_SOFTPHONE':
       return { ...state, softphoneOpen: !state.softphoneOpen };
 
+    case 'SET_TWILIO_DEVICE':
+        return { ...state, twilioDevice: action.payload.device };
+
     case 'START_OUTGOING_CALL': {
-      if (state.activeCall) return state; // Already in a call
-      const newCall: Call = {
-        id: `call_${Date.now()}`,
-        direction: 'outgoing',
-        to: action.payload.to,
-        from: 'You',
-        startTime: Date.now(),
-        duration: 0,
-        status: 'ringing-outgoing',
-      };
-      return { ...state, activeCall: newCall, softphoneOpen: true };
+      if (state.activeCall || !state.twilioDevice) return state;
+       state.twilioDevice.connect({
+           params: { To: action.payload.to, From: process.env.NEXT_PUBLIC_TWILIO_CALLER_ID || '' },
+       });
+      return { ...state, softphoneOpen: true };
     }
     
-    case 'SIMULATE_INCOMING_CALL': {
-        if (state.activeCall) return state; // Busy
+    case 'SET_ACTIVE_TWILIO_CALL': {
+        const { twilioCall, direction, to, from } = action.payload;
         const newCall: Call = {
-            id: `call_${Date.now()}`,
-            direction: 'incoming',
-            from: `(555) 867-5309`,
-            to: 'You',
+            id: twilioCall.parameters.CallSid,
+            direction: direction,
+            to: direction === 'outgoing' ? (to || twilioCall.parameters.To) : 'You',
+            from: direction === 'incoming' ? (from || twilioCall.parameters.From) : 'You',
             startTime: Date.now(),
             duration: 0,
-            status: 'ringing-incoming',
+            status: direction === 'incoming' ? 'ringing-incoming' : 'ringing-outgoing',
+            twilioInstance: twilioCall,
         };
-        return { ...state, activeCall: newCall, showIncomingCall: true };
-    }
 
+        const newState: CallState = {
+            ...state,
+            activeCall: newCall,
+            softphoneOpen: true,
+        };
+
+        if (direction === 'incoming') {
+            newState.showIncomingCall = true;
+        }
+
+        return newState;
+    }
+    
     case 'ACCEPT_CALL':
-      if (!state.activeCall) return state;
+      if (!state.activeCall || !state.activeCall.twilioInstance) return state;
+      state.activeCall.twilioInstance.accept();
       return {
         ...state,
         showIncomingCall: false,
@@ -97,10 +106,11 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       };
 
     case 'REJECT_CALL': {
-      if (!state.activeCall) return state;
+      if (!state.activeCall || !state.activeCall.twilioInstance) return state;
+      state.activeCall.twilioInstance.reject();
       const rejectedCall: Call = {
         ...state.activeCall,
-        status: 'voicemail-dropping',
+        status: 'voicemail-dropping', // We'll simulate this for now
         endTime: Date.now(),
       };
       return {
@@ -112,18 +122,10 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
     }
     
     case 'END_CALL': {
-        if (!state.activeCall) return state;
-        const endedCall: Call = {
-            ...state.activeCall,
-            status: 'completed',
-            endTime: Date.now(),
-        };
-        return {
-            ...state,
-            activeCall: null,
-            showPostCallSheetForId: endedCall.id,
-            callHistory: [endedCall, ...state.callHistory]
-        }
+        if (!state.activeCall || !state.activeCall.twilioInstance) return state;
+        state.activeCall.twilioInstance.disconnect();
+        // The rest of the logic is handled by the 'disconnect' event listener on the Twilio call object
+        return state;
     }
 
     case 'UPDATE_CALL_STATUS':
@@ -158,63 +160,123 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
+  const [token, setToken] = useState<string | null>(null);
 
-  const handleCallSimulation = useCallback(() => {
-    const { activeCall } = state;
-    if (!activeCall) {
-        clearCallInterval();
-        return;
-    }
-
-    // Call progression simulation
-    switch (activeCall.status) {
-        case 'ringing-outgoing':
-            setTimeout(() => {
-                // Simulate call being answered
-                if (state.activeCall?.id === activeCall.id) {
-                    dispatch({ type: 'UPDATE_CALL_STATUS', payload: { status: 'in-progress' } });
-                }
-            }, 3000);
-            break;
-
-        case 'in-progress':
-            if (!callInterval) {
-                callInterval = setInterval(() => {
-                    if (state.activeCall?.status === 'in-progress') {
-                        // This would be done in a real scenario by reading a stream, but we just increment
-                        state.activeCall.duration += 1;
-                    }
-                }, 1000);
+  useEffect(() => {
+    const fetchToken = async () => {
+        try {
+            const response = await fetch('/api/token');
+            const data = await response.json();
+            if (data.token) {
+                setToken(data.token);
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch Twilio token.' });
             }
-            break;
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch Twilio token.' });
+        }
+    };
+    fetchToken();
+  }, [toast]);
+  
+  useEffect(() => {
+    if (token) {
+        const device = new Device(token, {
+            codecPreferences: ['opus', 'pcmu'],
+        });
+
+        device.on('error', (error) => {
+            console.error('Twilio Device Error:', error);
+            toast({ variant: 'destructive', title: 'Twilio Error', description: error.message });
+        });
+
+        device.on('ready', (d) => {
+            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: d } });
+            toast({ title: 'Softphone Ready', description: 'You can now make and receive calls.' });
+        });
+        
+        device.on('incoming', (twilioCall) => {
+            dispatch({ type: 'SET_ACTIVE_TWILIO_CALL', payload: { twilioCall, direction: 'incoming' } });
+        });
+
+        return () => {
+            device.destroy();
+            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null as any } });
+        }
     }
-  }, [state.activeCall]);
+  }, [token, toast]);
 
-  React.useEffect(() => {
-      handleCallSimulation();
-      return () => clearCallInterval();
-  }, [state.activeCall, handleCallSimulation]);
+  const handleTwilioCallEvents = useCallback((twilioCall: TwilioCall) => {
+    const callSid = twilioCall.parameters.CallSid;
+    
+    twilioCall.on('accept', () => {
+        dispatch({ type: 'UPDATE_CALL_STATUS', payload: { status: 'in-progress' } });
+    });
 
-  // Voicemail simulation
-  React.useEffect(() => {
-    const voicemailCall = state.callHistory.find(c => c.status === 'voicemail-dropping');
-    if (voicemailCall) {
-      toast({ title: 'Agent unavailable', description: 'Dropping pre-recorded voicemail...' });
-      setTimeout(() => {
-        dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId: voicemailCall.id, notes: 'Auto-voicemail dropped.' } });
-        const updatedHistory = state.callHistory.map(c => c.id === voicemailCall.id ? {...c, status: 'voicemail-dropped'} as Call : c);
-        // This is a bit of a hack to update the history without a dedicated reducer action
-        // In a real app, this would be handled more cleanly.
-        // For now, we will just update the state directly to trigger a re-render
-        (state.callHistory as any) = updatedHistory;
-        toast({ title: 'Voicemail Left', description: 'Voicemail was successfully left.' });
-      }, 3000);
+    twilioCall.on('disconnect', () => {
+        const { activeCall, callHistory } = state;
+        if (activeCall && activeCall.id === callSid) {
+            const endedCall: Call = {
+                ...activeCall,
+                status: 'completed',
+                endTime: Date.now(),
+                duration: Math.floor((Date.now() - activeCall.startTime) / 1000),
+            };
+
+            // This is a direct state update which is not ideal, but necessary
+            // to avoid complex reducer logic with async operations.
+            // A better approach would be to use a state management library like Redux Toolkit.
+            (state as any).activeCall = null;
+            (state as any).showPostCallSheetForId = endedCall.id;
+            (state as any).callHistory = [endedCall, ...callHistory];
+            // Force re-render
+            dispatch({ type: 'TOGGLE_SOFTPHONE' });
+            dispatch({ type: 'TOGGLE_SOFTPHONE' });
+        }
+    });
+
+    twilioCall.on('cancel', () => {
+         const { activeCall, callHistory } = state;
+         if (activeCall && activeCall.id === callSid) {
+            const canceledCall = { ...activeCall, status: 'canceled', endTime: Date.now() };
+            (state as any).activeCall = null;
+            (state as any).callHistory = [canceledCall, ...callHistory];
+            dispatch({ type: 'TOGGLE_SOFTPHONE' });
+            dispatch({ type: 'TOGGLE_SOFTPHONE' });
+         }
+    });
+
+  }, [state]);
+
+
+  useEffect(() => {
+    if (state.activeCall?.twilioInstance) {
+        handleTwilioCallEvents(state.activeCall.twilioInstance);
     }
-  }, [state.callHistory, toast]);
-
+  }, [state.activeCall, handleTwilioCallEvents]);
+  
+  const fetchLeads = useCallback(async (): Promise<Lead[]> => {
+    try {
+        const response = await fetch(process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT!);
+        if (!response.ok) {
+            throw new Error('Failed to fetch leads');
+        }
+        const data = await response.json();
+        return data.leads as Lead[];
+    } catch (error) {
+        console.error(error);
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: (error as Error).message || 'Could not fetch leads.'
+        });
+        return [];
+    }
+  }, [toast]);
 
   return (
-    <CallContext.Provider value={{ state, dispatch }}>
+    <CallContext.Provider value={{ state, dispatch, fetchLeads }}>
       {children}
     </CallContext.Provider>
   );

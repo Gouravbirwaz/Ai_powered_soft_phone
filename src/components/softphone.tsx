@@ -25,6 +25,7 @@ import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
+import { Call as TwilioCall } from '@twilio/voice-sdk';
 
 const DialpadButton = ({
   digit,
@@ -105,6 +106,29 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 
 
 const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: () => void }) => {
+    const { state, fetchLeads, dispatch } = useCall();
+    const { toast } = useToast();
+    
+    const handleFetchAndCall = async () => {
+        if (state.activeCall) {
+            toast({ title: 'Already in a call', variant: 'destructive' });
+            return;
+        }
+        const leads = await fetchLeads();
+        if(leads && leads.length > 0) {
+            const lead = leads[0];
+            const phoneNumber = lead.phone || lead.company_phone;
+            if (phoneNumber) {
+                dispatch({ type: 'START_OUTGOING_CALL', payload: { to: phoneNumber } });
+            } else {
+                toast({ title: 'No phone number for lead', variant: 'destructive' });
+            }
+        } else {
+            toast({ title: 'No leads available', variant: 'destructive' });
+        }
+    }
+
+
   return (
       <div className="p-4">
           <Card>
@@ -118,7 +142,7 @@ const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: 
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={onFetchLead}>
+                          <Button variant="secondary" onClick={handleFetchAndCall}>
                               <List className="mr-2" />
                               Fetch Next Lead
                           </Button>
@@ -133,15 +157,7 @@ const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: 
 
 const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
-  const { toast } = useToast();
-
-  const handleFetchLead = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Fetching leads from a database is not yet implemented.',
-    });
-  };
-
+  
   return (
     <AnimatePresence mode="wait">
       {view === 'choice' ? (
@@ -152,7 +168,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
           exit={{ opacity: 0, x: 50 }}
           transition={{ duration: 0.2 }}
         >
-          <ChoiceView onDial={() => setView('dialpad')} onFetchLead={handleFetchLead} />
+          <ChoiceView onDial={() => setView('dialpad')} onFetchLead={() => {}} />
         </motion.div>
       ) : (
         <motion.div
@@ -173,19 +189,31 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
 const ActiveCallView = () => {
   const { state, dispatch } = useCall();
   const { activeCall } = state;
-  const [isMuted, setIsMuted] = useState(false);
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
     if (activeCall?.status === 'in-progress') {
-      const interval = setInterval(() => {
+      setDuration(0); // Reset on new call
+      interval = setInterval(() => {
         setDuration(Math.floor((Date.now() - activeCall.startTime) / 1000));
       }, 1000);
-      return () => clearInterval(interval);
     }
+    return () => {
+        if(interval) clearInterval(interval);
+    };
   }, [activeCall]);
 
   if (!activeCall) return null;
+  
+  const twilioCall = activeCall.twilioInstance;
+  const isMuted = twilioCall?.isMuted();
+
+  const handleMute = () => {
+    if (twilioCall) {
+        twilioCall.mute(!isMuted);
+    }
+  }
 
   const getStatusInfo = () => {
     switch(activeCall.status) {
@@ -211,7 +239,7 @@ const ActiveCallView = () => {
       </div>
       
       <div className="grid grid-cols-3 gap-4 my-8">
-        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={() => setIsMuted(!isMuted)}>
+        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute}>
           {isMuted ? <MicOff /> : <Mic />}
           <span className="text-xs mt-1">Mute</span>
         </Button>
@@ -240,7 +268,7 @@ const ActiveCallView = () => {
 
 export default function Softphone() {
   const { state, dispatch } = useCall();
-  const { activeCall, softphoneOpen } = state;
+  const { activeCall, softphoneOpen, twilioDevice } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
 
@@ -276,10 +304,12 @@ export default function Softphone() {
             <Button
               className={cn(
                 'h-16 w-16 rounded-full shadow-lg transition-colors duration-300',
-                activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                !twilioDevice && 'bg-gray-500 hover:bg-gray-600',
+                twilioDevice && (activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90'),
                 isRinging && 'animate-pulse'
               )}
               size="icon"
+              disabled={!twilioDevice}
             >
               {getTriggerIcon()}
             </Button>
