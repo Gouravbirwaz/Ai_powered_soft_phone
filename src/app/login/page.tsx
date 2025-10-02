@@ -19,14 +19,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import { useToast } from '@/hooks/use-toast';
+
+const TEST_PASSWORD = 'caprare@123';
 
 export default function LoginPage() {
   const { fetchAgents, loginAsAgent, state } = useCall();
+  const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedId, setSelectedId] = useState<string>(''); 
+  const [selectedId, setSelectedId] = useState<string>('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
@@ -41,19 +48,23 @@ export default function LoginPage() {
       setIsLoading(true);
       const fetchedData = await fetchAgents();
       const fetchedAgents = fetchedData || [];
-      
-      const validAgents = fetchedAgents.filter(agent => 
-          agent.id !== undefined && agent.id !== null
+
+      const validAgents = fetchedAgents.filter(
+        (agent) => agent.id !== undefined && agent.id !== null
       );
 
       if (process.env.NODE_ENV === 'development') {
-          if (validAgents.length !== fetchedAgents.length) {
-              console.warn(`[Data Warning] Removed ${fetchedAgents.length - validAgents.length} agent(s) with invalid ID.`);
-          }
+        if (validAgents.length !== fetchedAgents.length) {
+          console.warn(
+            `[Data Warning] Removed ${
+              fetchedAgents.length - validAgents.length
+            } agent(s) with invalid ID.`
+          );
+        }
       }
-      
+
       setAgents(validAgents);
-      
+
       if (validAgents.length > 0) {
         setSelectedId(String(validAgents[0].id));
       } else {
@@ -66,8 +77,17 @@ export default function LoginPage() {
   }, [fetchAgents]);
 
   const handleLogin = () => {
+    if (password !== TEST_PASSWORD) {
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: 'Incorrect password. Please try again.',
+      });
+      return;
+    }
+
     const agentToLogin = agents.find((agent) => String(agent.id) === selectedId);
-    
+
     if (agentToLogin) {
       loginAsAgent(agentToLogin);
       router.push('/');
@@ -78,14 +98,14 @@ export default function LoginPage() {
     <div className="flex h-screen w-full items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-            <Image 
-                src="https://storage.googleapis.com/aifire.appspot.com/project-assets/bigfoot-logo.png" 
-                alt="Caprae Capital Partners Logo" 
-                width={50} 
-                height={50} 
-                className="mb-2"
-                unoptimized 
-            />
+          <Image
+            src="https://storage.googleapis.com/aifire.appspot.com/project-assets/bigfoot-logo.png"
+            alt="Caprae Capital Partners Logo"
+            width={50}
+            height={50}
+            className="mb-2"
+            unoptimized
+          />
           <CardTitle className="text-2xl">Caprae Capital Partners</CardTitle>
           <CardDescription>Select an agent to continue</CardDescription>
         </CardHeader>
@@ -96,25 +116,35 @@ export default function LoginPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an agent..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map((agent) => (
-                      <SelectItem 
-                          key={agent.id} 
-                          value={String(agent.id)}
-                      >
+              <div className="space-y-2">
+                <Label htmlFor="agent-select">Agent</Label>
+                <Select value={selectedId} onValueChange={setSelectedId}>
+                  <SelectTrigger id="agent-select">
+                    <SelectValue placeholder="Select an agent..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.id} value={String(agent.id)}>
                         {agent.name}
                       </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+              </div>
               <Button
                 className="w-full"
                 onClick={handleLogin}
-                disabled={!selectedId}
+                disabled={!selectedId || !password}
               >
                 Login
               </Button>
