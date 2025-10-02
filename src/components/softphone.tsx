@@ -12,6 +12,7 @@ import {
   CircleDotDashed,
   Move,
   List,
+  AlertCircle,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -25,7 +26,8 @@ import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { Call as TwilioCall } from '@twilio/voice-sdk';
+import { Call as TwilioCall, Device } from '@twilio/voice-sdk';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 const DialpadButton = ({
   digit,
@@ -157,7 +159,22 @@ const ChoiceView = ({ onDial, onFetchLead }: { onDial: () => void; onFetchLead: 
 
 const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
-  
+  const { state } = useCall();
+
+  if (!state.twilioDevice) {
+    return (
+        <div className="p-4">
+            <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Softphone Offline</AlertTitle>
+                <AlertDescription>
+                    Please grant microphone permissions to enable the softphone.
+                </AlertDescription>
+            </Alert>
+        </div>
+    )
+  }
+
   return (
     <AnimatePresence mode="wait">
       {view === 'choice' ? (
@@ -193,8 +210,7 @@ const ActiveCallView = () => {
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (activeCall?.status === 'in-progress') {
-      setDuration(0); // Reset on new call
+    if (activeCall?.status === 'in-progress' && activeCall.startTime) {
       interval = setInterval(() => {
         setDuration(Math.floor((Date.now() - activeCall.startTime) / 1000));
       }, 1000);
@@ -268,7 +284,8 @@ const ActiveCallView = () => {
 
 export default function Softphone() {
   const { state, dispatch } = useCall();
-  const { activeCall, softphoneOpen, twilioDevice } = state;
+  const { toast } = useToast();
+  const { activeCall, softphoneOpen, twilioDevice, audioPermissionsGranted } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
 
@@ -276,7 +293,29 @@ export default function Softphone() {
     dispatch({ type: 'START_OUTGOING_CALL', payload: { to: number } });
   };
   
-  const handleToggle = (open: boolean) => {
+  const handleToggle = async (open: boolean) => {
+    if (!audioPermissionsGranted && open) {
+        try {
+            await navigator.mediaDevices.getUserMedia({ audio: true });
+            // This is a workaround to ensure the audio context is resumed.
+            // The Twilio SDK should handle this, but some browsers are strict.
+            await Device.audio.availableDevices.get('input');
+            await Device.audio.availableDevices.get('output');
+            dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
+            toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
+        } catch (err) {
+            console.error('Error getting audio permissions:', err);
+            toast({
+                variant: 'destructive',
+                title: 'Permission Denied',
+                description: 'Microphone access is required to use the softphone.'
+            });
+            dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
+            // Don't open the softphone if permissions are denied
+            return;
+        }
+    }
+    
     if(softphoneOpen !== open) {
       dispatch({ type: 'TOGGLE_SOFTPHONE' });
     }
@@ -287,7 +326,8 @@ export default function Softphone() {
     if (activeCall) return <Phone className="h-6 w-6" />;
     return <Phone className="h-6 w-6" />;
   };
-
+  
+  const isTriggerDisabled = !audioPermissionsGranted;
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
 
   return (
@@ -304,12 +344,11 @@ export default function Softphone() {
             <Button
               className={cn(
                 'h-16 w-16 rounded-full shadow-lg transition-colors duration-300',
-                !twilioDevice && 'bg-gray-500 hover:bg-gray-600',
-                twilioDevice && (activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90'),
+                isTriggerDisabled && 'bg-gray-500 hover:bg-gray-600',
+                !isTriggerDisabled && (activeCall ? 'bg-green-500 hover:bg-green-600' : 'bg-primary text-primary-foreground hover:bg-primary/90'),
                 isRinging && 'animate-pulse'
               )}
               size="icon"
-              disabled={!twilioDevice}
             >
               {getTriggerIcon()}
             </Button>

@@ -20,6 +20,7 @@ interface CallState {
   showIncomingCall: boolean;
   showPostCallSheetForId: string | null;
   twilioDevice: Device | null;
+  audioPermissionsGranted: boolean;
 }
 
 type CallAction =
@@ -32,7 +33,8 @@ type CallAction =
   | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string } }
-  | { type: 'SET_TWILIO_DEVICE'; payload: { device: Device } }
+  | { type: 'SET_TWILIO_DEVICE'; payload: { device: Device | null } }
+  | { type: 'SET_AUDIO_PERMISSIONS'; payload: { granted: boolean } }
   | { type: 'SET_ACTIVE_TWILIO_CALL'; payload: { twilioCall: TwilioCall, direction: CallDirection, to?: string, from?: string } };
 
 const initialState: CallState = {
@@ -42,6 +44,7 @@ const initialState: CallState = {
   showIncomingCall: false,
   showPostCallSheetForId: null,
   twilioDevice: null,
+  audioPermissionsGranted: false,
 };
 
 const CallContext = createContext<
@@ -60,6 +63,9 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 
     case 'SET_TWILIO_DEVICE':
         return { ...state, twilioDevice: action.payload.device };
+        
+    case 'SET_AUDIO_PERMISSIONS':
+        return { ...state, audioPermissionsGranted: action.payload.granted };
 
     case 'START_OUTGOING_CALL': {
       if (state.activeCall || !state.twilioDevice) return state;
@@ -177,13 +183,18 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch Twilio token.' });
         }
     };
-    fetchToken();
-  }, [toast]);
+    if (state.audioPermissionsGranted) {
+        fetchToken();
+    }
+  }, [state.audioPermissionsGranted, toast]);
   
   useEffect(() => {
-    if (token) {
+    if (token && state.audioPermissionsGranted) {
         const device = new Device(token, {
             codecPreferences: ['opus', 'pcmu'],
+            // WORKAROUND: Surpress `Twilio.Device is not a constructor` error
+            // @ts-ignore
+            debug: process.env.NODE_ENV === 'development',
         });
 
         device.on('error', (error) => {
@@ -200,12 +211,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             dispatch({ type: 'SET_ACTIVE_TWILIO_CALL', payload: { twilioCall, direction: 'incoming' } });
         });
 
+        const currentDevice = device;
+
         return () => {
-            device.destroy();
-            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null as any } });
+            currentDevice.destroy();
+            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
         }
     }
-  }, [token, toast]);
+  }, [token, state.audioPermissionsGranted, toast]);
 
   const handleTwilioCallEvents = useCallback((twilioCall: TwilioCall) => {
     const callSid = twilioCall.parameters.CallSid;
