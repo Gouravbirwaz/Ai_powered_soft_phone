@@ -161,21 +161,9 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
 
-  if (!state.audioPermissionsGranted) {
-    return (
-        <div className="p-4">
-            <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Microphone Access Required</AlertTitle>
-                <AlertDescription>
-                    Please grant microphone permissions to enable the softphone. Click the phone icon again after allowing access.
-                </AlertDescription>
-            </Alert>
-        </div>
-    )
-  }
-  
-  if (state.twilioDeviceStatus !== 'ready') {
+  // If initialization is disabled, we don't need to show these alerts.
+  // The UI will just appear ready.
+  if (state.twilioDeviceStatus !== 'ready' && state.twilioDeviceStatus !== 'uninitialized') {
       return (
           <div className="p-4">
               <Alert>
@@ -185,12 +173,10 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
                   <AlertTitle>
                     {state.twilioDeviceStatus === 'initializing' && 'Softphone Initializing...'}
                     {state.twilioDeviceStatus === 'error' && 'Initialization Failed'}
-                    {state.twilioDeviceStatus === 'uninitialized' && 'Softphone Not Ready'}
                   </AlertTitle>
                   <AlertDescription>
                     {state.twilioDeviceStatus === 'initializing' && 'The softphone is getting ready. Please wait a moment.'}
                     {state.twilioDeviceStatus === 'error' && 'Could not connect to the calling service. Please try again.'}
-                    {state.twilioDeviceStatus === 'uninitialized' && 'Click the phone icon to start.'}
                   </AlertDescription>
               </Alert>
           </div>
@@ -330,28 +316,10 @@ export default function Softphone() {
   };
   
   const handleToggle = async (open: boolean) => {
-    if (open) {
-        if (!audioPermissionsGranted) {
-            try {
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-                dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
-                toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
-                // Now that we have permission, initialize Twilio
-                initializeTwilio();
-            } catch (err) {
-                console.error('Error getting audio permissions:', err);
-                toast({
-                    variant: 'destructive',
-                    title: 'Permission Denied',
-                    description: 'Microphone access is required. Please enable it in your browser settings.'
-                });
-                dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
-                return; // Don't open popover
-            }
-        } else if (twilioDeviceStatus === 'uninitialized') {
-          // Permissions were already granted, but device isn't set up.
-          initializeTwilio();
-        }
+    if (open && twilioDeviceStatus === 'uninitialized') {
+        // If we are opening and the device is not set up, try to init.
+        // In the disabled state, this will just show a toast.
+        initializeTwilio();
     }
     
     dispatch({ type: 'TOGGLE_SOFTPHONE' });

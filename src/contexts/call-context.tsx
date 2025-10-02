@@ -44,8 +44,9 @@ const initialState: CallState = {
   softphoneOpen: false,
   showIncomingCall: false,
   showPostCallSheetForId: null,
-  twilioDeviceStatus: 'uninitialized',
-  audioPermissionsGranted: false,
+  // Disable initialization by default
+  twilioDeviceStatus: 'ready',
+  audioPermissionsGranted: true,
 };
 
 const CallContext = createContext<
@@ -107,187 +108,36 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
-  const twilioDeviceRef = useRef<Device | null>(null);
   const activeTwilioCallRef = useRef<TwilioCall | null>(null);
 
-
-  const handleCallEnded = useCallback((call: Call) => {
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-    dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: call });
-    
-    if (call.status === 'completed') {
-      dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: call.id } });
-    }
-  }, []);
-
-  const createCallObjectFromTwilio = useCallback((twilioCall: TwilioCall): Call => {
-    const direction = twilioCall.direction() === 'incoming' ? 'incoming' : 'outgoing';
-    return {
-      id: twilioCall.parameters.CallSid,
-      direction: direction,
-      to: twilioCall.parameters.To,
-      from: twilioCall.parameters.From,
-      startTime: Date.now(),
-      duration: 0,
-      status: direction === 'incoming' ? 'ringing-incoming' : 'ringing-outgoing',
-      avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
-    };
-  }, []);
-
-  const setupTwilioListeners = useCallback((device: Device) => {
-    device.on('ready', () => {
-      console.log('Twilio Device is ready!');
-      dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
-      toast({ title: 'Softphone Ready', description: 'You can now make and receive calls.' });
-    });
-
-    device.on('error', (error: any) => {
-      console.error('Twilio Device Error:', error);
-      toast({ variant: 'destructive', title: 'Twilio Error', description: error.message });
-      dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-    });
-
-    device.on('incoming', (twilioCall: TwilioCall) => {
-      console.log('Incoming call from:', twilioCall.parameters.From);
-      activeTwilioCallRef.current = twilioCall;
-      const newCall = createCallObjectFromTwilio(twilioCall);
-      
-      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: newCall } });
-      dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: newCall });
-      dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
-      
-      twilioCall.on('disconnect', () => {
-        console.log('Incoming call disconnected');
-        const finalCall = {
-          ...newCall,
-          status: 'completed' as const,
-          duration: Math.floor((Date.now() - newCall.startTime) / 1000),
-        };
-        activeTwilioCallRef.current = null;
-        handleCallEnded(finalCall);
-        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-      });
-
-      twilioCall.on('cancel', () => {
-        console.log('Incoming call canceled');
-        const finalCall = { ...newCall, status: 'canceled' as const, duration: 0 };
-        activeTwilioCallRef.current = null;
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-        dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: finalCall });
-        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-      });
-    });
-
-  }, [toast, createCallObjectFromTwilio, handleCallEnded]);
-
   const initializeTwilio = useCallback(async () => {
-    if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || state.twilioDeviceStatus === 'ready') {
-      console.log('Twilio already initialized or in progress.');
-      return;
-    }
-    
-    try {
-      console.log('Initializing Twilio...');
-      dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
-      
-      const tokenRes = await fetch('/api/token');
-      if (!tokenRes.ok) throw new Error('Failed to fetch Twilio token.');
-      const { token } = await tokenRes.json();
-      
-      const device = new Device(token, { codecPreferences: ['opus', 'pcmu'] });
-      await device.register();
-
-      twilioDeviceRef.current = device;
-      setupTwilioListeners(device);
-      
-    } catch (error: any) {
-      console.error("Twilio initialization error:", error);
-      toast({ variant: 'destructive', title: 'Initialization Error', description: error.message || 'Could not connect to call service.' });
-      dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-    }
-  }, [state.twilioDeviceStatus, setupTwilioListeners, toast]);
+    console.log('Twilio initialization is disabled.');
+    toast({ title: 'Softphone Disabled', description: 'Call functionality is currently turned off.' });
+  }, [toast]);
 
   const startOutgoingCall = useCallback(async (to: string) => {
-    if (!twilioDeviceRef.current || state.twilioDeviceStatus !== 'ready') {
-      toast({ title: 'Softphone not ready', variant: 'destructive' });
-      return;
-    }
-    try {
-      const twilioCall = await twilioDeviceRef.current.connect({ params: { To: to } });
-      activeTwilioCallRef.current = twilioCall;
-
-      const newCall = createCallObjectFromTwilio(twilioCall);
-      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: newCall } });
-      dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: newCall });
-      dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
-
-      twilioCall.on('accept', () => {
-        console.log('Outgoing call accepted');
-        const acceptedCall = { ...newCall, status: 'in-progress' as const, startTime: Date.now() };
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: acceptedCall } });
-        dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: acceptedCall });
-      });
-      
-      twilioCall.on('disconnect', () => {
-        console.log('Outgoing call disconnected');
-        const currentCall = activeTwilioCallRef.current;
-        const callStartTime = state.activeCall?.startTime || newCall.startTime;
-
-        const finalCall = {
-            ...(state.activeCall || newCall),
-            status: 'completed' as const,
-            duration: Math.floor((Date.now() - callStartTime) / 1000)
-        };
-        activeTwilioCallRef.current = null;
-        handleCallEnded(finalCall);
-      });
-
-      twilioCall.on('error', (err) => {
-        console.error('Outgoing call error', err);
-        const finalCall = { ...newCall, status: 'failed' as const, duration: 0 };
-        activeTwilioCallRef.current = null;
-        handleCallEnded(finalCall);
-      })
-
-    } catch (error) {
-        console.error("Error starting outgoing call:", error);
-        toast({ title: 'Failed to start call', variant: 'destructive' });
-    }
-  }, [state.twilioDeviceStatus, toast, createCallObjectFromTwilio, handleCallEnded, state.activeCall]);
+    console.log('Cannot start outgoing call: Twilio initialization is disabled.');
+    toast({ title: 'Softphone Disabled', description: `Cannot call ${to}.`, variant: 'destructive'});
+  }, [toast]);
 
   const acceptIncomingCall = useCallback(() => {
-    if (!activeTwilioCallRef.current || !state.activeCall) return;
-    activeTwilioCallRef.current.accept();
-    const acceptedCall = { ...state.activeCall, status: 'in-progress' as const, startTime: Date.now() };
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: acceptedCall } });
-    dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: acceptedCall });
-    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-    dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
-  }, [state.activeCall]);
+    console.log('Cannot accept incoming call: Twilio initialization is disabled.');
+    toast({ title: 'Softphone Disabled', variant: 'destructive'});
+  }, [toast]);
 
   const rejectIncomingCall = useCallback(() => {
-    if (!activeTwilioCallRef.current || !state.activeCall) return;
-    activeTwilioCallRef.current.reject();
-    const rejectedCall = { ...state.activeCall, status: 'canceled' as const };
-    activeTwilioCallRef.current = null;
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-    dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: rejectedCall });
-    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-  }, [state.activeCall]);
+    console.log('Cannot reject incoming call: Twilio initialization is disabled.');
+    toast({ title: 'Softphone Disabled', variant: 'destructive'});
+  }, [toast]);
   
   const endActiveCall = useCallback(() => {
-    if (!activeTwilioCallRef.current) return;
-    activeTwilioCallRef.current.disconnect();
-  }, []);
+    console.log('Cannot end active call: Twilio initialization is disabled.');
+    toast({ title: 'Softphone Disabled', variant: 'destructive'});
+  }, [toast]);
 
-  const getActiveTwilioCall = useCallback(() => activeTwilioCallRef.current, []);
-
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      twilioDeviceRef.current?.destroy();
-    }
+  const getActiveTwilioCall = useCallback(() => {
+    console.log('Cannot get active Twilio call: Twilio initialization is disabled.');
+    return null;
   }, []);
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
@@ -310,7 +160,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (e) {
              if (e instanceof SyntaxError) {
-                const errorDetail = `Unexpected token '<', which suggests an HTML error page was returned instead of valid JSON.`
+                const errorDetail = text.includes("<!DOCTYPE")
+                    ? `The API returned an HTML page instead of JSON. This might be an ngrok error page. Please check if your local server and ngrok tunnel are running correctly.`
+                    : `An unexpected error occurred while parsing the server response.`;
                 console.error("Fetch leads error: SyntaxError: " + e.message, "Response was:", text);
                 toast({
                     variant: 'destructive',
