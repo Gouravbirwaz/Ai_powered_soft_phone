@@ -1,4 +1,5 @@
 import CallHistoryTable from '@/components/call-history-table';
+import LeadActions from '@/components/lead-actions';
 import { AppLogo } from '@/components/icons';
 import {
   Card,
@@ -18,10 +19,13 @@ export default function Home() {
             Caprae Capital Partners
           </h1>
           <p className="text-sm text-muted-foreground">
-            Your recent call activity.
+            Your AI-powered softphone for enhanced productivity.
           </p>
         </div>
       </div>
+
+      <LeadActions />
+
       <Card>
         <CardHeader>
           <CardTitle>Call History</CardTitle>
