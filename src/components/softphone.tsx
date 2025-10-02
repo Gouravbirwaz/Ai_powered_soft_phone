@@ -315,11 +315,9 @@ export default function Softphone() {
     if (open && !audioPermissionsGranted && !permissionRequested) {
         setPermissionRequested(true);
         try {
-            // This is a workaround to ensure the audio context is resumed.
-            // The Twilio SDK should handle this, but some browsers are strict.
+            // This is the simplest way to request audio permissions and initialize
+            // the audio context, which is required by browsers.
             await navigator.mediaDevices.getUserMedia({ audio: true });
-            await Device.audio.availableDevices.get('input');
-            await Device.audio.availableDevices.get('output');
             
             dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
             toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
