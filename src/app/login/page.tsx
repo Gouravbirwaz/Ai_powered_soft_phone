@@ -41,6 +41,10 @@ export default function LoginPage() {
       setIsLoading(true);
       const fetchedAgents = await fetchAgents();
       setAgents(fetchedAgents);
+      if (fetchedAgents.length > 0) {
+        // Pre-select the first agent if desired, or leave empty
+        // setSelectedAgentId(fetchedAgents[0].agent_id);
+      }
       setIsLoading(false);
     };
     getAgents();
