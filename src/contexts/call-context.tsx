@@ -8,6 +8,7 @@ import React, {
   ReactNode,
   useCallback,
   useEffect,
+  useState,
 } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
@@ -78,12 +79,13 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
     
     case 'SET_ACTIVE_CALL': {
         const { call } = action.payload;
+        const callExists = state.callHistory.some(c => c.id === call.id);
         return {
             ...state,
             activeCall: call,
             softphoneOpen: true,
             showIncomingCall: call.direction === 'incoming' && call.status === 'ringing-incoming',
-            callHistory: state.callHistory.find(c => c.id === call.id) ? state.callHistory : [call, ...state.callHistory],
+            callHistory: callExists ? state.callHistory.map(c => c.id === call.id ? call : c) : [call, ...state.callHistory],
         };
     }
     
@@ -167,109 +169,94 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
   }
 };
 
-let twilioDevice: Device | null = null;
-
-const setupTwilioDevice = async (token: string, dispatch: React.Dispatch<CallAction>, toast: (args: any) => void) => {
-    if (twilioDevice) {
-        twilioDevice.destroy();
-        twilioDevice = null;
-    }
-
-    try {
-        twilioDevice = new Device(token, {
-            codecPreferences: ['opus', 'pcmu'],
-            edge: ['ashburn', 'frankfurt'],
-        });
-
-        twilioDevice.on('ready', () => {
-            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: twilioDevice } });
-            toast({ title: 'Softphone Ready', description: 'You can now make and receive calls.' });
-        });
-
-        twilioDevice.on('error', (error: any) => {
-            console.error('Twilio Device Error:', error);
-            toast({ variant: 'destructive', title: 'Twilio Error', description: error.message });
-            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
-        });
-
-        const handleCallLifecycle = (twilioCall: TwilioCall) => {
-            const callId = twilioCall.parameters.CallSid;
-            const direction = twilioCall.direction() === 'incoming' ? 'incoming' : 'outgoing';
-            
-            const newCall: Call = {
-                id: callId,
-                direction: direction,
-                to: twilioCall.parameters.To,
-                from: twilioCall.parameters.From,
-                startTime: Date.now(),
-                duration: 0,
-                status: direction === 'incoming' ? 'ringing-incoming' : 'ringing-outgoing',
-                twilioInstance: twilioCall,
-                avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
-            };
-            dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: newCall }});
-            
-            twilioCall.on('accept', () => {
-                dispatch({ type: 'UPDATE_CALL_STATUS', payload: { callId, status: 'in-progress' } });
-            });
-
-            const handleDisconnect = () => {
-                const duration = Math.floor((Date.now() - newCall.startTime) / 1000);
-                dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'completed', duration } });
-            };
-
-            twilioCall.on('disconnect', handleDisconnect);
-            twilioCall.on('cancel', () => dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'canceled', duration: 0 } }));
-            twilioCall.on('reject', () => dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'canceled', duration: 0 } }));
-            
-            twilioCall.on('error', (err) => {
-              toast({ variant: 'destructive', title: 'Call Error', description: err.message });
-              dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'failed', duration: 0 } });
-            });
-        };
-
-        twilioDevice.on('incoming', handleCallLifecycle);
-        twilioDevice.on('connect', handleCallLifecycle);
-
-    } catch (error) {
-        console.error("Failed to setup Twilio Device", error);
-        toast({ variant: 'destructive', title: 'Initialization Failed', description: 'Could not set up the softphone.' });
-    }
-};
-
 
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
-  
-  useEffect(() => {
-    const initialize = async () => {
-        if (state.audioPermissionsGranted && !state.twilioDevice) {
-            try {
-                const response = await fetch('/api/token');
-                if (!response.ok) throw new Error('Failed to fetch token');
-                const data = await response.json();
-                if (data.token) {
-                    await setupTwilioDevice(data.token, dispatch, toast);
-                } else {
-                    throw new Error('Token not found in response');
-                }
-            } catch (error: any) {
-                console.error("Initialization error:", error);
-                toast({ variant: 'destructive', title: 'Initialization Error', description: error.message || 'Could not connect to the call service.' });
-            }
-        }
-    };
-    initialize();
+  const [token, setToken] = useState<string | null>(null);
 
-    return () => {
-      if (twilioDevice) {
-        twilioDevice.destroy();
-        dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
-      }
-    };
+  // Effect to fetch the Twilio token
+  useEffect(() => {
+    if (state.audioPermissionsGranted) {
+        fetch('/api/token')
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch token');
+                return res.json();
+            })
+            .then(data => setToken(data.token))
+            .catch(error => {
+                console.error("Token fetching error:", error);
+                toast({ variant: 'destructive', title: 'Initialization Error', description: error.message || 'Could not connect to the call service.' });
+            });
+    }
   }, [state.audioPermissionsGranted, toast]);
   
+  // Effect to setup Twilio device once token is available
+  useEffect(() => {
+      if (!token) return;
+
+      const device = new Device(token, {
+          codecPreferences: ['opus', 'pcmu'],
+      });
+
+      device.on('ready', () => {
+          dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device } });
+          toast({ title: 'Softphone Ready', description: 'You can now make and receive calls.' });
+      });
+
+      device.on('error', (error: any) => {
+          console.error('Twilio Device Error:', error);
+          toast({ variant: 'destructive', title: 'Twilio Error', description: error.message });
+          dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
+      });
+
+      const handleCallLifecycle = (twilioCall: TwilioCall) => {
+          const callId = twilioCall.parameters.CallSid;
+          const direction = twilioCall.direction() === 'incoming' ? 'incoming' : 'outgoing';
+          
+          const newCall: Call = {
+              id: callId,
+              direction: direction,
+              to: twilioCall.parameters.To,
+              from: twilioCall.parameters.From,
+              startTime: Date.now(),
+              duration: 0,
+              status: direction === 'incoming' ? 'ringing-incoming' : 'ringing-outgoing',
+              twilioInstance: twilioCall,
+              avatarUrl: `https://picsum.photos/seed/${Math.random()}/100/100`,
+          };
+          dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: newCall }});
+          
+          twilioCall.on('accept', () => {
+              dispatch({ type: 'UPDATE_CALL_STATUS', payload: { callId, status: 'in-progress' } });
+          });
+
+          const handleDisconnect = () => {
+              const duration = Math.floor((Date.now() - newCall.startTime) / 1000);
+              dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'completed', duration } });
+          };
+
+          twilioCall.on('disconnect', handleDisconnect);
+          twilioCall.on('cancel', () => dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'canceled', duration: 0 } }));
+          twilioCall.on('reject', () => dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'canceled', duration: 0 } }));
+          
+          twilioCall.on('error', (err) => {
+            toast({ variant: 'destructive', title: 'Call Error', description: err.message });
+            dispatch({ type: 'CALL_ENDED', payload: { callId, finalStatus: 'failed', duration: 0 } });
+          });
+      };
+
+      device.on('incoming', handleCallLifecycle);
+      device.on('connect', handleCallLifecycle);
+
+      // Cleanup on unmount
+      return () => {
+          device.destroy();
+          dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
+      };
+
+  }, [token, toast]);
+
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
     const endpoint = process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT;
     if (!endpoint) {
@@ -290,8 +277,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (e) {
              if (e instanceof SyntaxError) {
+                const errorDetail = `Unexpected token '<', which suggests an HTML error page was returned instead of valid JSON.`
                 console.error("Fetch leads error: SyntaxError: " + e.message, "Response was:", text);
-                throw new SyntaxError(`Unexpected token '<', which suggests an HTML error page was returned instead of valid JSON.`);
+                toast({
+                    variant: 'destructive',
+                    title: 'API Error',
+                    description: errorDetail
+                });
+                return [];
              }
              throw e;
         }
@@ -301,9 +294,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         console.error("Fetch leads error:", error);
         
         let description = 'Could not fetch leads.';
-        if (error.message.includes("Unexpected token '<'")) {
-            description = "Failed to parse server response. The API might be down or returning an HTML error page instead of JSON.";
-        } else if (error instanceof Error) {
+        if (error instanceof Error) {
             description = error.message;
         }
 
