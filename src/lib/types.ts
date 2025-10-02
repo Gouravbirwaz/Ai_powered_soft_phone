@@ -1,3 +1,4 @@
+
 import { type Call as TwilioCall } from '@twilio/voice-sdk';
 
 export type CallStatus =
@@ -26,7 +27,7 @@ export interface Call {
   notes?: string;
   summary?: string;
   avatarUrl?: string;
-  // twilioInstance is removed from here to prevent putting non-serializable objects in state
+  agentId?: string;
 }
 
 export interface Lead {
@@ -69,4 +70,11 @@ export interface Lead {
     updated_at: string;
     website: string;
     year_founded: string;
+}
+
+export interface Agent {
+    agent_id: string;
+    name: string;
+    email: string;
+    phone_number: string;
 }

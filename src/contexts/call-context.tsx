@@ -1,6 +1,7 @@
+
 'use client';
 
-import type { Call, Lead } from '@/lib/types';
+import type { Call, Lead, Agent } from '@/lib/types';
 import React, {
   createContext,
   useContext,
@@ -24,6 +25,7 @@ interface CallState {
   showPostCallSheetForId: string | null;
   twilioDeviceStatus: TwilioDeviceStatus;
   audioPermissionsGranted: boolean;
+  currentAgent: Agent | null;
 }
 
 type CallAction =
@@ -36,7 +38,8 @@ type CallAction =
   | { type: 'SHOW_INCOMING_CALL'; payload: boolean }
   | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
-  | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string } };
+  | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
+  | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } };
 
 const initialState: CallState = {
   callHistory: MOCK_CALLS,
@@ -44,9 +47,9 @@ const initialState: CallState = {
   softphoneOpen: false,
   showIncomingCall: false,
   showPostCallSheetForId: null,
-  // Disable initialization by default
   twilioDeviceStatus: 'ready',
   audioPermissionsGranted: true,
+  currentAgent: null,
 };
 
 const CallContext = createContext<
@@ -54,6 +57,9 @@ const CallContext = createContext<
       state: CallState;
       dispatch: React.Dispatch<CallAction>;
       fetchLeads: () => Promise<Lead[]>;
+      fetchAgents: () => Promise<Agent[]>;
+      loginAsAgent: (agent: Agent) => void;
+      logout: () => void;
       initializeTwilio: () => Promise<void>;
       startOutgoingCall: (to: string) => void;
       acceptIncomingCall: () => void;
@@ -100,6 +106,8 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: action.payload.callId };
+    case 'SET_CURRENT_AGENT':
+        return { ...state, currentAgent: action.payload.agent };
     default:
       return state;
   }
@@ -184,11 +192,57 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
+  const fetchAgents = useCallback(async (): Promise<Agent[]> => {
+    try {
+        const response = await fetch('/api/agents');
+        if (!response.ok) {
+            throw new Error(`Failed to fetch agents. Status: ${response.status}`);
+        }
+        const data = await response.json();
+        if (data && Array.isArray(data.agents)) {
+            return data.agents as Agent[];
+        }
+        console.error("API response is not in the expected format for agents.", data);
+        toast({
+            variant: 'destructive',
+            title: 'API Error',
+            description: 'Received unexpected data format from the agents API.'
+        });
+        return [];
+    } catch (error: any) {
+        console.error("Fetch agents error:", error);
+        let description = 'Could not fetch agents.';
+        if (error instanceof Error) {
+            description = error.message;
+        }
+        toast({
+            variant: 'destructive',
+            title: 'API Error',
+            description: description
+        });
+        return [];
+    }
+  }, [toast]);
+  
+  const loginAsAgent = useCallback((agent: Agent) => {
+    dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
+    // Here you might want to initialize Twilio for the specific agent
+    initializeTwilio(); 
+  }, [initializeTwilio]);
+
+  const logout = useCallback(() => {
+    dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
+    // You might want to disconnect the Twilio device here
+  }, []);
+
   return (
     <CallContext.Provider value={{
         state,
         dispatch,
         fetchLeads,
+        fetchAgents,
+        loginAsAgent,
+        logout,
         initializeTwilio,
         startOutgoingCall,
         acceptIncomingCall,
