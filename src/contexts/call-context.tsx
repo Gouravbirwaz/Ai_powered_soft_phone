@@ -153,21 +153,29 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch('/api/leads');
         
         if (!response.ok) {
-            throw new Error(`Failed to fetch leads. Status: ${response.status}`);
+            const errorText = await response.text();
+            // Check if the response is an ngrok HTML page
+            if (errorText.includes('<!DOCTYPE html>') && errorText.includes('ngrok')) {
+                throw new Error(
+                    `The API returned an ngrok error page. This usually means the 'ngrok-skip-browser-warning' header is missing or your local server is not running.`
+                );
+            }
+            throw new Error(`Failed to fetch leads. Status: ${response.status}. Response: ${errorText}`);
         }
         
         const data = await response.json();
-        console.log("Fetched data:", data);
+        console.log("Fetched leads data:", data);
 
         if (data && Array.isArray(data.leads)) {
             return data.leads as Lead[];
         }
         
+        // Handle cases where the API might just return an array
         if (Array.isArray(data)) {
             return data as Lead[];
         }
         
-        console.error("API response is not in the expected format.", data);
+        console.error("Leads API response is not in the expected format.", data);
         toast({
             variant: 'destructive',
             title: 'API Error',
@@ -196,13 +204,22 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
         const response = await fetch('/api/agents');
         if (!response.ok) {
-            throw new Error(`Failed to fetch agents. Status: ${response.status}`);
+            const errorText = await response.text();
+             if (errorText.includes('<!DOCTYPE html>') && errorText.includes('ngrok')) {
+                throw new Error(
+                    `The API returned an ngrok error page. This usually means the 'ngrok-skip-browser-warning' header is missing or your local server is not running.`
+                );
+            }
+            throw new Error(`Failed to fetch agents. Status: ${response.status}. Response: ${errorText}`);
         }
         const data = await response.json();
+        console.log('Fetched agents data:', data);
+
         if (data && Array.isArray(data.agents)) {
             return data.agents as Agent[];
         }
-        console.error("API response is not in the expected format for agents.", data);
+
+        console.error("Agents API response is not in the expected format.", data);
         toast({
             variant: 'destructive',
             title: 'API Error',
