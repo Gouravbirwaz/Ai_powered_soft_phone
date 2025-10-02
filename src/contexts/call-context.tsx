@@ -182,8 +182,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
-  const [token, setToken] = useState<string | null>(null);
-
+  
   const fetchToken = useCallback(async () => {
     try {
       const response = await fetch('/api/token');
@@ -193,53 +192,54 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       }
       const data = await response.json();
       if (data.token) {
-        setToken(data.token);
+        return data.token;
       } else {
         toast({ variant: 'destructive', title: 'Token Error', description: data.error || 'Could not fetch Twilio token.' });
+        return null;
       }
     } catch (error: any) {
       console.error('Fetch token error:', error);
       toast({ variant: 'destructive', title: 'Network Error', description: error.message || 'Could not fetch Twilio token.' });
+      return null;
     }
   }, [toast]);
   
   useEffect(() => {
-    if (state.audioPermissionsGranted && !token) {
-      fetchToken();
-    }
-  }, [state.audioPermissionsGranted, token, fetchToken]);
-  
-  useEffect(() => {
-    if (!token || !state.audioPermissionsGranted) {
+    if (!state.audioPermissionsGranted) {
         return;
     }
 
-    const device = new Device(token, {
-        codecPreferences: ['opus', 'pcmu'],
-        // @ts-ignore
-        debug: process.env.NODE_ENV === 'development',
-    });
+    let device: Device;
 
-    const setupEventListeners = (d: Device) => {
-        d.on('ready', () => {
-            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: d } });
+    const setupTwilio = async () => {
+        const token = await fetchToken();
+        if (!token) {
+            console.error("Failed to fetch Twilio token. Cannot initialize device.");
+            return;
+        }
+
+        device = new Device(token, {
+            codecPreferences: ['opus', 'pcmu'],
+        });
+
+        device.on('ready', () => {
+            dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device } });
             toast({ title: 'Softphone Ready', description: 'You can now make and receive calls.' });
         });
 
-        d.on('error', (error: any) => {
+        device.on('error', (error: any) => {
             console.error('Twilio Device Error:', error);
             toast({ variant: 'destructive', title: 'Twilio Error', description: error.message });
         });
-
+        
         const handleCall = (twilioCall: TwilioCall) => {
             const direction = twilioCall.direction() === 'incoming' ? 'incoming' : 'outgoing';
 
             const handleDisconnect = () => {
                 const finalStatus = twilioCall.status();
-                let callData = state.activeCall;
-                if (!callData || callData.id !== twilioCall.parameters.CallSid) {
-                    callData = state.callHistory.find(c => c.id === twilioCall.parameters.CallSid) || null;
-                }
+                const callInHistory = state.callHistory.find(c => c.id === twilioCall.parameters.CallSid);
+                const activeCall = state.activeCall?.id === twilioCall.parameters.CallSid ? state.activeCall : null;
+                const callData = activeCall || callInHistory;
                 
                 const endedCall: Call = {
                     id: twilioCall.parameters.CallSid,
@@ -263,25 +263,36 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                handleDisconnect();
             });
 
-            dispatch({
-                type: 'SET_ACTIVE_TWILIO_CALL',
-                payload: { twilioCall, direction, to: twilioCall.parameters.To, from: twilioCall.parameters.From },
-            });
+            if (direction === 'outgoing') {
+                 dispatch({
+                    type: 'SET_ACTIVE_TWILIO_CALL',
+                    payload: { twilioCall, direction, to: twilioCall.parameters.To, from: twilioCall.parameters.From },
+                });
+            } else {
+                 dispatch({
+                    type: 'SET_ACTIVE_TWILIO_CALL',
+                    payload: { twilioCall, direction, to: twilioCall.parameters.To, from: twilioCall.parameters.From },
+                });
+            }
         };
-        
-        d.on('incoming', handleCall);
-        d.on('connect', (twilioCall) => {
+
+        device.on('incoming', handleCall);
+        device.on('connect', (twilioCall) => {
+            handleCall(twilioCall);
             dispatch({type: 'UPDATE_CALL_STATUS', payload: { callId: twilioCall.parameters.CallSid, status: 'in-progress'}});
         });
     };
-    
-    setupEventListeners(device);
+
+    setupTwilio();
 
     return () => {
-        device.destroy();
+        if (device) {
+            device.destroy();
+        }
         dispatch({ type: 'SET_TWILIO_DEVICE', payload: { device: null } });
     };
-}, [token, state.audioPermissionsGranted, toast]);
+}, [state.audioPermissionsGranted, fetchToken, toast, state.activeCall, state.callHistory]);
+
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
     const endpoint = process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT;
@@ -295,11 +306,20 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             throw new Error(`Failed to fetch leads. Status: ${response.status}`);
         }
         const text = await response.text();
-        const data = JSON.parse(text);
-
-        if (data && Array.isArray(data.leads)) {
-          return data.leads as Lead[];
+        
+        try {
+            const data = JSON.parse(text);
+             if (data && Array.isArray(data.leads)) {
+                return data.leads as Lead[];
+            }
+        } catch (e) {
+             if (e instanceof SyntaxError) {
+                console.error("Fetch leads error: SyntaxError: " + e.message, "Response was:", text);
+                throw new SyntaxError(`Unexpected token '<', "<!DOCTYPE "... is not valid JSON`);
+             }
+             throw e;
         }
+
         return [];
     } catch (error: any) {
         console.error("Fetch leads error:", error);
