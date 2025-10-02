@@ -7,12 +7,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import Image from 'next/image';
 
 export default function Home() {
   return (
     <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center space-x-4">
-        <AppLogo className="h-10 w-10 text-primary" />
+        <Image src="https://storage.googleapis.com/aifire.appspot.com/project-assets/bigfoot-logo.png" alt="Caprae Capital Partners Logo" width={40} height={40} />
         <div>
           <h1 className="text-3xl font-bold font-headline tracking-tight">
             Caprae Capital Partners
