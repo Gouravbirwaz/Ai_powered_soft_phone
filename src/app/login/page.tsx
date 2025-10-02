@@ -78,13 +78,11 @@ export default function LoginPage() {
                   <SelectValue placeholder="Select an agent..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {agents.map((agent) => {
-                    return (
+                  {agents.map((agent) => (
                       <SelectItem key={agent.agent_id} value={agent.agent_id}>
                         {agent.name}
                       </SelectItem>
-                    );
-                  })}
+                  ))}
                 </SelectContent>
               </Select>
               <Button
