@@ -161,21 +161,21 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
 
-  if (!state.twilioDevice && !state.audioPermissionsGranted) {
+  if (!state.audioPermissionsGranted) {
     return (
         <div className="p-4">
             <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Microphone Access Required</AlertTitle>
                 <AlertDescription>
-                    Please grant microphone permissions to enable the softphone. You may need to refresh and try again.
+                    Please grant microphone permissions to enable the softphone. Click the phone icon again after allowing access.
                 </AlertDescription>
             </Alert>
         </div>
     )
   }
   
-  if (!state.twilioDevice && state.audioPermissionsGranted) {
+  if (!state.twilioDevice) {
       return (
           <div className="p-4">
               <Alert>
@@ -221,6 +221,7 @@ const ActiveCallView = () => {
   const { state, dispatch } = useCall();
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -233,11 +234,23 @@ const ActiveCallView = () => {
         if(interval) clearInterval(interval);
     };
   }, [activeCall]);
+  
+  useEffect(() => {
+    if (activeCall?.twilioInstance) {
+        const twilioCall = activeCall.twilioInstance;
+        const handleMute = (muted: boolean) => setIsMuted(muted);
+        twilioCall.on('mute', handleMute);
+        setIsMuted(twilioCall.isMuted());
+        return () => {
+            twilioCall.off('mute', handleMute);
+        }
+    }
+  }, [activeCall?.twilioInstance])
+
 
   if (!activeCall) return null;
   
   const twilioCall = activeCall.twilioInstance;
-  const isMuted = twilioCall?.isMuted();
 
   const handleMute = () => {
     if (twilioCall) {
@@ -303,22 +316,14 @@ export default function Softphone() {
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
   
-  // Local state to track if we've attempted to get permissions
-  const [permissionRequested, setPermissionRequested] = useState(false);
-
   const handleCall = (number: string) => {
     dispatch({ type: 'START_OUTGOING_CALL', payload: { to: number } });
   };
   
   const handleToggle = async (open: boolean) => {
-    // Only request permissions if opening and haven't requested yet.
-    if (open && !audioPermissionsGranted && !permissionRequested) {
-        setPermissionRequested(true);
+    if (open && !audioPermissionsGranted) {
         try {
-            // This is the simplest way to request audio permissions and initialize
-            // the audio context, which is required by browsers.
             await navigator.mediaDevices.getUserMedia({ audio: true });
-            
             dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true }});
             toast({ title: 'Microphone Enabled', description: 'Audio permissions have been granted.' });
         } catch (err) {
@@ -326,12 +331,10 @@ export default function Softphone() {
             toast({
                 variant: 'destructive',
                 title: 'Permission Denied',
-                description: 'Microphone access is required. Please enable it in your browser settings and refresh the page.'
+                description: 'Microphone access is required. Please enable it in your browser settings.'
             });
             dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false }});
-            // Don't open the softphone if permissions are denied, but allow re-trying
-            setPermissionRequested(false); 
-            return;
+            return; // Don't open the popover if permission is denied
         }
     }
     
