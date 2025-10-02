@@ -49,7 +49,7 @@ export interface Lead {
     edited_by: string | null;
     employees: number;
     industry: string;
-    is_edited: false;
+    is_edited: boolean;
     lead_id: string;
     owner_email: string;
     owner_first_name: string;

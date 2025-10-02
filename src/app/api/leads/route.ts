@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const leadsEndpoint = process.env.NEXT_PUBLIC_LEADS_API_ENDPOINT;
+  const leadsEndpoint = "https://7948d6a4aad9.ngrok-free.app/api/v1/leads";
 
   if (!leadsEndpoint) {
     return NextResponse.json(
