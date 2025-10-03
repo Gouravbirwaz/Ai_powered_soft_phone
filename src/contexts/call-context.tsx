@@ -192,6 +192,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
         }
         const { token } = await response.json();
+
+        if (typeof token !== 'string') {
+          throw new Error('Received invalid token from server.');
+        }
         
         const device = new Device(token, {
             codecPreferences: ['opus', 'pcmu'],
