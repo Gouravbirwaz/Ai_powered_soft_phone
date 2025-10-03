@@ -172,22 +172,14 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
 
-  // If initialization is disabled, we don't need to show these alerts.
-  // The UI will just appear ready.
-  if (state.twilioDeviceStatus !== 'ready' && state.twilioDeviceStatus !== 'uninitialized') {
+  if (state.twilioDeviceStatus === 'error') {
       return (
           <div className="p-4">
-              <Alert>
-                  {state.twilioDeviceStatus === 'initializing' ? 
-                    <Loader2 className="h-4 w-4 animate-spin" /> : 
-                    <AlertCircle className="h-4 w-4" />}
-                  <AlertTitle>
-                    {state.twilioDeviceStatus === 'initializing' && 'Softphone Initializing...'}
-                    {state.twilioDeviceStatus === 'error' && 'Initialization Failed'}
-                  </AlertTitle>
+              <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Initialization Failed</AlertTitle>
                   <AlertDescription>
-                    {state.twilioDeviceStatus === 'initializing' && 'The softphone is getting ready. Please wait a moment.'}
-                    {state.twilioDeviceStatus === 'error' && 'Could not connect to the calling service. Please try again.'}
+                    Could not connect to the calling service. Please try reloading the page.
                   </AlertDescription>
               </Alert>
           </div>
