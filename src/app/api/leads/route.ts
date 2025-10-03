@@ -2,8 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  // Correct the endpoint to match the likely backend structure
-  const leadsEndpoint = `${process.env.BASE_URL}/api/twilio/leads`;
+  // Correct the endpoint to match the backend structure
+  const leadsEndpoint = `${process.env.BASE_URL}/api/leads`;
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(
