@@ -2,9 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const leadsEndpoint = `${process.env.BASE_URL}/leads`;
+  // Correct the endpoint to match the likely backend structure
+  const leadsEndpoint = `${process.env.BASE_URL}/api/twilio/leads`;
 
-  if (!leadsEndpoint || !process.env.BASE_URL) {
+  if (!process.env.BASE_URL) {
     return NextResponse.json(
       { error: 'Leads API endpoint is not configured.' },
       { status: 500 }
