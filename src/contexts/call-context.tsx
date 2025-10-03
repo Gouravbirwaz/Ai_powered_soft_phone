@@ -190,6 +190,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch(`/api/token?identity=${state.currentAgent.id}`);
         const { token } = await response.json();
         
+        if (!token) {
+          throw new Error('Received an invalid token from the server.');
+        }
+
         const device = new Device(token, {
             codecPreferences: ['opus', 'pcmu'],
             logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
@@ -235,10 +239,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         device.register();
         twilioDeviceRef.current = device;
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error initializing Twilio:', error);
         dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-        toast({ title: 'Initialization Failed', description: 'Could not get a token from the server.', variant: 'destructive' });
+        toast({ title: 'Initialization Failed', description: error.message || 'Could not get a token from the server.', variant: 'destructive' });
     }
   }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleCallStateChange, endActiveCall]);
 
@@ -324,16 +328,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
         const response = await fetch('/api/leads');
         if (!response.ok) {
-            throw new Error('Failed to fetch leads');
+            throw new Error(`Failed to fetch leads. Status: ${response.status}`);
         }
         const data = await response.json();
         return (data.leads || []) as Lead[];
-    } catch (error) {
+    } catch (error: any) {
         console.error("Fetch leads error:", error);
         toast({
             variant: 'destructive',
             title: 'API Error',
-            description: 'Could not fetch leads.'
+            description: error.message || 'Could not fetch leads.'
         });
         return [];
     }
@@ -395,3 +399,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
