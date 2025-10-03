@@ -13,12 +13,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const response = await fetch(tokenEndpoint, {
-      method: 'POST',
+      method: 'GET', // Match backend which uses GET
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ identity }),
+      // Identity is passed via query params in the backend, so no body is needed.
     });
 
     if (!response.ok) {
@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    // The backend returns { "token": "..." }, so we extract the actual token string.
+    return NextResponse.json({ token: data.token });
 
   } catch (error) {
     console.error('Error proxying token request:', error);
