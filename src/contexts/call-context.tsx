@@ -47,8 +47,8 @@ const initialState: CallState = {
   softphoneOpen: false,
   showIncomingCall: false,
   showPostCallSheetForId: null,
-  twilioDeviceStatus: 'ready',
-  audioPermissionsGranted: true,
+  twilioDeviceStatus: 'uninitialized',
+  audioPermissionsGranted: false,
   currentAgent: null,
 };
 
@@ -116,85 +116,206 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
+  const twilioDeviceRef = useRef<Device | null>(null);
   const activeTwilioCallRef = useRef<TwilioCall | null>(null);
 
+  const cleanupTwilio = useCallback(() => {
+    twilioDeviceRef.current?.destroy();
+    twilioDeviceRef.current = null;
+    activeTwilioCallRef.current = null;
+    dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'uninitialized' } });
+    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+  }, []);
+
+  const handleCallStateChange = useCallback((twilioCall: TwilioCall | null, callData: Partial<Call>) => {
+    if (!twilioCall) return;
+
+    const updatedCall: Call = {
+        id: callData.id || twilioCall.parameters.CallSid,
+        direction: callData.direction || (twilioCall.direction === 'incoming' ? 'incoming' : 'outgoing'),
+        from: twilioCall.parameters.From || state.currentAgent?.phone || 'Unknown',
+        to: twilioCall.parameters.To || 'Unknown',
+        startTime: callData.startTime || Date.now(),
+        duration: 0,
+        status: 'queued',
+        agentId: state.currentAgent?.id.toString(),
+        ...state.callHistory.find(c => c.id === twilioCall.parameters.CallSid),
+        ...callData,
+    };
+    
+    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: updatedCall } });
+    dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: updatedCall });
+
+  }, [state.currentAgent, state.callHistory]);
+
+  const endActiveCall = useCallback((showSheet = true) => {
+    const twilioCall = activeTwilioCallRef.current;
+    if (!twilioCall) return;
+
+    const callId = twilioCall.parameters.CallSid;
+    const existingCall = state.callHistory.find(c => c.id === callId);
+
+    if (existingCall) {
+        const endTime = Date.now();
+        const duration = Math.round((endTime - existingCall.startTime) / 1000);
+        handleCallStateChange(twilioCall, { 
+            status: 'completed', 
+            endTime, 
+            duration,
+        });
+        if (showSheet) {
+            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
+        }
+    }
+    
+    twilioCall.disconnect();
+    activeTwilioCallRef.current = null;
+    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+    dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: false });
+  }, [state.callHistory, handleCallStateChange]);
+
+
   const initializeTwilio = useCallback(async () => {
-    console.log('Twilio initialization is disabled.');
-    toast({ title: 'Softphone Disabled', description: 'Call functionality is currently turned off.' });
-  }, [toast]);
+    if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || !state.currentAgent) {
+        return;
+    }
+    
+    try {
+        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
+        
+        const response = await fetch(`/api/token?identity=${state.currentAgent.id}`);
+        const { token } = await response.json();
+        
+        const device = new Device(token, {
+            codecPreferences: ['opus', 'pcmu'],
+            logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
+        });
+        
+        device.on('ready', (d) => {
+            console.log('Twilio Device is ready.');
+            twilioDeviceRef.current = d;
+            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
+            dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
+        });
+
+        device.on('error', (error) => {
+            console.error('Twilio Device Error:', error);
+            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+            toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
+            cleanupTwilio();
+        });
+
+        device.on('incoming', (twilioCall) => {
+            console.log('Incoming call from', twilioCall.parameters.From);
+            activeTwilioCallRef.current = twilioCall;
+
+            const callData = {
+                id: twilioCall.parameters.CallSid,
+                from: twilioCall.parameters.From,
+                to: twilioCall.parameters.To,
+                direction: 'incoming' as const,
+                status: 'ringing-incoming' as const,
+                startTime: Date.now(),
+            };
+            
+            handleCallStateChange(twilioCall, callData);
+
+            dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
+            dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
+
+            twilioCall.on('disconnect', () => endActiveCall(true));
+            twilioCall.on('cancel', () => endActiveCall(false));
+
+        });
+
+        device.register();
+        twilioDeviceRef.current = device;
+
+    } catch (error) {
+        console.error('Error initializing Twilio:', error);
+        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+        toast({ title: 'Initialization Failed', description: 'Could not get a token from the server.', variant: 'destructive' });
+    }
+  }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleCallStateChange, endActiveCall]);
+
 
   const startOutgoingCall = useCallback(async (to: string) => {
-    console.log('Cannot start outgoing call: Twilio initialization is disabled.');
-    toast({ title: 'Softphone Disabled', description: `Cannot call ${to}.`, variant: 'destructive'});
-  }, [toast]);
+    if (!twilioDeviceRef.current || !state.currentAgent) {
+        toast({ title: 'Softphone Not Ready', description: 'The softphone is not connected. Please login again.', variant: 'destructive' });
+        return;
+    }
+    
+    try {
+        const from = process.env.NEXT_PUBLIC_TWILIO_PHONE_NUMBER || state.currentAgent.phone;
+        const conferenceName = [from, to].sort().join('-');
+
+        const twilioCall = await twilioDeviceRef.current.connect({
+            params: { To: to, From: from, ConferenceName: conferenceName },
+        });
+
+        activeTwilioCallRef.current = twilioCall;
+
+        const callData = {
+            id: twilioCall.parameters.CallSid,
+            from: from,
+            to: to,
+            direction: 'outgoing' as const,
+            status: 'ringing-outgoing' as const,
+            startTime: Date.now(),
+        };
+
+        handleCallStateChange(twilioCall, callData);
+
+        twilioCall.on('accept', () => handleCallStateChange(twilioCall, { status: 'in-progress' }));
+        twilioCall.on('disconnect', () => endActiveCall(true));
+        twilioCall.on('cancel', () => endActiveCall(false));
+        twilioCall.on('reject', () => handleCallStateChange(twilioCall, { status: 'busy' }));
+
+    } catch (error) {
+        console.error('Error starting outgoing call:', error);
+        toast({ title: 'Call Failed', description: 'Could not start the call.', variant: 'destructive' });
+    }
+  }, [twilioDeviceRef, state.currentAgent, toast, handleCallStateChange, endActiveCall]);
 
   const acceptIncomingCall = useCallback(() => {
-    console.log('Cannot accept incoming call: Twilio initialization is disabled.');
-    toast({ title: 'Softphone Disabled', variant: 'destructive'});
-  }, [toast]);
+    const twilioCall = activeTwilioCallRef.current;
+    if (twilioCall && twilioCall.direction === 'incoming') {
+      twilioCall.accept();
+      handleCallStateChange(twilioCall, { status: 'in-progress' });
+      dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+    }
+  }, [handleCallStateChange]);
 
   const rejectIncomingCall = useCallback(() => {
-    console.log('Cannot reject incoming call: Twilio initialization is disabled.');
-    toast({ title: 'Softphone Disabled', variant: 'destructive'});
-  }, [toast]);
+    const twilioCall = activeTwilioCallRef.current;
+    if (twilioCall && twilioCall.direction === 'incoming') {
+      twilioCall.reject();
+      handleCallStateChange(twilioCall, { status: 'canceled' });
+      dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+      activeTwilioCallRef.current = null;
+    }
+  }, [handleCallStateChange]);
   
-  const endActiveCall = useCallback(() => {
-    console.log('Cannot end active call: Twilio initialization is disabled.');
-    toast({ title: 'Softphone Disabled', variant: 'destructive'});
-  }, [toast]);
-
   const getActiveTwilioCall = useCallback(() => {
-    console.log('Cannot get active Twilio call: Twilio initialization is disabled.');
-    return null;
+    return activeTwilioCallRef.current;
   }, []);
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
     try {
         const response = await fetch('/api/leads');
-        
         if (!response.ok) {
-            const errorText = await response.text();
-            // Check if the response is an ngrok HTML page
-            if (errorText.includes('<!DOCTYPE html>') && errorText.includes('ngrok')) {
-                throw new Error(
-                    `The API returned an ngrok error page. This usually means the 'ngrok-skip-browser-warning' header is missing or your local server is not running.`
-                );
-            }
-            throw new Error(`Failed to fetch leads. Status: ${response.status}. Response: ${errorText}`);
+            throw new Error('Failed to fetch leads');
         }
-        
         const data = await response.json();
-        console.log("Fetched leads data:", data);
-
-        if (data && Array.isArray(data.leads)) {
-            return data.leads as Lead[];
-        }
-        
-        // Handle cases where the API might just return an array
-        if (Array.isArray(data)) {
-            return data as Lead[];
-        }
-        
-        console.error("Leads API response is not in the expected format.", data);
-        toast({
-            variant: 'destructive',
-            title: 'API Error',
-            description: 'Received unexpected data format from the leads API.'
-        });
-        return [];
-
-    } catch (error: any) {
+        return (data.leads || []) as Lead[];
+    } catch (error) {
         console.error("Fetch leads error:", error);
-        
-        let description = 'Could not fetch leads.';
-        if (error instanceof Error) {
-            description = error.message;
-        }
-
         toast({
             variant: 'destructive',
             title: 'API Error',
-            description: description
+            description: 'Could not fetch leads.'
         });
         return [];
     }
@@ -204,38 +325,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
         const response = await fetch('/api/agents');
         if (!response.ok) {
-            const errorText = await response.text();
-             if (errorText.includes('<!DOCTYPE html>') && errorText.includes('ngrok')) {
-                throw new Error(
-                    `The API returned an ngrok error page. This usually means the 'ngrok-skip-browser-warning' header is missing or your local server is not running.`
-                );
-            }
-            throw new Error(`Failed to fetch agents. Status: ${response.status}. Response: ${errorText}`);
+            throw new Error(`Failed to fetch agents. Status: ${response.status}`);
         }
         const data = await response.json();
-        console.log('Fetched agents data:', data);
-
-        if (data && Array.isArray(data.agents)) {
-            return data.agents as Agent[];
-        }
-
-        console.error("Agents API response is not in the expected format.", data);
-        toast({
-            variant: 'destructive',
-            title: 'API Error',
-            description: 'Received unexpected data format from the agents API.'
-        });
-        return [];
+        return (data.agents || []) as Agent[];
     } catch (error: any) {
         console.error("Fetch agents error:", error);
-        let description = 'Could not fetch agents.';
-        if (error instanceof Error) {
-            description = error.message;
-        }
         toast({
             variant: 'destructive',
             title: 'API Error',
-            description: description
+            description: error.message || 'Could not fetch agents.'
         });
         return [];
     }
@@ -243,14 +342,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    // Here you might want to initialize Twilio for the specific agent
     initializeTwilio(); 
   }, [initializeTwilio]);
 
   const logout = useCallback(() => {
+    cleanupTwilio();
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
-    // You might want to disconnect the Twilio device here
-  }, []);
+  }, [cleanupTwilio]);
 
   return (
     <CallContext.Provider value={{

@@ -24,7 +24,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const identity = `user_${Math.random().toString(36).substring(7)}`;
+  const searchParams = req.nextUrl.searchParams;
+  const identity = searchParams.get('identity');
+
+  if (!identity) {
+      return NextResponse.json(
+          { error: 'Identity is a required parameter' },
+          { status: 400 }
+      );
+  }
 
   const accessToken = new AccessToken(
     TWILIO_ACCOUNT_SID,
