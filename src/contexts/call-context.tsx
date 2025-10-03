@@ -188,6 +188,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
         
         const response = await fetch(`/api/token?identity=${state.currentAgent.id}`);
+        if (!response.ok) {
+            const errorBody = await response.text();
+            throw new Error(`Failed to get a token from the server. Status: ${response.status}. Body: ${errorBody}`);
+        }
         const { token } = await response.json();
         
         if (!token) {
@@ -270,14 +274,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { conference, customer_call_sid } = await makeCallResponse.json();
 
-        const twilioCall = await twilioDeviceRef.current.connect({
-            params: { To: `room:${conference}` },
-        });
-
-        activeTwilioCallRef.current = twilioCall;
-        
+        // This is a temporary ID until the customer call is initiated.
+        const tempCallId = `temp_${Date.now()}`;
         const callData: Partial<Call> = {
-            id: customer_call_sid, 
+            id: tempCallId, // Use temporary ID
             from: state.currentAgent.phone,
             to: to,
             direction: 'outgoing',
@@ -285,18 +285,33 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             startTime: Date.now(),
         };
 
-        handleCallStateChange(twilioCall, callData);
+        handleCallStateChange(null, callData);
 
-        twilioCall.on('accept', () => handleCallStateChange(twilioCall, { id: customer_call_sid, status: 'in-progress' }));
+        const twilioCall = await twilioDeviceRef.current.connect({
+            params: { To: `room:${conference}` },
+        });
+
+        activeTwilioCallRef.current = twilioCall;
+        
+        // Now update the call with the actual SID
+        const finalCallData: Partial<Call> = {
+            id: tempCallId, // find by temp id
+            ...state.callHistory.find(c => c.id === tempCallId), // get existing data
+            id: twilioCall.parameters.CallSid, // Overwrite with final SID
+        };
+        handleCallStateChange(twilioCall, finalCallData);
+        // The above will create a new entry with the correct ID and update the active call.
+
+        twilioCall.on('accept', () => handleCallStateChange(twilioCall, { status: 'in-progress' }));
         twilioCall.on('disconnect', () => endActiveCall(true));
         twilioCall.on('cancel', () => endActiveCall(false));
-        twilioCall.on('reject', () => handleCallStateChange(twilioCall, { id: customer_call_sid, status: 'busy' }));
+        twilioCall.on('reject', () => handleCallStateChange(twilioCall, { status: 'busy' }));
 
     } catch (error) {
         console.error('Error starting outgoing call:', error);
         toast({ title: 'Call Failed', description: 'Could not start the call.', variant: 'destructive' });
     }
-  }, [twilioDeviceRef, state.currentAgent, toast, handleCallStateChange, endActiveCall]);
+  }, [twilioDeviceRef, state.currentAgent, toast, handleCallStateChange, endActiveCall, state.callHistory]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -397,6 +412,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
-    
