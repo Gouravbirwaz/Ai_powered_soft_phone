@@ -184,17 +184,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
+    dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
+    
     try {
-        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
-        
         const response = await fetch(`/api/token?identity=${state.currentAgent.id}`);
         if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`Failed to get a token from the server. Status: ${response.status}. Body: ${errorBody}`);
+            throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
         }
         const { token } = await response.json();
         
-        if (!token) {
+        if (!token || typeof token !== 'string') {
           throw new Error('Received an invalid token from the server.');
         }
 
@@ -256,10 +255,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
-        const makeCallResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/make_call`, {
+        const makeCallResponse = await fetch(`/api/make-call`, {
           method: 'POST',
           headers: {
-            'ngrok-skip-browser-warning': 'true',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -419,5 +417,7 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
 
     
