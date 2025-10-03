@@ -377,8 +377,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    initializeTwilio(); 
-  }, [initializeTwilio]);
+    // The useEffect below will trigger the initialization
+  }, []);
+  
+  useEffect(() => {
+    if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
+        initializeTwilio();
+    }
+  }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio]);
+
 
   const logout = useCallback(() => {
     cleanupTwilio();
@@ -412,3 +419,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
