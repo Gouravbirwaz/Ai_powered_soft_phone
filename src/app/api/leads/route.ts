@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
   // Correct the endpoint to match the backend structure
-  const leadsEndpoint = `${process.env.BASE_URL}/api/leads`;
+  const leadsEndpoint = `${process.env.BASE_URL}/api/v1/leads`;
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(

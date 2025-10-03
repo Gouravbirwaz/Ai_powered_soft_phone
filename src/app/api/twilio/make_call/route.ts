@@ -2,11 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  // Directly use the environment variable. It should not be prefixed with NEXT_PUBLIC_
-  // if it's meant for server-side use.
+  // Use the server-side environment variable BASE_URL
   const makeCallEndpoint = `${process.env.BASE_URL}/api/twilio/make_call`;
 
-  if (!makeCallEndpoint || !process.env.BASE_URL) {
+  if (!process.env.BASE_URL) {
     return NextResponse.json(
       { error: 'Twilio make_call endpoint is not configured in environment variables.' },
       { status: 500 }
@@ -16,13 +15,19 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
+    // Ensure the body matches the backend expectation, especially agent_id as a string.
+    const requestBody = {
+      agent_id: String(body.agent_id),
+      to: body.to,
+    };
+
     const response = await fetch(makeCallEndpoint, {
       method: 'POST',
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
