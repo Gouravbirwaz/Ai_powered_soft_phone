@@ -255,7 +255,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
-        const makeCallResponse = await fetch(`/api/make-call`, {
+        const makeCallResponse = await fetch(`/api/twilio/make_call`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

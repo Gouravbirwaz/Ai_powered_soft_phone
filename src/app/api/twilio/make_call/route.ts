@@ -2,8 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  // The BASE_URL from .env is available here on the server
   const makeCallEndpoint = `${process.env.BASE_URL}/api/twilio/make_call`;
+
+  if (!makeCallEndpoint) {
+    return NextResponse.json(
+      { error: 'Twilio make_call endpoint is not configured in environment variables.' },
+      { status: 500 }
+    );
+  }
 
   try {
     const body = await req.json();
