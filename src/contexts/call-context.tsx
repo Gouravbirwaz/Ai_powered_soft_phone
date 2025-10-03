@@ -250,10 +250,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
-        // Step 1: Call backend to initiate the call and create the conference
-        const makeCallResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/make_call`, {
+        const makeCallResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/make_call`, {
           method: 'POST',
           headers: {
+            'ngrok-skip-browser-warning': 'true',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -268,14 +268,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { conference, customer_call_sid } = await makeCallResponse.json();
 
-        // Step 2: Connect the agent's device to the conference room
         const twilioCall = await twilioDeviceRef.current.connect({
             params: { To: `room:${conference}` },
         });
 
         activeTwilioCallRef.current = twilioCall;
         
-        // Use the customer call SID as the unique ID for history
         const callData: Partial<Call> = {
             id: customer_call_sid, 
             from: state.currentAgent.phone,

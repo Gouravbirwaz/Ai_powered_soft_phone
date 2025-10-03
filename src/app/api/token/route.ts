@@ -9,13 +9,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Identity is required' }, { status: 400 });
   }
 
-  const tokenEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/token`;
+  const tokenEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/token`;
 
   try {
     const response = await fetch(tokenEndpoint, {
+      method: 'POST',
       headers: {
         'ngrok-skip-browser-warning': 'true',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ identity }),
     });
 
     if (!response.ok) {
@@ -25,7 +28,6 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await response.json();
-    // The backend provides the token directly, just proxy it.
     return NextResponse.json(data);
 
   } catch (error) {
