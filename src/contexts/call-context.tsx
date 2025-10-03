@@ -193,10 +193,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
         const { token } = await response.json();
         
-        if (!token || typeof token !== 'string') {
-          throw new Error('Received an invalid token from the server.');
-        }
-
         const device = new Device(token, {
             codecPreferences: ['opus', 'pcmu'],
             logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
@@ -267,15 +263,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (!makeCallResponse.ok) {
-          throw new Error('Backend failed to initiate call.');
+          const errorBody = await makeCallResponse.text();
+          throw new Error(`Backend failed to initiate call. Status: ${makeCallResponse.status}. Body: ${errorBody}`);
         }
 
         const { conference, customer_call_sid } = await makeCallResponse.json();
 
-        // This is a temporary ID until the customer call is initiated.
-        const tempCallId = `temp_${Date.now()}`;
+        const tempCallId = customer_call_sid || `temp_${Date.now()}`;
         const callData: Partial<Call> = {
-            id: tempCallId, // Use temporary ID
+            id: tempCallId,
             from: state.currentAgent.phone,
             to: to,
             direction: 'outgoing',
@@ -291,23 +287,20 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         activeTwilioCallRef.current = twilioCall;
         
-        // Now update the call with the actual SID
         const finalCallData: Partial<Call> = {
-            id: tempCallId, // find by temp id
             ...state.callHistory.find(c => c.id === tempCallId), // get existing data
             id: twilioCall.parameters.CallSid, // Overwrite with final SID
         };
         handleCallStateChange(twilioCall, finalCallData);
-        // The above will create a new entry with the correct ID and update the active call.
 
         twilioCall.on('accept', () => handleCallStateChange(twilioCall, { status: 'in-progress' }));
         twilioCall.on('disconnect', () => endActiveCall(true));
         twilioCall.on('cancel', () => endActiveCall(false));
         twilioCall.on('reject', () => handleCallStateChange(twilioCall, { status: 'busy' }));
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error starting outgoing call:', error);
-        toast({ title: 'Call Failed', description: 'Could not start the call.', variant: 'destructive' });
+        toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
     }
   }, [twilioDeviceRef, state.currentAgent, toast, handleCallStateChange, endActiveCall, state.callHistory]);
 
@@ -375,7 +368,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    // The useEffect below will trigger the initialization
   }, []);
   
   useEffect(() => {
@@ -417,7 +409,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
-
-    
