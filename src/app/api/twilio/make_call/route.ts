@@ -2,9 +2,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
+  // Directly use the environment variable. It should not be prefixed with NEXT_PUBLIC_
+  // if it's meant for server-side use.
   const makeCallEndpoint = `${process.env.BASE_URL}/api/twilio/make_call`;
 
-  if (!makeCallEndpoint) {
+  if (!makeCallEndpoint || !process.env.BASE_URL) {
     return NextResponse.json(
       { error: 'Twilio make_call endpoint is not configured in environment variables.' },
       { status: 500 }
@@ -26,6 +28,7 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Error from make_call endpoint:', errorText);
+      // Proxy the error response from the backend
       return NextResponse.json({ error: `Failed to initiate call from backend. Status: ${response.status} ${response.statusText}` }, { status: response.status });
     }
 
