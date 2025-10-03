@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const leadsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/leads`;
+  const leadsEndpoint = `${process.env.BASE_URL}/leads`;
 
-  if (!leadsEndpoint) {
+  if (!leadsEndpoint || !process.env.BASE_URL) {
     return NextResponse.json(
       { error: 'Leads API endpoint is not configured.' },
       { status: 500 }
