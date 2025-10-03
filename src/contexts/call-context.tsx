@@ -199,9 +199,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
         });
         
-        device.on('ready', (d) => {
+        await device.register();
+
+        twilioDeviceRef.current = device;
+
+        device.on('ready', () => {
             console.log('Twilio Device is ready.');
-            twilioDeviceRef.current = d;
             dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
             dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
         });
@@ -236,9 +239,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         });
 
-        device.register();
-        twilioDeviceRef.current = device;
-
     } catch (error: any) {
         console.error('Error initializing Twilio:', error);
         dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
@@ -261,7 +261,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            agent_id: state.currentAgent.id,
+            agent_id: String(state.currentAgent.id),
             to: to,
           }),
         });
@@ -400,4 +400,5 @@ export const useCall = () => {
   return context;
 };
 
+    
     
