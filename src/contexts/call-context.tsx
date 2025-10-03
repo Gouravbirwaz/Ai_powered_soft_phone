@@ -245,7 +245,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
   const startOutgoingCall = useCallback(async (to: string) => {
-    if (!twilioDeviceRef.current || !state.currentAgent) {
+    if (!state.currentAgent) {
         toast({ title: 'Softphone Not Ready', description: 'The softphone is not connected. Please login again.', variant: 'destructive' });
         return;
     }
@@ -280,6 +280,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         };
 
         handleCallStateChange(null, callData);
+        
+        if (!twilioDeviceRef.current) {
+            throw new Error("Twilio Device not initialized.");
+        }
 
         const twilioCall = await twilioDeviceRef.current.connect({
             params: { To: `room:${conference}` },
@@ -302,7 +306,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         console.error('Error starting outgoing call:', error);
         toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
     }
-  }, [twilioDeviceRef, state.currentAgent, toast, handleCallStateChange, endActiveCall, state.callHistory]);
+  }, [state.currentAgent, toast, handleCallStateChange, endActiveCall, state.callHistory]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
