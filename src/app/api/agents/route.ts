@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const agentsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/agents`;
+  const agentsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/agents`;
 
   if (!agentsEndpoint) {
     return NextResponse.json(

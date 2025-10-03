@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const leadsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/leads`;
+  const leadsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/leads`;
 
   if (!leadsEndpoint) {
     return NextResponse.json(
