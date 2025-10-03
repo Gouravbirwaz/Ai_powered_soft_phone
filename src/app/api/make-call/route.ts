@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const makeCallEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/make_call`;
+  const makeCallEndpoint = `${process.env.BASE_URL}/api/twilio/make_call`;
 
   try {
     const body = await req.json();
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Error from make_call endpoint:', errorText);
-      return NextResponse.json({ error: 'Failed to initiate call from backend' }, { status: response.status });
+      return NextResponse.json({ error: `Failed to initiate call from backend. Status: ${response.status} ${response.statusText}` }, { status: response.status });
     }
 
     const data = await response.json();
@@ -30,5 +30,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to proxy make_call request' }, { status: 500 });
   }
 }
-
-    
