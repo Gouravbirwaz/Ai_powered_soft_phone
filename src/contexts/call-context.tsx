@@ -128,18 +128,21 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const handleCallStateChange = useCallback((twilioCall: TwilioCall | null, callData: Partial<Call>) => {
-    if (!twilioCall) return;
+    if (!twilioCall && !callData.id) return;
+    const callId = callData.id || twilioCall?.parameters.CallSid;
+
+    if(!callId) return;
 
     const updatedCall: Call = {
-        id: callData.id || twilioCall.parameters.CallSid,
-        direction: callData.direction || (twilioCall.direction === 'incoming' ? 'incoming' : 'outgoing'),
-        from: twilioCall.parameters.From || state.currentAgent?.phone || 'Unknown',
-        to: twilioCall.parameters.To || 'Unknown',
+        id: callId,
+        direction: callData.direction || (twilioCall?.direction === 'incoming' ? 'incoming' : 'outgoing'),
+        from: twilioCall?.parameters.From || state.currentAgent?.phone || 'Unknown',
+        to: twilioCall?.parameters.To || callData.to || 'Unknown',
         startTime: callData.startTime || Date.now(),
         duration: 0,
         status: 'queued',
         agentId: state.currentAgent?.id.toString(),
-        ...state.callHistory.find(c => c.id === twilioCall.parameters.CallSid),
+        ...state.callHistory.find(c => c.id === callId),
         ...callData,
     };
     
@@ -247,30 +250,47 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
-        const from = process.env.NEXT_PUBLIC_TWILIO_PHONE_NUMBER || state.currentAgent.phone;
-        const conferenceName = [from, to].sort().join('-');
+        // Step 1: Call backend to initiate the call and create the conference
+        const makeCallResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/make_call`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            agent_id: state.currentAgent.id,
+            to: to,
+          }),
+        });
 
+        if (!makeCallResponse.ok) {
+          throw new Error('Backend failed to initiate call.');
+        }
+
+        const { conference, customer_call_sid } = await makeCallResponse.json();
+
+        // Step 2: Connect the agent's device to the conference room
         const twilioCall = await twilioDeviceRef.current.connect({
-            params: { To: to, From: from, ConferenceName: conferenceName },
+            params: { To: `room:${conference}` },
         });
 
         activeTwilioCallRef.current = twilioCall;
-
-        const callData = {
-            id: twilioCall.parameters.CallSid,
-            from: from,
+        
+        // Use the customer call SID as the unique ID for history
+        const callData: Partial<Call> = {
+            id: customer_call_sid, 
+            from: state.currentAgent.phone,
             to: to,
-            direction: 'outgoing' as const,
-            status: 'ringing-outgoing' as const,
+            direction: 'outgoing',
+            status: 'ringing-outgoing',
             startTime: Date.now(),
         };
 
         handleCallStateChange(twilioCall, callData);
 
-        twilioCall.on('accept', () => handleCallStateChange(twilioCall, { status: 'in-progress' }));
+        twilioCall.on('accept', () => handleCallStateChange(twilioCall, { id: customer_call_sid, status: 'in-progress' }));
         twilioCall.on('disconnect', () => endActiveCall(true));
         twilioCall.on('cancel', () => endActiveCall(false));
-        twilioCall.on('reject', () => handleCallStateChange(twilioCall, { status: 'busy' }));
+        twilioCall.on('reject', () => handleCallStateChange(twilioCall, { id: customer_call_sid, status: 'busy' }));
 
     } catch (error) {
         console.error('Error starting outgoing call:', error);

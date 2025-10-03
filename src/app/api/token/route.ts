@@ -1,53 +1,35 @@
+
 import { NextRequest, NextResponse } from 'next/server';
-import twilio from 'twilio';
-
-const {
-  TWILIO_ACCOUNT_SID,
-  TWILIO_API_KEY_SID,
-  TWILIO_API_SECRET,
-  TWILIO_TWIML_APP_SID,
-} = process.env;
-
-const { AccessToken } = twilio.jwt;
-const { VoiceGrant } = AccessToken;
 
 export async function GET(req: NextRequest) {
-  if (
-    !TWILIO_ACCOUNT_SID ||
-    !TWILIO_API_KEY_SID ||
-    !TWILIO_API_SECRET ||
-    !TWILIO_TWIML_APP_SID
-  ) {
-    return NextResponse.json(
-      { error: 'Twilio environment variables not configured' },
-      { status: 500 }
-    );
-  }
-
-  const searchParams = req.nextUrl.searchParams;
+  const { searchParams } = new URL(req.url);
   const identity = searchParams.get('identity');
-
+  
   if (!identity) {
-      return NextResponse.json(
-          { error: 'Identity is a required parameter' },
-          { status: 400 }
-      );
+    return NextResponse.json({ error: 'Identity is required' }, { status: 400 });
   }
 
-  const accessToken = new AccessToken(
-    TWILIO_ACCOUNT_SID,
-    TWILIO_API_KEY_SID,
-    TWILIO_API_SECRET,
-    { identity }
-  );
+  const tokenEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/token`;
 
-  const voiceGrant = new VoiceGrant({
-    outgoingApplicationSid: TWILIO_TWIML_APP_SID,
-    incomingAllow: true, 
-  });
-  accessToken.addGrant(voiceGrant);
+  try {
+    const response = await fetch(tokenEndpoint, {
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    });
 
-  const token = accessToken.toJwt();
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error from token endpoint:', errorText);
+      return NextResponse.json({ error: 'Failed to fetch token from backend' }, { status: response.status });
+    }
 
-  return NextResponse.json({ token, identity });
+    const data = await response.json();
+    // The backend provides the token directly, just proxy it.
+    return NextResponse.json(data);
+
+  } catch (error) {
+    console.error('Error proxying token request:', error);
+    return NextResponse.json({ error: 'Failed to proxy token request' }, { status: 500 });
+  }
 }
