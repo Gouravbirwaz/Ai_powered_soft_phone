@@ -199,10 +199,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
         });
         
-        await device.register();
-
-        twilioDeviceRef.current = device;
-
         device.on('ready', () => {
             console.log('Twilio Device is ready.');
             dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
@@ -236,8 +232,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
             twilioCall.on('disconnect', () => endActiveCall(true));
             twilioCall.on('cancel', () => endActiveCall(false));
-
         });
+
+        await device.register();
+        twilioDeviceRef.current = device;
 
     } catch (error: any) {
         console.error('Error initializing Twilio:', error);
