@@ -139,8 +139,8 @@ const logCall = async (call: Call) => {
         return;
     }
 
-    if (call.direction === 'outgoing' && !call.leadId) {
-        console.warn('Not logging manually dialed outgoing call without a leadId.', call);
+    if (!call.leadId) {
+        console.warn('Cannot log call without leadId.', call);
         return;
     }
 
@@ -385,13 +385,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const permanentCall = { ...callData, id: twilioCall.parameters.CallSid, status: 'ringing-outgoing' as CallStatus };
 
         // Replace temporary call with permanent one
-        dispatch({
-          type: 'ADD_OR_UPDATE_CALL',
-          payload: { call: permanentCall },
+        dispatch((prevState) => {
+          const newHistory = prevState.callHistory.map(c => c.id === tempId ? permanentCall : c);
+          return {
+            ...prevState,
+            callHistory: newHistory,
+            activeCall: permanentCall
+          }
         });
-        const historyWithoutTemp = state.callHistory.filter(c => c.id !== tempId);
-        dispatch({ type: 'SET_CALL_HISTORY', payload: [permanentCall, ...historyWithoutTemp] });
-
 
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
 
@@ -412,7 +413,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
         endActiveCall('failed');
     }
-  }, [state.currentAgent, toast, endActiveCall, state.callHistory]);
+  }, [state.currentAgent, toast, endActiveCall]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -513,7 +514,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         dispatch: (action: CallAction) => {
             if (action.type === 'UPDATE_NOTES_AND_SUMMARY') {
                 updateNotesAndSummary(action.payload);
-            } else {
+            } else if (action.type === 'ADD_OR_UPDATE_CALL' || action.type === 'UPDATE_ACTIVE_CALL' || action.type === 'SET_ACTIVE_CALL' || action.type === 'SET_CALL_HISTORY') {
+                // This is a hacky way to get around the state not being updated in the reducer
+                dispatch(action)
+            }
+             else {
                 dispatch(action);
             }
         },
@@ -542,5 +547,7 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
 
     
