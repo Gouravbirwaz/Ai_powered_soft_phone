@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// Handle GET requests to fetch call logs
+// Handle GET requests to fetch call logs by transforming them into a POST request for the backend
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const agentId = searchParams.get('agent_id');
@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 });
   }
 
-  // Construct the backend endpoint URL for GET
-  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/call_logs?agent_id=${agentId}`;
+  // The backend expects a POST request to fetch logs
+  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(
@@ -22,11 +22,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const response = await fetch(getCallLogsEndpoint, {
-      method: 'GET',
+      method: 'POST', // Backend requires POST to fetch logs
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ agent_id: agentId }), // Pass agent_id in the body
     });
 
     if (!response.ok) {
