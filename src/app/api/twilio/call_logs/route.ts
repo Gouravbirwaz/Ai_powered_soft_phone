@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-
+// Handles POST requests to create or update a call log
 export async function POST(req: NextRequest) {
     const postCallLogEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
   
@@ -57,8 +57,10 @@ export async function POST(req: NextRequest) {
     }
   
     try {
+      // Get the entire body from the frontend request
       const body = await req.json();
       
+      // Forward the entire body to the backend
       const response = await fetch(postCallLogEndpoint, {
         method: 'POST',
         headers: {
