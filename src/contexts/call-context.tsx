@@ -13,7 +13,6 @@ import React, {
 } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
-import { MOCK_CALLS } from '@/lib/mock-calls';
 
 type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 
@@ -35,6 +34,7 @@ type CallAction =
   | { type: 'SET_AUDIO_PERMISSIONS'; payload: { granted: boolean } }
   | { type: 'SET_ACTIVE_CALL'; payload: { call: Call | null } }
   | { type: 'ADD_OR_UPDATE_CALL_HISTORY'; payload: Call }
+  | { type: 'SET_CALL_HISTORY'; payload: Call[] }
   | { type: 'SHOW_INCOMING_CALL'; payload: boolean }
   | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
@@ -42,7 +42,7 @@ type CallAction =
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } };
 
 const initialState: CallState = {
-  callHistory: MOCK_CALLS,
+  callHistory: [],
   activeCall: null,
   softphoneOpen: false,
   showIncomingCall: false,
@@ -58,6 +58,7 @@ const CallContext = createContext<
       dispatch: React.Dispatch<CallAction>;
       fetchLeads: () => Promise<Lead[]>;
       fetchAgents: () => Promise<Agent[]>;
+      fetchCallHistory: (agentId: string) => Promise<void>;
       loginAsAgent: (agent: Agent) => void;
       logout: () => void;
       initializeTwilio: () => Promise<void>;
@@ -94,6 +95,8 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
           : [action.payload, ...state.callHistory],
       };
     }
+    case 'SET_CALL_HISTORY':
+        return { ...state, callHistory: action.payload };
     case 'UPDATE_NOTES_AND_SUMMARY':
         const updatedHistory = state.callHistory.map((call) =>
             call.id === action.payload.callId
@@ -223,9 +226,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     twilioCall.disconnect();
     activeTwilioCallRef.current = null;
     
-    // Only close the softphone if the call was actually completed.
-    // Otherwise, keep it open for voicemail, etc.
-    if (status === 'completed') {
+    const isTerminalStatus = ['completed', 'busy', 'failed', 'canceled'].includes(status);
+
+    if (isTerminalStatus && status !== 'completed') {
+       // Don't close the softphone, just update the view
+    } else {
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
       dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
       dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: false });
@@ -403,7 +408,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const twilioCall = activeTwilioCallRef.current;
     if (twilioCall && twilioCall.direction === 'incoming') {
       twilioCall.reject();
-      // Use endActiveCall to centralize state updates
       endActiveCall('canceled');
       dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
@@ -452,6 +456,39 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return [];
     }
   }, [toast]);
+
+  const fetchCallHistory = useCallback(async (agentId: string) => {
+    try {
+        const response = await fetch(`/api/twilio/call_logs?agent_id=${agentId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch call history. Status: ${response.status}`);
+        }
+        const data = await response.json();
+        // The backend might return call logs in a different shape, so we map them.
+        const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
+            id: log.call_log_id || `log-${log.lead_id}-${log.started_at}`,
+            direction: 'outgoing', // Assuming all logged calls are outgoing for now
+            from: state.currentAgent?.phone || 'Unknown',
+            to: log.phone_number,
+            startTime: new Date(log.started_at).getTime(),
+            endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
+            duration: log.duration,
+            status: 'completed', // Assuming logged calls are completed
+            notes: log.notes,
+            summary: log.summary,
+            agentId: log.agent_id,
+            leadId: log.lead_id,
+        }));
+        dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
+    } catch (error: any) {
+        console.error("Fetch call history error:", error);
+        toast({
+            variant: 'destructive',
+            title: 'API Error',
+            description: error.message || 'Could not fetch call history.'
+        });
+    }
+  }, [toast, state.currentAgent]);
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
@@ -475,6 +512,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         dispatch,
         fetchLeads,
         fetchAgents,
+        fetchCallHistory,
         loginAsAgent,
         logout,
         initializeTwilio,

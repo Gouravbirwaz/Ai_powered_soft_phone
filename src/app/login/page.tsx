@@ -29,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 const TEST_PASSWORD = 'caprare@123';
 
 export default function LoginPage() {
-  const { fetchAgents, loginAsAgent, state } = useCall();
+  const { fetchAgents, loginAsAgent, state, fetchCallHistory } = useCall();
   const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
@@ -76,7 +76,7 @@ export default function LoginPage() {
     getAgents();
   }, [fetchAgents]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (password !== TEST_PASSWORD) {
       toast({
         variant: 'destructive',
@@ -90,6 +90,7 @@ export default function LoginPage() {
 
     if (agentToLogin) {
       loginAsAgent(agentToLogin);
+      await fetchCallHistory(agentToLogin.id);
       router.push('/');
     }
   };
