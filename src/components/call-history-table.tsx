@@ -193,7 +193,7 @@ export default function CallHistoryTable() {
                 )
               })
             ) : (
-              <TableRow>
+              <TableRow key="no-calls-row">
                 <TableCell colSpan={6} className="h-24 text-center">
                   No calls found.
                 </TableCell>
