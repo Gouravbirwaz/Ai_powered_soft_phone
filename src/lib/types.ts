@@ -29,6 +29,8 @@ export interface Call {
   avatarUrl?: string;
   agentId?: string;
   leadId?: string;
+  followUpRequired?: boolean;
+  callAttemptNumber?: number;
 }
 
 export interface Lead {
