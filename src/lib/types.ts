@@ -28,6 +28,7 @@ export interface Call {
   summary?: string;
   avatarUrl?: string;
   agentId?: string;
+  leadId?: string;
 }
 
 export interface Lead {

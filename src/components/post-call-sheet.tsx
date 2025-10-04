@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -24,7 +25,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { generateSummaryAction } from '@/lib/actions';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2 } from 'lucide-react';
 
@@ -47,6 +48,13 @@ export default function PostCallSheet({ call }: { call: Call }) {
       summary: call.summary || '',
     },
   });
+
+  useEffect(() => {
+    form.reset({
+        notes: call.notes || '',
+        summary: call.summary || '',
+    })
+  }, [call, form]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {

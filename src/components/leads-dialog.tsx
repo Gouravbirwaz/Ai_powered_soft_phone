@@ -38,7 +38,7 @@ export default function LeadsDialog({
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
     if (phoneNumber) {
-      startOutgoingCall(phoneNumber);
+      startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
     }
   };

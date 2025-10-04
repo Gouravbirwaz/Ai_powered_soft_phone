@@ -61,7 +61,7 @@ const CallContext = createContext<
       loginAsAgent: (agent: Agent) => void;
       logout: () => void;
       initializeTwilio: () => Promise<void>;
-      startOutgoingCall: (to: string) => void;
+      startOutgoingCall: (to: string, leadId?: string) => void;
       acceptIncomingCall: () => void;
       rejectIncomingCall: () => void;
       endActiveCall: () => void;
@@ -94,14 +94,19 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       };
     }
     case 'UPDATE_NOTES_AND_SUMMARY':
-      return {
-        ...state,
-        callHistory: state.callHistory.map((call) =>
-          call.id === action.payload.callId
+        const updatedHistory = state.callHistory.map((call) =>
+            call.id === action.payload.callId
             ? { ...call, notes: action.payload.notes, summary: action.payload.summary }
             : call
-        ),
-      };
+        );
+        const callToLog = updatedHistory.find(c => c.id === action.payload.callId);
+        if (callToLog) {
+            logCall(callToLog);
+        }
+        return {
+            ...state,
+            callHistory: updatedHistory,
+        };
     case 'CLOSE_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
@@ -112,6 +117,38 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return state;
   }
 };
+
+const logCall = async (call: Call) => {
+    if (!call.leadId || !call.agentId) {
+        console.warn('Cannot log call without leadId and agentId.', call);
+        return;
+    }
+    try {
+        const response = await fetch('/api/twilio/call_logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                lead_id: call.leadId,
+                agent_id: call.agentId,
+                phone_number: call.to,
+                started_at: call.startTime ? new Date(call.startTime).toISOString() : undefined,
+                ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
+                duration: call.duration,
+                notes: call.notes,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Failed to log call:', errorData);
+        } else {
+            console.log('Call logged successfully');
+        }
+    } catch (error) {
+        console.error('Error logging call:', error);
+    }
+};
+
 
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
@@ -161,11 +198,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     if (existingCall) {
         const endTime = Date.now();
         const duration = Math.round((endTime - existingCall.startTime) / 1000);
-        handleCallStateChange(twilioCall, { 
-            status: 'completed', 
-            endTime, 
+        const finalCallState: Call = {
+            ...existingCall,
+            status: 'completed',
+            endTime,
             duration,
-        });
+        }
+        handleCallStateChange(twilioCall, finalCallState);
+        logCall(finalCallState);
+
         if (showSheet) {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
         }
@@ -248,7 +289,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleCallStateChange, endActiveCall]);
 
 
-  const startOutgoingCall = useCallback(async (to: string) => {
+  const startOutgoingCall = useCallback(async (to: string, leadId?: string) => {
     if (!state.currentAgent) {
         toast({ title: 'Softphone Not Ready', description: 'The softphone is not connected. Please login again.', variant: 'destructive' });
         return;
@@ -281,6 +322,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             direction: 'outgoing',
             status: 'ringing-outgoing',
             startTime: Date.now(),
+            leadId: leadId,
         };
 
         handleCallStateChange(null, callData);
@@ -417,5 +459,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
