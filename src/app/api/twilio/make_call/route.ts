@@ -15,19 +15,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
-    // Ensure the body matches the backend expectation, especially agent_id as a string.
-    const requestBody = {
-      agent_id: String(body.agent_id),
-      to: body.to,
-    };
-
     const response = await fetch(makeCallEndpoint, {
       method: 'POST',
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(body), // Forward the original body
     });
 
     if (!response.ok) {
