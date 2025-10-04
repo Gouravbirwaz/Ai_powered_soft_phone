@@ -187,7 +187,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
     
     try {
-        const response = await fetch(`/api/token?identity=${state.currentAgent.id}`);
+        const response = await fetch(`/api/twilio/token?identity=${state.currentAgent.id}`);
         if (!response.ok) {
             throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
         }
@@ -417,3 +417,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
