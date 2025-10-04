@@ -221,7 +221,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const updateCallOnBackend = useCallback(async (call: Call) => {
     try {
         const response = await fetch('/api/twilio/call_logs', {
-            method: 'PUT',
+            method: 'POST', // Using POST to update as well, backend should handle upsert
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 call_log_id: call.id,
@@ -230,6 +230,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
                 duration: call.duration,
                 status: call.status,
+                // Include keys the backend expects for creation, even if null/undefined
+                lead_id: call.leadId,
+                agent_id: call.agentId,
+                phone_number: call.direction === 'outgoing' ? call.to : call.from,
             }),
         });
 
