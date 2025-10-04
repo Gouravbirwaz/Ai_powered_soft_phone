@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { Call, Lead, Agent, CallStatus } from '@/lib/types';
@@ -119,64 +118,55 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 
 const CallContext = createContext<any>(null);
 
-
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
   const twilioDeviceRef = useRef<Device | null>(null);
   const activeTwilioCallRef = useRef<TwilioCall | null>(null);
   const activeCallRef = useRef<Call | null>(null);
-  const currentAgentRef = useRef<Agent | null>(null);
 
   useEffect(() => {
     activeCallRef.current = state.activeCall;
   }, [state.activeCall]);
 
-  useEffect(() => {
-    currentAgentRef.current = state.currentAgent;
-  }, [state.currentAgent]);
 
   const fetchCallHistory = useCallback(async (agentId: string) => {
     try {
-        const response = await fetch(`/api/twilio/call_logs?agent_id=${agentId}`);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch call history. Status: ${response.status}`);
-        }
-        const data = await response.json();
-        const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
-            id: log.call_log_id,
-            direction: log.direction || 'outgoing', 
-            from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
-            to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
-            startTime: new Date(log.started_at).getTime(),
-            endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
-            duration: log.duration || 0,
-            status: 'completed',
-            notes: log.notes,
-            summary: log.summary,
-            agentId: String(log.agent_id),
-            leadId: log.lead_id,
-        }));
-        dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls.sort((a, b) => b.startTime - a.startTime) });
+      const response = await fetch(`/api/twilio/call_logs?agent_id=${agentId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch call history. Status: ${response.status}`);
+      }
+      const data = await response.json();
+      const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
+        id: log.call_log_id,
+        direction: log.direction || 'outgoing', 
+        from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
+        to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
+        startTime: new Date(log.started_at).getTime(),
+        endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
+        duration: log.duration || 0,
+        status: 'completed',
+        notes: log.notes,
+        summary: log.summary,
+        agentId: String(log.agent_id),
+        leadId: log.lead_id,
+        followUpRequired: log.follow_up_required || false,
+        callAttemptNumber: log.call_attempt_number || 1,
+      }));
+      dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls.sort((a, b) => b.startTime - a.startTime) });
     } catch (error: any) {
-        console.error("Fetch call history error:", error);
-        toast({
-            variant: 'destructive',
-            title: 'API Error',
-            description: error.message || 'Could not fetch call history.'
-        });
+      console.error("Fetch call history error:", error);
+      toast({
+        variant: 'destructive',
+        title: 'API Error',
+        description: error.message || 'Could not fetch call history.'
+      });
     }
   }, [toast, state.currentAgent]);
-  
-  const updateCallOnBackend = useCallback(async (call: Call, agentId: string) => {
-    if (!agentId) {
-      console.warn('Cannot log call without an agentId.', call);
-      return;
-    }
-  
-    // Your backend requires a lead_id, so we only proceed if one exists.
-    if (!call.leadId) {
-      console.log('Not logging call without a leadId to backend.', call);
+
+  const updateCallOnBackend = useCallback(async (call: Call) => {
+    if (!state.currentAgent?.id || !call.leadId) {
+      console.warn('Cannot log call without an agentId and leadId.', call);
       return;
     }
     
@@ -185,36 +175,47 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       
       const body = {
         lead_id: call.leadId,
-        agent_id: agentId,
+        agent_id: state.currentAgent.id,
         phone_number: phoneNumber,
         started_at: call.startTime ? new Date(call.startTime).toISOString() : null,
         ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
         duration: call.duration,
-        notes: call.notes,
-        summary: call.summary,
+        notes: call.notes || '',
+        summary: call.summary || '',
+        follow_up_required: call.followUpRequired || false,
+        call_attempt_number: call.callAttemptNumber || 1,
       };
-  
+
+      console.log('Sending call log to backend via proxy:', body);
+
       const response = await fetch('/api/twilio/call_logs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from logCall API.' }));
         console.error('Failed to log call:', errorData);
-        toast({ title: 'Logging Error', description: `Failed to save call log: ${errorData.error || response.statusText}`, variant: 'destructive'});
+        toast({ 
+          title: 'Logging Error', 
+          description: `Failed to save call log: ${errorData.details || response.statusText}`, 
+          variant: 'destructive'
+        });
       } else {
         console.log('Call log saved successfully for call:', call.id);
-        if (currentAgentRef.current?.id) {
-          fetchCallHistory(currentAgentRef.current.id);
-        }
+        fetchCallHistory(state.currentAgent.id);
       }
     } catch (error) {
       console.error('Error in updateCallOnBackend function:', error);
-      toast({ title: 'Logging Error', description: 'An unexpected error occurred while saving the call log.', variant: 'destructive'});
+      toast({ 
+        title: 'Logging Error', 
+        description: 'An unexpected error occurred while saving the call log.', 
+        variant: 'destructive'
+      });
     }
-  }, [toast, fetchCallHistory]);
+  }, [toast, state.currentAgent, fetchCallHistory]);
+
 
   const cleanupTwilio = useCallback(() => {
     twilioDeviceRef.current?.destroy();
@@ -224,58 +225,56 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
   }, []);
   
-  const handleCallDisconnect = useCallback((twilioCall: TwilioCall | null, status: CallStatus = 'completed') => {
-        const call = activeCallRef.current;
-        const agentId = currentAgentRef.current?.id;
+  const handleCallDisconnect = useCallback((twilioCall: TwilioCall, status: CallStatus = 'completed') => {
+    const call = activeCallRef.current;
+    if (!call) {
+      console.warn('handleCallDisconnect called but no active call in ref.');
+      return;
+    }
 
-        if (!call) {
-            console.warn('handleCallDisconnect called but no active call in ref.');
-            return;
-        }
+    console.log('Call disconnect triggered for call:', call.id);
+    
+    const endTime = Date.now();
+    const duration = Math.round((endTime - call.startTime) / 1000);
 
-        const endTime = Date.now();
-        const duration = Math.round((endTime - call.startTime) / 1000);
+    const finalCallState: Call = {
+      ...call,
+      status,
+      endTime,
+      duration,
+    };
 
-        const finalCallState: Call = {
-            ...call,
-            status,
-            endTime,
-            duration,
-        };
-        
-        dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: finalCallState } });
-        
-        if (agentId) { 
-          updateCallOnBackend(finalCallState, agentId);
-        } else {
-          console.error('Cannot log call, agent ID is missing at disconnect time.');
-        }
+    console.log('Final call state before API call:', finalCallState);
+    
+    updateCallOnBackend(finalCallState);
 
-        if (status === 'completed' && finalCallState.leadId) {
-            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
-        } else {
-            dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-        }
-        
-        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-        activeTwilioCallRef.current = null;
-    }, [updateCallOnBackend]);
+    dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: finalCallState } });
+    
+    if (status === 'completed' && finalCallState.leadId) {
+      dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
+    } else {
+      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+    }
+    
+    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+    activeTwilioCallRef.current = null;
+  }, [updateCallOnBackend]);
 
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
     const twilioCall = activeTwilioCallRef.current;
     
     if (twilioCall) {
-        // The 'disconnect' event on the TwilioCall object will trigger handleCallDisconnect
-        twilioCall.disconnect();
+      console.log('Disconnecting Twilio call');
+      twilioCall.disconnect();
     } else {
-        // If there's no Twilio call object, it might be a call that failed before connecting
-        const call = activeCallRef.current;
-        if (call) {
-            handleCallDisconnect(null, status);
-        }
+      console.log('No Twilio call found, handling disconnect manually');
+      const call = activeCallRef.current;
+      if (call) {
+        handleCallDisconnect(null as any, status);
+      }
     }
   }, [handleCallDisconnect]);
-
+  
   const closeSoftphone = useCallback(() => {
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: false });
@@ -288,14 +287,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const fromNumber = twilioCall.parameters.From;
 
     const callData: Call = {
-        id: twilioCall.parameters.CallSid,
-        from: fromNumber,
-        to: twilioCall.parameters.To,
-        direction: 'incoming',
-        status: 'ringing-incoming',
-        startTime: Date.now(),
-        duration: 0,
-        agentId: state.currentAgent?.id,
+      id: twilioCall.parameters.CallSid,
+      from: fromNumber,
+      to: twilioCall.parameters.To,
+      direction: 'incoming',
+      status: 'ringing-incoming',
+      startTime: Date.now(),
+      duration: 0,
+      agentId: state.currentAgent?.id,
+      followUpRequired: false,
+      callAttemptNumber: 1,
     };
     
     dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: callData } });
@@ -311,121 +312,138 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const initializeTwilio = useCallback(async () => {
     if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || !state.currentAgent) {
-        return;
+      return;
     }
     
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
     
     try {
-        const response = await fetch(`/api/twilio/token?identity=${state.currentAgent.id}`);
-        if (!response.ok) {
-            throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
-        }
-        const { token } = await response.json();
+      const response = await fetch(`/api/twilio/token?identity=${state.currentAgent.id}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
+      }
+      const { token } = await response.json();
 
-        if (typeof token !== 'string') {
-          throw new Error('Received invalid token from server.');
-        }
-        
-        const device = new Device(token, {
-            codecPreferences: ['opus', 'pcmu'],
-            logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
-        });
-        
-        device.on('ready', () => {
-            console.log('Twilio Device is ready.');
-            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
-            dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
-        });
+      if (typeof token !== 'string') {
+        throw new Error('Received invalid token from server.');
+      }
+      
+      const device = new Device(token, {
+        codecPreferences: ['opus', 'pcmu'],
+        logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
+      });
+      
+      device.on('ready', () => {
+        console.log('Twilio Device is ready.');
+        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
+        dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
+      });
 
-        device.on('error', (error) => {
-            console.error('Twilio Device Error:', error);
-            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-            toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
-            cleanupTwilio();
-        });
+      device.on('error', (error) => {
+        console.error('Twilio Device Error:', error);
+        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+        toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
+        cleanupTwilio();
+      });
 
-        device.on('incoming', handleIncomingCall);
+      device.on('incoming', handleIncomingCall);
 
-        await device.register();
-        twilioDeviceRef.current = device;
+      await device.register();
+      twilioDeviceRef.current = device;
 
     } catch (error: any) {
-        console.error('Error initializing Twilio:', error);
-        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-        toast({ title: 'Initialization Failed', description: error.message || 'Could not get a token from the server.', variant: 'destructive' });
+      console.error('Error initializing Twilio:', error);
+      dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+      toast({ 
+        title: 'Initialization Failed', 
+        description: error.message || 'Could not get a token from the server.', 
+        variant: 'destructive' 
+      });
     }
   }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
 
-
   const startOutgoingCall = useCallback(async (to: string, leadId?: string) => {
     if (!state.currentAgent || !twilioDeviceRef.current) {
-        toast({ title: 'Softphone Not Ready', description: 'The softphone is not connected. Please login again.', variant: 'destructive' });
-        return;
+      toast({ 
+        title: 'Softphone Not Ready', 
+        description: 'The softphone is not connected. Please login again.', 
+        variant: 'destructive' 
+      });
+      return;
     }
     
     const tempId = `temp_${Date.now()}`;
     const callData: Call = {
-        id: tempId,
-        from: state.currentAgent.phone,
-        to: to,
-        direction: 'outgoing',
-        status: 'ringing-outgoing',
-        startTime: Date.now(),
-        duration: 0,
-        agentId: state.currentAgent.id,
-        leadId: leadId,
+      id: tempId,
+      from: state.currentAgent.phone,
+      to: to,
+      direction: 'outgoing',
+      status: 'ringing-outgoing',
+      startTime: Date.now(),
+      duration: 0,
+      agentId: state.currentAgent.id,
+      leadId: leadId,
+      followUpRequired: false,
+      callAttemptNumber: 1,
     };
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
     dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: callData } });
 
     
     try {
-        const makeCallResponse = await fetch(`/api/twilio/make_call`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            agent_id: state.currentAgent.id,
-            to: to,
-          }),
-        });
+      const makeCallResponse = await fetch(`/api/twilio/make_call`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agent_id: String(state.currentAgent.id),
+          to: to,
+        }),
+      });
 
-        if (!makeCallResponse.ok) {
-          const errorBody = await makeCallResponse.text();
-          throw new Error(`Backend failed to initiate call. Status: ${makeCallResponse.status}. Body: ${errorBody}`);
-        }
+      if (!makeCallResponse.ok) {
+        const errorBody = await makeCallResponse.text();
+        throw new Error(`Backend failed to initiate call. Status: ${makeCallResponse.status}. Body: ${errorBody}`);
+      }
 
-        const { conference } = await makeCallResponse.json();
-        
-        const twilioCall = await twilioDeviceRef.current.connect({
-            params: { To: `room:${conference}` },
-        });
+      const { conference } = await makeCallResponse.json();
+      
+      const twilioCall = await twilioDeviceRef.current.connect({
+        params: { To: `room:${conference}` },
+      });
 
-        activeTwilioCallRef.current = twilioCall;
-        
-        const permanentCall = { ...callData, id: twilioCall.parameters.CallSid, status: 'ringing-outgoing' as CallStatus };
+      activeTwilioCallRef.current = twilioCall;
+      
+      const permanentCall: Call = { 
+        ...callData, 
+        id: twilioCall.parameters.CallSid, 
+        status: 'ringing-outgoing',
+      };
 
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
-        dispatch({ type: 'REPLACE_CALL_IN_HISTORY', payload: { tempId: tempId, finalCall: permanentCall } });
+      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
+      dispatch({ type: 'REPLACE_CALL_IN_HISTORY', payload: { tempId: tempId, finalCall: permanentCall } });
 
-        twilioCall.on('accept', () => {
-          dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
-        });
+      twilioCall.on('accept', () => {
+        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
+      });
 
-        twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
-        twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
-        twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
-        twilioCall.on('error', (e) => {
-          console.error("Twilio call error", e);
-          handleCallDisconnect(null, 'failed');
-        });
+      twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
+      twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
+      twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
+      twilioCall.on('error', (e) => {
+        console.error("Twilio call error", e);
+        handleCallDisconnect(null as any, 'failed');
+      });
 
     } catch (error: any) {
-        console.error('Error starting outgoing call:', error);
-        toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
-        endActiveCall('failed');
+      console.error('Error starting outgoing call:', error);
+      toast({ 
+        title: 'Call Failed', 
+        description: error.message || 'Could not start the call.', 
+        variant: 'destructive' 
+      });
+      endActiveCall('failed');
     }
   }, [state.currentAgent, toast, endActiveCall, handleCallDisconnect]);
 
@@ -451,39 +469,39 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
     try {
-        const response = await fetch('/api/leads');
-        if (!response.ok) {
-            throw new Error(`Failed to fetch leads. Status: ${response.status}`);
-        }
-        const data = await response.json();
-        return (data.leads || []) as Lead[];
+      const response = await fetch('/api/leads');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch leads. Status: ${response.status}`);
+      }
+      const data = await response.json();
+      return (data.leads || []) as Lead[];
     } catch (error: any) {
-        console.error("Fetch leads error:", error);
-        toast({
-            variant: 'destructive',
-            title: 'API Error',
-            description: error.message || 'Could not fetch leads.'
-        });
-        return [];
+      console.error("Fetch leads error:", error);
+      toast({
+        variant: 'destructive',
+        title: 'API Error',
+        description: error.message || 'Could not fetch leads.'
+      });
+      return [];
     }
   }, [toast]);
 
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
     try {
-        const response = await fetch('/api/agents');
-        if (!response.ok) {
-            throw new Error(`Failed to fetch agents. Status: ${response.status}`);
-        }
-        const data = await response.json();
-        return (data.agents || []) as Agent[];
+      const response = await fetch('/api/agents');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch agents. Status: ${response.status}`);
+      }
+      const data = await response.json();
+      return (data.agents || []) as Agent[];
     } catch (error: any) {
-        console.error("Fetch agents error:", error);
-        toast({
-            variant: 'destructive',
-            title: 'API Error',
-            description: error.message || 'Could not fetch agents.'
-        });
-        return [];
+      console.error("Fetch agents error:", error);
+      toast({
+        variant: 'destructive',
+        title: 'API Error',
+        description: error.message || 'Could not fetch agents.'
+      });
+      return [];
     }
   }, [toast]);
   
@@ -493,22 +511,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const handleUpdateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.callHistory.find(c => c.id === callId);
-    const agentId = state.currentAgent?.id;
-
-    if(callToUpdate && agentId) {
-        const updatedCall = { ...callToUpdate, notes, summary };
-        dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary }});
-        updateCallOnBackend(updatedCall, agentId);
+    if(callToUpdate && state.currentAgent) {
+      const updatedCall = { ...callToUpdate, notes, summary };
+      dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary }});
+      updateCallOnBackend(updatedCall);
     }
   }, [state.callHistory, state.currentAgent, updateCallOnBackend]);
 
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
-        initializeTwilio();
-        fetchCallHistory(state.currentAgent.id);
+      initializeTwilio();
+      fetchCallHistory(state.currentAgent.id);
     }
   }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio, fetchCallHistory]);
-
 
   const logout = useCallback(() => {
     cleanupTwilio();
@@ -518,21 +533,21 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <CallContext.Provider value={{
-        state,
-        dispatch,
-        fetchLeads,
-        fetchAgents,
-        fetchCallHistory,
-        loginAsAgent,
-        logout,
-        initializeTwilio,
-        startOutgoingCall,
-        acceptIncomingCall,
-        rejectIncomingCall,
-        endActiveCall,
-        getActiveTwilioCall,
-        closeSoftphone,
-        updateNotesAndSummary: handleUpdateNotesAndSummary,
+      state,
+      dispatch,
+      fetchLeads,
+      fetchAgents,
+      fetchCallHistory,
+      loginAsAgent,
+      logout,
+      initializeTwilio,
+      startOutgoingCall,
+      acceptIncomingCall,
+      rejectIncomingCall,
+      endActiveCall,
+      getActiveTwilioCall,
+      closeSoftphone,
+      updateNotesAndSummary: handleUpdateNotesAndSummary,
     }}>
       {children}
     </CallContext.Provider>
@@ -544,5 +559,8 @@ export const useCall = () => {
   if (context === undefined) {
     throw new Error('useCall must be used within a CallProvider');
   }
-  return context as Omit<typeof context, 'dispatch'> & { dispatch?: React.Dispatch<CallAction>, updateNotesAndSummary: (callId: string, notes: string, summary?: string) => void };
+  return context as Omit<typeof context, 'dispatch'> & { 
+    dispatch?: React.Dispatch<CallAction>, 
+    updateNotesAndSummary: (callId: string, notes: string, summary?: string) => void 
+  };
 };
