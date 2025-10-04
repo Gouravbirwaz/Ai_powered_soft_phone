@@ -52,22 +52,32 @@ export default function LeadsDialog({
     if (activeCall?.to === phoneNumber) {
       return <Badge className="bg-green-500">In Call</Badge>;
     }
+
+    const hasBeenContacted = callHistory.some(
+      (call) => call.to === phoneNumber && call.status === 'completed'
+    );
+    if (hasBeenContacted) {
+      return <Badge variant="secondary">Contacted</Badge>;
+    }
     
-    // A simple check if called in the last hour to avoid re-calling too soon
-    const recentlyCalled = callHistory.find(call => call.to === phoneNumber && (Date.now() - call.startTime < 3600 * 1000));
-    if (recentlyCalled) {
-        return <Badge variant="secondary">Recently Called</Badge>
+    // Check for a recent non-completed call to avoid re-calling too soon
+    const recentlyAttempted = callHistory.some(
+        (call) => call.to === phoneNumber && (Date.now() - call.startTime < 3600 * 1000)
+    );
+
+    if (recentlyAttempted) {
+        return <Badge variant="outline">Recently Attempted</Badge>
     }
 
-    return <Badge variant="outline">Available</Badge>;
+    return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">Available</Badge>;
   };
   
   const isCallable = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
     if (!phoneNumber || activeCall) return false;
     
-    const recentlyCalled = callHistory.find(call => call.to === phoneNumber && (Date.now() - call.startTime < 3600 * 1000));
-    return !recentlyCalled;
+    const hasBeenContacted = callHistory.some(call => call.to === phoneNumber && call.status === 'completed');
+    return !hasBeenContacted;
   }
 
   return (
