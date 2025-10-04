@@ -79,10 +79,12 @@ export default function CallHistoryTable() {
     }
     if (sortConfig !== null) {
       filtered.sort((a, b) => {
-        if (a[sortConfig.key]! < b[sortConfig.key]!) {
+        const valA = a[sortConfig.key] || 0;
+        const valB = b[sortConfig.key] || 0;
+        if (valA < valB) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        if (a[sortConfig.key]! > b[sortConfig.key]!) {
+        if (valA > valB) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
         return 0;
@@ -142,8 +144,9 @@ export default function CallHistoryTable() {
           <TableBody>
             {filteredAndSortedCalls.length > 0 ? (
               filteredAndSortedCalls.map((call) => {
-                const callDate = new Date(call.startTime);
-                const isDateValid = isValid(callDate);
+                const callDate = call.startTime ? new Date(call.startTime) : null;
+                const isDateValid = callDate && isValid(callDate);
+                const contactNumber = call.direction === 'incoming' ? call.from : call.to;
 
                 return (
                   <TableRow key={call.id}>
@@ -158,10 +161,10 @@ export default function CallHistoryTable() {
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                          <AvatarFallback>{(call.direction === 'incoming' ? call.from?.[0] : call.to?.[0]) || '?'}</AvatarFallback>
+                          <AvatarFallback>{contactNumber?.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{call.direction === 'incoming' ? call.from : call.to}</div>
+                          <div className="font-medium">{contactNumber}</div>
                           {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
                         </div>
                       </div>
@@ -169,7 +172,7 @@ export default function CallHistoryTable() {
                     <TableCell>
                       <StatusBadge status={call.status} />
                     </TableCell>
-                    <TableCell>{formatDuration(call.duration)}</TableCell>
+                    <TableCell>{formatDuration(call.duration || 0)}</TableCell>
                     <TableCell>
                       {isDateValid ? (
                         <div className="flex flex-col">

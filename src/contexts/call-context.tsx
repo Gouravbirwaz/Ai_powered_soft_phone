@@ -218,7 +218,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         handleCallStateChange(twilioCall, finalCallState);
         logCall(finalCallState);
 
-        if (status === 'completed') {
+        if (status === 'completed' && (finalCallState.direction === 'outgoing' || finalCallState.duration > 0)) {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
         }
     }
@@ -360,17 +360,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         activeTwilioCallRef.current = twilioCall;
         
-        // This process feels a bit clunky. Maybe there's a better way.
-        // We create a temporary call, then update it.
         const existingCall = state.callHistory.find(c => c.id === tempCallId);
         const finalCallData: Partial<Call> = {
-            ...existingCall, // get existing data
-            id: twilioCall.parameters.CallSid, // Overwrite with final SID
+            ...existingCall, 
+            id: twilioCall.parameters.CallSid, 
         };
         handleCallStateChange(twilioCall, finalCallData);
         
-        // Remove the temporary call from history, if it's still there.
-        // This is a bit of a hack.
         dispatch({
             type: 'ADD_OR_UPDATE_CALL_HISTORY',
             payload: { ...state.activeCall!, ...finalCallData }
@@ -459,21 +455,21 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchCallHistory = useCallback(async (agentId: string) => {
     try {
+        dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
         const response = await fetch(`/api/twilio/call_logs?agent_id=${agentId}`);
         if (!response.ok) {
             throw new Error(`Failed to fetch call history. Status: ${response.status}`);
         }
         const data = await response.json();
-        // The backend might return call logs in a different shape, so we map them.
         const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
-            id: log.call_log_id || `log-${log.lead_id}-${log.started_at}`,
-            direction: 'outgoing', // Assuming all logged calls are outgoing for now
+            id: log.call_log_id,
+            direction: 'outgoing', 
             from: state.currentAgent?.phone || 'Unknown',
             to: log.phone_number,
             startTime: new Date(log.started_at).getTime(),
             endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
-            duration: log.duration,
-            status: 'completed', // Assuming logged calls are completed
+            duration: log.duration || 0,
+            status: 'completed',
             notes: log.notes,
             summary: log.summary,
             agentId: log.agent_id,
