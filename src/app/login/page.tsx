@@ -45,7 +45,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     const getAgents = async () => {
-      setIsLoading(true);
+      // Don't set loading to true here to avoid re-renders triggering hydration issues
       const fetchedData = await fetchAgents();
       const fetchedAgents = fetchedData || [];
 
