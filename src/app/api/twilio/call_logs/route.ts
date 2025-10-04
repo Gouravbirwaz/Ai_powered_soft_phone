@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // This is a GET request to the backend, as defined in the Flask app
     const response = await fetch(getCallLogsEndpoint, {
       method: 'GET',
       headers: {
@@ -43,7 +42,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Handles POST requests to create or update a call log
+// Handles POST requests to create a call log
 export async function POST(req: NextRequest) {
     const postCallLogEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
   
@@ -83,3 +82,44 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+// Handles PUT requests to update a call log
+export async function PUT(req: NextRequest) {
+  const updateCallLogEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
+  
+  if (!process.env.BASE_URL) {
+    return NextResponse.json(
+      { error: 'Call logs endpoint is not configured.' },
+      { status: 500 }
+    );
+  }
+
+  try {
+    const body = await req.json();
+    
+    const response = await fetch(updateCallLogEndpoint, {
+      method: 'PUT', // Using PUT for updates
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Error from update_call_log endpoint:', errorText);
+      return NextResponse.json({ error: `Failed to update call log. Status: ${response.status} ${response.statusText}`, details: errorText }, { status: response.status });
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+    
+  } catch (error) {
+    console.error('Error proxying update_call_log request:', error);
+    return NextResponse.json(
+      { error: 'Failed to proxy update_call_log request' },
+      { status: 500 }
+    );
+  }
+}

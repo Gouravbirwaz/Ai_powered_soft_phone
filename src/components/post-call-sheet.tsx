@@ -90,7 +90,6 @@ export default function PostCallSheet({ call }: { call: Call }) {
     if(dispatch) {
         dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
     }
-    toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
   };
 
   return (
