@@ -37,7 +37,7 @@ const notesFormSchema = z.object({
 type NotesFormValues = z.infer<typeof notesFormSchema>;
 
 export default function PostCallSheet({ call }: { call: Call }) {
-  const { dispatch } = useCall();
+  const { dispatch, updateNotesAndSummary } = useCall();
   const { toast } = useToast();
   const [isSummarizing, setIsSummarizing] = useState(false);
 
@@ -57,7 +57,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
   }, [call, form]);
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) {
+    if (!open && dispatch) {
       dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
     }
   };
@@ -84,11 +84,12 @@ export default function PostCallSheet({ call }: { call: Call }) {
   }
 
   const onSubmit = (data: NotesFormValues) => {
-    dispatch({
-      type: 'UPDATE_NOTES_AND_SUMMARY',
-      payload: { callId: call.id, ...data },
-    });
-    dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
+    if(updateNotesAndSummary) {
+        updateNotesAndSummary(call.id, data.notes, data.summary);
+    }
+    if(dispatch) {
+        dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
+    }
     toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
   };
 
