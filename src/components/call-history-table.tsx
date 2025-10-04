@@ -23,7 +23,7 @@ import { ArrowDown, ArrowUp, Edit, PhoneIncoming, PhoneOutgoing, Voicemail } fro
 import { useCall } from '@/contexts/call-context';
 import type { Call, CallDirection, CallStatus } from '@/lib/types';
 import { formatDuration } from '@/lib/utils';
-import { format, formatRelative } from 'date-fns';
+import { format, formatRelative, isValid } from 'date-fns';
 
 const StatusBadge = ({ status }: { status: CallStatus }) => {
   const variant: { [key in CallStatus]?: 'default' | 'secondary' | 'destructive' | 'outline' } = {
@@ -141,45 +141,54 @@ export default function CallHistoryTable() {
           </TableHeader>
           <TableBody>
             {filteredAndSortedCalls.length > 0 ? (
-              filteredAndSortedCalls.map((call) => (
-                <TableRow key={call.id}>
-                  <TableCell>
-                    {call.direction === 'incoming' ? (
-                      <PhoneIncoming className="h-5 w-5 text-blue-500" />
-                    ) : (
-                      <PhoneOutgoing className="h-5 w-5 text-green-500" />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                        <AvatarFallback>{(call.direction === 'incoming' ? call.from?.[0] : call.to?.[0]) || '?'}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">{call.direction === 'incoming' ? call.from : call.to}</div>
-                        {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
+              filteredAndSortedCalls.map((call) => {
+                const callDate = new Date(call.startTime);
+                const isDateValid = isValid(callDate);
+
+                return (
+                  <TableRow key={call.id}>
+                    <TableCell>
+                      {call.direction === 'incoming' ? (
+                        <PhoneIncoming className="h-5 w-5 text-blue-500" />
+                      ) : (
+                        <PhoneOutgoing className="h-5 w-5 text-green-500" />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
+                          <AvatarFallback>{(call.direction === 'incoming' ? call.from?.[0] : call.to?.[0]) || '?'}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{call.direction === 'incoming' ? call.from : call.to}</div>
+                          {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={call.status} />
-                  </TableCell>
-                  <TableCell>{formatDuration(call.duration)}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                        <span className='font-medium'>{formatRelative(new Date(call.startTime), new Date())}</span>
-                        <span className='text-sm text-muted-foreground'>{format(new Date(call.startTime), 'p')}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)}>
-                      <Edit className="h-4 w-4" />
-                      <span className="sr-only">Edit Notes</span>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={call.status} />
+                    </TableCell>
+                    <TableCell>{formatDuration(call.duration)}</TableCell>
+                    <TableCell>
+                      {isDateValid ? (
+                        <div className="flex flex-col">
+                          <span className='font-medium'>{formatRelative(callDate, new Date())}</span>
+                          <span className='text-sm text-muted-foreground'>{format(callDate, 'p')}</span>
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground">Invalid date</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)}>
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit Notes</span>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
