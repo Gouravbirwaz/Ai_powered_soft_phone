@@ -54,14 +54,12 @@ const initialState: CallState = {
 };
 
 // This function is now responsible for ALL backend communication for call logs.
-const logCall = async (call: Call, agentId: string | null | undefined) => {
-    // An agent must be logged in to log a call
+const updateCallOnBackend = async (call: Call, agentId: string | null | undefined) => {
     if (!agentId) {
         console.warn('Cannot log call without an agentId.', call);
         return;
     }
 
-    // A leadId is required by the backend for POSTing outgoing call logs
     if (call.direction === 'outgoing' && !call.leadId) {
         console.warn('Cannot log outgoing call without a leadId. Skipping backend log.', call);
         return;
@@ -71,7 +69,7 @@ const logCall = async (call: Call, agentId: string | null | undefined) => {
         const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
 
         const response = await fetch('/api/twilio/call_logs', {
-            method: 'POST', // Always POST to create or update
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 lead_id: call.leadId,
@@ -92,7 +90,7 @@ const logCall = async (call: Call, agentId: string | null | undefined) => {
             console.log('Call log saved successfully for call:', call.id);
         }
     } catch (error) {
-        console.error('Error in logCall function:', error);
+        console.error('Error in updateCallOnBackend function:', error);
     }
 };
 
@@ -161,8 +159,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         );
         const callToLog = updatedHistory.find(c => c.id === callId);
         if(callToLog && state.currentAgent) {
-            // Fire-and-forget the API call
-            logCall(callToLog, state.currentAgent.id);
+            updateCallOnBackend(callToLog, state.currentAgent.id);
         }
         return {
             ...state,
@@ -244,7 +241,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
     
     // Log the call to the backend.
-    await logCall(finalCallState, state.currentAgent?.id);
+    await updateCallOnBackend(finalCallState, state.currentAgent?.id);
     
     // Update local state for the UI
     dispatch({ type: 'ADD_OR_UPDATE_CALL', payload: { call: finalCallState }});
@@ -527,4 +524,5 @@ export const useCall = () => {
   return context;
 };
 
+    
     
