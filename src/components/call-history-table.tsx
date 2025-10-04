@@ -154,7 +154,7 @@ export default function CallHistoryTable() {
                     <div className="flex items-center gap-3">
                       <Avatar>
                         <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                        <AvatarFallback>{(call.direction === 'incoming' ? call.from[0] : call.to[0]) || '?'}</AvatarFallback>
+                        <AvatarFallback>{(call.direction === 'incoming' ? call.from?.[0] : call.to?.[0]) || '?'}</AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="font-medium">{call.direction === 'incoming' ? call.from : call.to}</div>
