@@ -37,7 +37,7 @@ const notesFormSchema = z.object({
 type NotesFormValues = z.infer<typeof notesFormSchema>;
 
 export default function PostCallSheet({ call }: { call: Call }) {
-  const { state, dispatch } = useCall();
+  const { dispatch } = useCall();
   const { toast } = useToast();
   const [isSummarizing, setIsSummarizing] = useState(false);
 
