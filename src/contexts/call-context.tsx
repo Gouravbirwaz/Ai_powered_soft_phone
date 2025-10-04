@@ -33,7 +33,7 @@ type CallAction =
   | { type: 'SET_TWILIO_DEVICE_STATUS'; payload: { status: TwilioDeviceStatus } }
   | { type: 'SET_AUDIO_PERMISSIONS'; payload: { granted: boolean } }
   | { type: 'SET_ACTIVE_CALL'; payload: { call: Call | null } }
-  | { type: 'ADD_OR_UPDATE_CALL_HISTORY'; payload: Call }
+  | { type: 'ADD_OR_UPDATE_CALL_HISTORY'; payload: { call: Call; tempId?: string } }
   | { type: 'SET_CALL_HISTORY'; payload: Call[] }
   | { type: 'SHOW_INCOMING_CALL'; payload: boolean }
   | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string } }
@@ -87,13 +87,25 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
     case 'SHOW_INCOMING_CALL':
       return { ...state, showIncomingCall: action.payload };
     case 'ADD_OR_UPDATE_CALL_HISTORY': {
-      const callExists = state.callHistory.some(c => c.id === action.payload.id);
-      return {
-        ...state,
-        callHistory: callExists
-          ? state.callHistory.map(c => c.id === action.payload.id ? action.payload : c)
-          : [action.payload, ...state.callHistory],
-      };
+        const { call, tempId } = action.payload;
+        let history = [...state.callHistory];
+        
+        // If a tempId is provided, it means we're updating a temporary record with a permanent one
+        if (tempId) {
+            const tempIndex = history.findIndex(c => c.id === tempId);
+            if (tempIndex !== -1) {
+                history.splice(tempIndex, 1);
+            }
+        }
+
+        const callExists = history.some(c => c.id === call.id);
+        
+        return {
+            ...state,
+            callHistory: callExists
+            ? history.map(c => c.id === call.id ? call : c)
+            : [call, ...history],
+        };
     }
     case 'SET_CALL_HISTORY':
         return { ...state, callHistory: action.payload };
@@ -168,13 +180,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
   }, []);
 
-  const handleCallStateChange = useCallback((twilioCall: TwilioCall | null, callData: Partial<Call>) => {
+  const handleCallStateChange = useCallback((twilioCall: TwilioCall | null, callData: Partial<Call>, tempId?: string) => {
     if (!twilioCall && !callData.id) return;
     const callId = callData.id || twilioCall?.parameters.CallSid;
 
     if(!callId) return;
 
-    const existingCall = state.callHistory.find(c => c.id === callId);
+    const existingCall = state.callHistory.find(c => c.id === callId || c.id === tempId);
 
     const updatedCall: Call = {
         id: callId,
@@ -190,7 +202,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
     
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: updatedCall } });
-    dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: updatedCall });
+    dispatch({ type: 'ADD_OR_UPDATE_CALL_HISTORY', payload: { call: updatedCall, tempId } });
 
   }, [state.currentAgent, state.callHistory]);
 
@@ -318,6 +330,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
+    // Create a temporary ID for optimistic UI update
+    const tempCallId = `temp_${Date.now()}`;
+    const callData: Partial<Call> = {
+        id: tempCallId,
+        from: state.currentAgent.phone,
+        to: to,
+        direction: 'outgoing',
+        status: 'ringing-outgoing',
+        startTime: Date.now(),
+        leadId: leadId,
+    };
+    handleCallStateChange(null, callData);
+
     try {
         const makeCallResponse = await fetch(`/api/twilio/make_call`, {
           method: 'POST',
@@ -335,20 +360,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           throw new Error(`Backend failed to initiate call. Status: ${makeCallResponse.status}. Body: ${errorBody}`);
         }
 
-        const { conference, customer_call_sid } = await makeCallResponse.json();
-
-        const tempCallId = customer_call_sid || `temp_${Date.now()}`;
-        const callData: Partial<Call> = {
-            id: tempCallId,
-            from: state.currentAgent.phone,
-            to: to,
-            direction: 'outgoing',
-            status: 'ringing-outgoing',
-            startTime: Date.now(),
-            leadId: leadId,
-        };
-
-        handleCallStateChange(null, callData);
+        const { conference } = await makeCallResponse.json();
         
         if (!twilioDeviceRef.current) {
             throw new Error("Twilio Device not initialized.");
@@ -360,18 +372,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         activeTwilioCallRef.current = twilioCall;
         
-        const existingCall = state.callHistory.find(c => c.id === tempCallId);
+        // Now that we have the real CallSid, update the state
+        // This will replace the temporary call object with the real one
         const finalCallData: Partial<Call> = {
-            ...existingCall, 
             id: twilioCall.parameters.CallSid, 
         };
-        handleCallStateChange(twilioCall, finalCallData);
-        
-        dispatch({
-            type: 'ADD_OR_UPDATE_CALL_HISTORY',
-            payload: { ...state.activeCall!, ...finalCallData }
-        })
-
+        handleCallStateChange(twilioCall, finalCallData, tempCallId);
 
         twilioCall.on('accept', () => handleCallStateChange(twilioCall, { status: 'in-progress' }));
         twilioCall.on('disconnect', () => endActiveCall('completed'));
@@ -389,7 +395,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             handleCallStateChange(null, { ...state.activeCall, status: 'failed' });
         }
     }
-  }, [state.currentAgent, state.activeCall, state.callHistory, toast, handleCallStateChange, endActiveCall]);
+  }, [state.currentAgent, state.activeCall, toast, handleCallStateChange, endActiveCall]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -455,7 +461,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchCallHistory = useCallback(async (agentId: string) => {
     try {
-        dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
+        // Clear history before fetching to prevent duplicates
+        dispatch({ type: 'SET_CALL_HISTORY', payload: [] }); 
         const response = await fetch(`/api/twilio/call_logs?agent_id=${agentId}`);
         if (!response.ok) {
             throw new Error(`Failed to fetch call history. Status: ${response.status}`);
