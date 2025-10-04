@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { Call, Lead, Agent } from '@/lib/types';
+import type { Call, Lead, Agent, CallStatus } from '@/lib/types';
 import React, {
   createContext,
   useContext,
@@ -64,8 +64,9 @@ const CallContext = createContext<
       startOutgoingCall: (to: string, leadId?: string) => void;
       acceptIncomingCall: () => void;
       rejectIncomingCall: () => void;
-      endActiveCall: () => void;
+      endActiveCall: (status?: CallStatus) => void;
       getActiveTwilioCall: () => TwilioCall | null;
+      closeSoftphone: () => void;
     }
   | undefined
 >(undefined);
@@ -170,6 +171,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     if(!callId) return;
 
+    const existingCall = state.callHistory.find(c => c.id === callId);
+
     const updatedCall: Call = {
         id: callId,
         direction: callData.direction || (twilioCall?.direction === 'incoming' ? 'incoming' : 'outgoing'),
@@ -178,8 +181,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         startTime: callData.startTime || Date.now(),
         duration: 0,
         status: 'queued',
-        agentId: state.currentAgent?.id.toString(),
-        ...state.callHistory.find(c => c.id === callId),
+        agentId: state.currentAgent?.id,
+        ...existingCall,
         ...callData,
     };
     
@@ -188,9 +191,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   }, [state.currentAgent, state.callHistory]);
 
-  const endActiveCall = useCallback((showSheet = true) => {
+  const endActiveCall = useCallback((status: CallStatus = 'completed') => {
     const twilioCall = activeTwilioCallRef.current;
-    if (!twilioCall) return;
+    if (!twilioCall) {
+        if(state.activeCall) {
+             handleCallStateChange(null, { ...state.activeCall, status, endTime: Date.now() });
+        }
+        return;
+    }
 
     const callId = twilioCall.parameters.CallSid;
     const existingCall = state.callHistory.find(c => c.id === callId);
@@ -200,24 +208,34 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const duration = Math.round((endTime - existingCall.startTime) / 1000);
         const finalCallState: Call = {
             ...existingCall,
-            status: 'completed',
+            status,
             endTime,
             duration,
         }
         handleCallStateChange(twilioCall, finalCallState);
         logCall(finalCallState);
 
-        if (showSheet) {
+        if (status === 'completed') {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
         }
     }
     
     twilioCall.disconnect();
     activeTwilioCallRef.current = null;
+    
+    // Only close the softphone if the call was actually completed.
+    // Otherwise, keep it open for voicemail, etc.
+    if (status === 'completed') {
+      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+      dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+      dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: false });
+    }
+  }, [state.activeCall, state.callHistory, handleCallStateChange]);
+  
+  const closeSoftphone = useCallback(() => {
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: false });
-  }, [state.callHistory, handleCallStateChange]);
+  }, []);
 
 
   const initializeTwilio = useCallback(async () => {
@@ -274,8 +292,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
             dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
 
-            twilioCall.on('disconnect', () => endActiveCall(true));
-            twilioCall.on('cancel', () => endActiveCall(false));
+            twilioCall.on('disconnect', () => endActiveCall('completed'));
+            twilioCall.on('cancel', () => endActiveCall('canceled'));
         });
 
         await device.register();
@@ -302,7 +320,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            agent_id: String(state.currentAgent.id),
+            agent_id: state.currentAgent.id,
             to: to,
           }),
         });
@@ -337,22 +355,40 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         activeTwilioCallRef.current = twilioCall;
         
+        // This process feels a bit clunky. Maybe there's a better way.
+        // We create a temporary call, then update it.
+        const existingCall = state.callHistory.find(c => c.id === tempCallId);
         const finalCallData: Partial<Call> = {
-            ...state.callHistory.find(c => c.id === tempCallId), // get existing data
+            ...existingCall, // get existing data
             id: twilioCall.parameters.CallSid, // Overwrite with final SID
         };
         handleCallStateChange(twilioCall, finalCallData);
+        
+        // Remove the temporary call from history, if it's still there.
+        // This is a bit of a hack.
+        dispatch({
+            type: 'ADD_OR_UPDATE_CALL_HISTORY',
+            payload: { ...state.activeCall!, ...finalCallData }
+        })
+
 
         twilioCall.on('accept', () => handleCallStateChange(twilioCall, { status: 'in-progress' }));
-        twilioCall.on('disconnect', () => endActiveCall(true));
-        twilioCall.on('cancel', () => endActiveCall(false));
-        twilioCall.on('reject', () => handleCallStateChange(twilioCall, { status: 'busy' }));
+        twilioCall.on('disconnect', () => endActiveCall('completed'));
+        twilioCall.on('cancel', () => endActiveCall('canceled'));
+        twilioCall.on('reject', () => endActiveCall('busy'));
+        twilioCall.on('error', (e) => {
+          console.error("Twilio call error", e);
+          endActiveCall('failed');
+        });
 
     } catch (error: any) {
         console.error('Error starting outgoing call:', error);
         toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
+        if (state.activeCall) {
+            handleCallStateChange(null, { ...state.activeCall, status: 'failed' });
+        }
     }
-  }, [state.currentAgent, toast, handleCallStateChange, endActiveCall, state.callHistory]);
+  }, [state.currentAgent, state.activeCall, state.callHistory, toast, handleCallStateChange, endActiveCall]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -367,12 +403,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const twilioCall = activeTwilioCallRef.current;
     if (twilioCall && twilioCall.direction === 'incoming') {
       twilioCall.reject();
-      handleCallStateChange(twilioCall, { status: 'canceled' });
+      // Use endActiveCall to centralize state updates
+      endActiveCall('canceled');
       dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
       activeTwilioCallRef.current = null;
     }
-  }, [handleCallStateChange]);
+  }, [endActiveCall]);
   
   const getActiveTwilioCall = useCallback(() => {
     return activeTwilioCallRef.current;
@@ -446,6 +483,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         rejectIncomingCall,
         endActiveCall,
         getActiveTwilioCall,
+        closeSoftphone,
     }}>
       {children}
     </CallContext.Provider>

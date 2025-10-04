@@ -15,6 +15,7 @@ import {
   List,
   AlertCircle,
   Loader2,
+  X,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-import type { Lead } from '@/lib/types';
+import type { CallStatus, Lead } from '@/lib/types';
 import LeadsDialog from './leads-dialog';
 
 
@@ -215,7 +216,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
 
 
 const ActiveCallView = () => {
-  const { state, endActiveCall, getActiveTwilioCall } = useCall();
+  const { state, endActiveCall, getActiveTwilioCall, closeSoftphone } = useCall();
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -249,21 +250,51 @@ const ActiveCallView = () => {
 
   if (!activeCall) return null;
   
+  const isCallActive = activeCall.status === 'ringing-outgoing' || activeCall.status === 'in-progress' || activeCall.status === 'ringing-incoming' || activeCall.status === 'queued';
+
+  const handleHangup = () => {
+    if (isCallActive) {
+      endActiveCall('canceled');
+    } else {
+      closeSoftphone();
+    }
+  };
+
   const handleMute = () => {
     const currentTwilioCall = getActiveTwilioCall();
     if (currentTwilioCall) {
       currentTwilioCall.mute(!isMuted);
     }
   }
+  
+  const statusTextMap: { [key in CallStatus]?: string } = {
+    'ringing-outgoing': 'Ringing...',
+    'in-progress': formatDuration(duration),
+    'queued': 'Connecting...',
+    'ringing-incoming': 'Ringing...',
+    'completed': 'Call Ended',
+    'busy': 'Busy',
+    'failed': 'Call Failed',
+    'canceled': 'Canceled',
+  }
 
   const getStatusInfo = () => {
-    switch(activeCall.status) {
+    const status = activeCall.status;
+    const text = statusTextMap[status] || 'Connecting...';
+
+    switch(status) {
       case 'ringing-outgoing':
-        return { text: 'Ringing...', icon: <CircleDotDashed className="animate-spin h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
+      case 'queued':
+      case 'ringing-incoming':
+        return { text, icon: <CircleDotDashed className="animate-spin h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
       case 'in-progress':
-        return { text: formatDuration(duration), icon: <Clock className="h-4 w-4 text-green-500" />, color: 'text-green-500' };
+        return { text, icon: <Clock className="h-4 w-4 text-green-500" />, color: 'text-green-500' };
+      case 'failed':
+      case 'busy':
+      case 'canceled':
+        return { text, icon: <AlertCircle className="h-4 w-4 text-destructive" />, color: 'text-destructive' };
       default:
-        return { text: 'Connecting...', icon: <CircleDotDashed className="animate-spin h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
+        return { text: 'Call Ended', icon: <PhoneOff className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
     }
   };
 
@@ -280,11 +311,11 @@ const ActiveCallView = () => {
       </div>
       
       <div className="grid grid-cols-3 gap-4 my-8">
-        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute}>
+        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
           {isMuted ? <MicOff /> : <Mic />}
           <span className="text-xs mt-1">Mute</span>
         </Button>
-        <Button variant="outline" className="h-16 w-16 rounded-full flex-col">
+        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
           <Grid3x3 />
           <span className="text-xs mt-1">Keypad</span>
         </Button>
@@ -296,11 +327,12 @@ const ActiveCallView = () => {
 
       <Button
         size="lg"
-        variant="destructive"
+        variant={isCallActive ? 'destructive' : 'secondary'}
         className="w-full rounded-full h-14"
-        onClick={endActiveCall}
+        onClick={handleHangup}
       >
-        <PhoneOff className="mr-2 h-5 w-5" /> End Call
+        {isCallActive ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
+        {isCallActive ? 'End Call' : 'Close'}
       </Button>
     </div>
   );

@@ -66,7 +66,7 @@ export default function LoginPage() {
       setAgents(validAgents);
 
       if (validAgents.length > 0) {
-        setSelectedId(String(validAgents[0].id));
+        setSelectedId(validAgents[0].id);
       } else {
         setSelectedId('');
       }
@@ -86,7 +86,7 @@ export default function LoginPage() {
       return;
     }
 
-    const agentToLogin = agents.find((agent) => String(agent.id) === selectedId);
+    const agentToLogin = agents.find((agent) => agent.id === selectedId);
 
     if (agentToLogin) {
       loginAsAgent(agentToLogin);
@@ -124,7 +124,7 @@ export default function LoginPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {agents.map((agent) => (
-                      <SelectItem key={agent.id} value={String(agent.id)}>
+                      <SelectItem key={agent.id} value={agent.id}>
                         {agent.name}
                       </SelectItem>
                     ))}
