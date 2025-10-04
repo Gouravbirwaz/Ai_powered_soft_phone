@@ -124,10 +124,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const twilioDeviceRef = useRef<Device | null>(null);
   const activeTwilioCallRef = useRef<TwilioCall | null>(null);
   const activeCallRef = useRef<Call | null>(null);
+  const currentAgentRef = useRef<Agent | null>(null);
 
   useEffect(() => {
     activeCallRef.current = state.activeCall;
   }, [state.activeCall]);
+
+  useEffect(() => {
+    currentAgentRef.current = state.currentAgent;
+  }, [state.currentAgent]);
 
 
   const fetchCallHistory = useCallback(async (agentId: string) => {
@@ -164,8 +169,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast, state.currentAgent]);
 
-  const updateCallOnBackend = useCallback(async (call: Call) => {
-    if (!state.currentAgent?.id || !call.leadId) {
+  const updateCallOnBackend = useCallback(async (call: Call, agentId: string) => {
+    if (!agentId || !call.leadId) {
       console.warn('Cannot log call without an agentId and leadId.', call);
       return;
     }
@@ -175,7 +180,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       
       const body = {
         lead_id: call.leadId,
-        agent_id: state.currentAgent.id,
+        agent_id: agentId,
         phone_number: phoneNumber,
         started_at: call.startTime ? new Date(call.startTime).toISOString() : null,
         ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
@@ -204,18 +209,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
       } else {
         console.log('Call log saved successfully for call:', call.id);
-        fetchCallHistory(state.currentAgent.id);
+        if (currentAgentRef.current?.id) {
+          fetchCallHistory(currentAgentRef.current.id);
+        }
       }
     } catch (error) {
       console.error('Error in updateCallOnBackend function:', error);
       toast({ 
         title: 'Logging Error', 
         description: 'An unexpected error occurred while saving the call log.', 
-        variant: 'destructive'
+        variant: 'destructive' 
       });
     }
-  }, [toast, state.currentAgent, fetchCallHistory]);
-
+  }, [toast, fetchCallHistory]);
 
   const cleanupTwilio = useCallback(() => {
     twilioDeviceRef.current?.destroy();
@@ -225,11 +231,20 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
   }, []);
   
-  const handleCallDisconnect = useCallback((twilioCall: TwilioCall, status: CallStatus = 'completed') => {
+  const handleCallDisconnect = useCallback((twilioCall: TwilioCall | null, status: CallStatus = 'completed') => {
     const call = activeCallRef.current;
+    const agentId = currentAgentRef.current?.id;
+
     if (!call) {
-      console.warn('handleCallDisconnect called but no active call in ref.');
-      return;
+        console.warn('handleCallDisconnect called but no active call in ref.');
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+        activeTwilioCallRef.current = null;
+        return;
+    }
+
+    if (!agentId) {
+        console.warn('handleCallDisconnect called but no agent ID. Aborting log.');
     }
 
     console.log('Call disconnect triggered for call:', call.id);
@@ -246,7 +261,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     console.log('Final call state before API call:', finalCallState);
     
-    updateCallOnBackend(finalCallState);
+    if (agentId && finalCallState.leadId) {
+      updateCallOnBackend(finalCallState, agentId);
+    } else {
+      console.log('Call not logged to backend because leadId or agentId is missing.');
+    }
 
     dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: finalCallState } });
     
@@ -260,6 +279,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     activeTwilioCallRef.current = null;
   }, [updateCallOnBackend]);
 
+
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
     const twilioCall = activeTwilioCallRef.current;
     
@@ -270,7 +290,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       console.log('No Twilio call found, handling disconnect manually');
       const call = activeCallRef.current;
       if (call) {
-        handleCallDisconnect(null as any, status);
+        handleCallDisconnect(null, status);
       }
     }
   }, [handleCallDisconnect]);
@@ -511,10 +531,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const handleUpdateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.callHistory.find(c => c.id === callId);
-    if(callToUpdate && state.currentAgent) {
+    const agentId = state.currentAgent?.id;
+
+    if(callToUpdate && agentId) {
       const updatedCall = { ...callToUpdate, notes, summary };
       dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary }});
-      updateCallOnBackend(updatedCall);
+      updateCallOnBackend(updatedCall, agentId);
     }
   }, [state.callHistory, state.currentAgent, updateCallOnBackend]);
 

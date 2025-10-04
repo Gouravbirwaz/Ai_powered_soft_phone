@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// Handle GET requests to fetch call logs by transforming them into a POST request for the backend
+// Handle GET requests to fetch call logs
 export async function GET(req: NextRequest) {
   const agentId = req.nextUrl.searchParams.get('agent_id');
 
@@ -9,8 +9,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 });
   }
 
-  // The backend expects a POST request to fetch logs
-  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
+  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs?agent_id=${agentId}`;
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(
@@ -20,13 +19,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // This is a GET request to the backend, as defined in the Flask app
     const response = await fetch(getCallLogsEndpoint, {
-      method: 'POST', // Backend requires POST to fetch logs
+      method: 'GET',
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ agent_id: agentId }), // Pass agent_id in the body
     });
 
     if (!response.ok) {
@@ -56,10 +55,8 @@ export async function POST(req: NextRequest) {
     }
   
     try {
-      // Get the entire body from the frontend request
       const body = await req.json();
       
-      // Forward the entire body to the backend
       const response = await fetch(postCallLogEndpoint, {
         method: 'POST',
         headers: {
@@ -86,4 +83,3 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  
