@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 });
   }
 
+  // Correctly construct the backend endpoint URL
   const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs?agent_id=${agentId}`;
 
   if (!process.env.BASE_URL) {
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest) {
 
 // Handle POST requests to log a new call
 export async function POST(req: NextRequest) {
+  // Correctly construct the backend endpoint URL
   const callLogsEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
 
   if (!process.env.BASE_URL) {
