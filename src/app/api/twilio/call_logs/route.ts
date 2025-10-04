@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Handle GET requests to fetch call logs by transforming them into a POST request for the backend
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const agentId = searchParams.get('agent_id');
+  const agentId = req.nextUrl.searchParams.get('agent_id');
 
   if (!agentId) {
     return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 });
