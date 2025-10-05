@@ -143,17 +143,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = state.currentAgent;
   }, [state.currentAgent]);
 
-  const fetchCallHistory = useCallback(async (agentId?: string) => {
-    if (!agentId) return;
+  const fetchCallHistory = useCallback(async () => {
     try {
-      const url = `/api/twilio/call_logs?agent_id=${agentId}`;
+      const url = `/api/twilio/call_logs`;
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch call history. Status: ${response.status}`);
       }
       const data = await response.json();
       const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
-        id: String(log.id), // Use 'id' instead of 'call_log_id'
+        id: String(log.id),
         direction: log.direction || 'outgoing', 
         from: log.direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
         to: log.direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
@@ -180,7 +179,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast]);
 
   const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
-    // This function will now only be called at the end of a call.
     if (!call || !call.agentId || !call.id) {
         console.error("Cannot create call log on backend: Missing critical data.", call);
         toast({
@@ -219,7 +217,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 const errorJson = JSON.parse(errorText);
                 errorDetails = errorJson.message || errorJson.error || errorText;
             } catch (e) {
-                // Not a JSON response
             }
             console.error(`Failed to create call log:`, errorDetails);
             toast({
@@ -281,18 +278,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       duration,
     };
     
-    // Create the single log at the end of the call
     createOrUpdateCallOnBackend(finalCallState).then((savedCall) => {
         if(savedCall) {
             const finalSavedCall = { ...savedCall, agentId: String(savedCall.agentId), id: String(savedCall.id) };
-            // Replace the temporary call in history with the final one from the backend
             dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callInState.id, finalCall: finalSavedCall } });
 
             if (status === 'completed' || status === 'canceled' || status === 'busy' || status === 'failed') {
                 dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalSavedCall.id } });
             }
         } else {
-            // If saving fails, we still need to update the history with the final state
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
         }
     });
@@ -341,7 +335,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
     
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
-    dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } }); // Add temporary record
+    dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
     dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
 
@@ -437,7 +431,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         activeTwilioCallRef.current = agentCall;
         
         const callData: Call = {
-            id: customer_call_sid, // Use the customer's call SID for logging
+            id: customer_call_sid,
             from: state.currentAgent.phone,
             to: to,
             direction: 'outgoing',
@@ -533,28 +527,24 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    fetchCallHistory(agent.id); 
+    fetchCallHistory(); 
   }, [fetchCallHistory]);
 
   const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => {
     const callToUpdate = state.callHistory.find(c => c.id === callId);
     
     if(callToUpdate) {
-        // Rebuild the full object to ensure data integrity
         const updatedCall: Call = { 
             ...callToUpdate,
             notes, 
             summary,
             leadId: callToUpdate.leadId || leadId,
-            // Ensure phone number is correct based on direction
             to: callToUpdate.direction === 'outgoing' ? (phoneNumber || callToUpdate.to) : (callToUpdate.to || state.currentAgent?.phone),
             from: callToUpdate.direction === 'incoming' ? (phoneNumber || callToUpdate.from) : (callToUpdate.from || state.currentAgent?.phone),
         };
 
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: updatedCall } });
 
-        // The backend expects an update, not a new creation here.
-        // We will reuse createOrUpdateCallOnBackend for this.
         createOrUpdateCallOnBackend(updatedCall).then((savedCall) => {
             if (savedCall) {
                 const finalSavedCall = { ...savedCall, agentId: String(savedCall.agentId), id: String(savedCall.id) };
