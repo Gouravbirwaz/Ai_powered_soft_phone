@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const makeCallEndpoint = `${process.env.BASE_URL}/make_call`;
+  const makeCallEndpoint = `${process.env.BASE_URL}/api/twilio/make_call`;
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(
