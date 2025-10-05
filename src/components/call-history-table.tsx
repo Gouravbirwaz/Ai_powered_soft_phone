@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -113,8 +114,8 @@ export default function CallHistoryTable() {
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
-            {allStatuses.map(status => (
-              <SelectItem key={status} value={status} className="capitalize">{status}</SelectItem>
+            {allStatuses.map((status, index) => (
+              <SelectItem key={`${status}-${index}`} value={status} className="capitalize">{status}</SelectItem>
             ))}
           </SelectContent>
         </Select>
