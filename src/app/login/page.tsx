@@ -75,7 +75,7 @@ export default function LoginPage() {
 
     if (agentToLogin) {
       loginAsAgent(agentToLogin);
-      await fetchCallHistory(agentToLogin.id);
+      await fetchCallHistory();
       router.push('/');
     }
   };

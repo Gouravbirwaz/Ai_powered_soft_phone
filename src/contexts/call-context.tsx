@@ -135,9 +135,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = state.currentAgent;
   }, [state.currentAgent]);
 
-  const fetchCallHistory = useCallback(async (agentId: string) => {
+  const fetchCallHistory = useCallback(async (agentId?: string) => {
     try {
-      const response = await fetch(`/api/twilio/call_logs?agent_id=${agentId}`);
+      const url = agentId ? `/api/twilio/call_logs?agent_id=${agentId}` : '/api/twilio/call_logs';
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch call history. Status: ${response.status}`);
       }
@@ -145,8 +146,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
         id: log.call_log_id,
         direction: log.direction || 'outgoing', 
-        from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
-        to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
+        from: log.direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
+        to: log.direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
         startTime: new Date(log.started_at).getTime(),
         endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
         duration: log.duration || 0,
@@ -167,7 +168,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         description: error.message || 'Could not fetch call history.'
       });
     }
-  }, [toast, state.currentAgent]);
+  }, [toast]);
 
   const createCallOnBackend = useCallback(async (call: Partial<Call>) => {
     try {
@@ -332,7 +333,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       status: 'ringing-incoming',
       startTime: Date.now(),
       duration: 0,
-      agentId: state.currentAgent?.id,
+      agentId: currentAgentRef.current?.id,
       followUpRequired: false,
       callAttemptNumber: 1,
       // We likely don't have a leadId for an incoming call initially
@@ -354,7 +355,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
     twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
 
-  }, [state.currentAgent, handleCallDisconnect, createCallOnBackend]);
+  }, [handleCallDisconnect, createCallOnBackend]);
 
   const initializeTwilio = useCallback(async () => {
     if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || !state.currentAgent) {
@@ -587,7 +588,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
       initializeTwilio();
-      fetchCallHistory(state.currentAgent.id);
+      fetchCallHistory();
+    } else if (state.currentAgent) {
+      fetchCallHistory();
     }
   }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio, fetchCallHistory]);
 
