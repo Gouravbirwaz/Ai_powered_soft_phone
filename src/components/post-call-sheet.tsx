@@ -39,6 +39,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
   const { dispatch, updateNotesAndSummary } = useCall();
   const { toast } = useToast();
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<NotesFormValues>({
     resolver: zodResolver(notesFormSchema),
@@ -82,10 +83,12 @@ export default function PostCallSheet({ call }: { call: Call }) {
     setIsSummarizing(false);
   }
 
-  const onSubmit = (data: NotesFormValues) => {
+  const onSubmit = async (data: NotesFormValues) => {
+    setIsSaving(true);
     if (updateNotesAndSummary) {
-        updateNotesAndSummary(call.id, data.notes, data.summary);
+        await updateNotesAndSummary(call.id, data.notes, data.summary);
     }
+    setIsSaving(false);
     if (dispatch) {
         dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
     }
@@ -131,7 +134,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
                   <FormItem>
                     <div className="flex justify-between items-center">
                       <FormLabel>AI Summary</FormLabel>
-                      <Button type="button" variant="outline" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing}>
+                      <Button type="button" variant="outline" size="sm" onClick={handleGenerateSummary} disabled={isSummarizing || isSaving}>
                         {isSummarizing ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
@@ -144,7 +147,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
                       <Textarea
                         placeholder="AI-generated summary will appear here."
                         className="min-h-[120px] bg-muted/50"
-                        readOnly={isSummarizing}
+                        readOnly={isSummarizing || isSaving}
                         {...field}
                       />
                     </FormControl>
@@ -154,7 +157,10 @@ export default function PostCallSheet({ call }: { call: Call }) {
               />
             </div>
             <SheetFooter>
-              <Button type="submit">Save Notes</Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Notes
+              </Button>
             </SheetFooter>
           </form>
         </Form>

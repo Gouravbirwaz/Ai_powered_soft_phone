@@ -101,7 +101,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
             if (index === -1) return [call, ...history];
             const newHistory = [...history];
             newHistory[index] = call;
-            return newHistory;
+            return newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
         };
         return {
             ...state,
@@ -251,15 +251,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 errorDetails = errorJson.message || errorJson.error || errorText;
             } catch (e) {
             }
-            console.error(`Failed to create call log:`, errorDetails);
+            console.error(`Failed to create/update call log:`, errorDetails);
             toast({
                 title: 'Logging Error',
-                description: `Failed to create call log: ${errorDetails}`,
+                description: `Failed to save call log: ${errorDetails}`,
                 variant: 'destructive',
             });
             return null;
         } else {
-            console.log('Call log created successfully for call:', call.id);
+            console.log('Call log created/updated successfully for call:', call.id);
             const responseData = await response.json();
             return responseData.call_log as Call;
         }
@@ -287,12 +287,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
         const response = await fetch(`/api/twilio/transcript/${callSid}`);
         if (!response.ok) {
-            // Don't throw, just return null if no transcript
             console.warn(`Could not fetch transcript for ${callSid}. Status: ${response.status}`);
             return null;
         }
         const data = await response.json();
-        // Assuming the transcript is in data.recordings[0].transcript
         return data.recordings?.[0]?.transcript || null;
     } catch (error) {
         console.error('Error fetching transcript:', error);
@@ -334,23 +332,28 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       notes: transcript || callInState.notes || '', // Pre-fill notes with transcript
     };
     
-    createOrUpdateCallOnBackend(finalCallState).then((savedCall) => {
-        if(savedCall) {
-            const finalSavedCall = mapCallLog(savedCall);
-            dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callInState.id, finalCall: finalSavedCall } });
+    // The first save operation happens here. We get the final ID from the backend.
+    const savedCall = await createOrUpdateCallOnBackend(finalCallState);
+    
+    if(savedCall) {
+        const finalSavedCall = mapCallLog(savedCall);
+        // Replace the temporary call in history with the final one from the backend
+        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callInState.id, finalCall: finalSavedCall } });
+        await fetchAllCallHistory(); // Refresh all call history for lead status
 
-            if (status === 'completed' || status === 'canceled' || status === 'busy' || status === 'failed') {
-                dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalSavedCall.id } });
-            }
-        } else {
-            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
+        // Open the post-call sheet with the final, saved call ID
+        if (status === 'completed' || status === 'canceled' || status === 'busy' || status === 'failed') {
+            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalSavedCall.id } });
         }
-    });
+    } else {
+        // If the backend save fails, at least update the local state
+        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
+    }
 
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     activeTwilioCallRef.current = null;
-  }, [createOrUpdateCallOnBackend, mapCallLog]);
+  }, [createOrUpdateCallOnBackend, mapCallLog, fetchAllCallHistory]);
 
 
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
@@ -586,7 +589,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     fetchAllCallHistory();
   }, [fetchCallHistory, fetchAllCallHistory]);
 
-  const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => {
+  const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
     
     if(callToUpdate) {
@@ -594,25 +597,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             ...callToUpdate,
             notes, 
             summary,
-            leadId: callToUpdate.leadId || leadId,
-            to: callToUpdate.direction === 'outgoing' ? (phoneNumber || callToUpdate.to) : (callToUpdate.to || state.currentAgent?.phone),
-            from: callToUpdate.direction === 'incoming' ? (phoneNumber || callToUpdate.from) : (callToUpdate.from || state.currentAgent?.phone),
         };
 
-        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: updatedCall } });
-
-        createOrUpdateCallOnBackend(updatedCall).then((savedCall) => {
-            if (savedCall) {
-                const finalSavedCall = mapCallLog(savedCall);
-                dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalSavedCall } });
-                toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
-            }
-        });
+        const savedCall = await createOrUpdateCallOnBackend(updatedCall);
+        if (savedCall) {
+            const finalSavedCall = mapCallLog(savedCall);
+            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalSavedCall } });
+            toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
+        }
     } else {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-  }, [state.allCallHistory, state.currentAgent, createOrUpdateCallOnBackend, toast, mapCallLog]);
+  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast, mapCallLog]);
   
   const sendVoicemail = useCallback(async (to: string, script: string, callId: string) => {
     dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'voicemail-dropping' } } });
@@ -687,7 +684,7 @@ export const useCall = () => {
   }
   return context as Omit<typeof context, 'dispatch'> & { 
     dispatch?: React.Dispatch<CallAction>, 
-    updateNotesAndSummary: (callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => void,
+    updateNotesAndSummary: (callId: string, notes: string, summary?: string) => Promise<void>,
     sendVoicemail: (to: string, script: string, callId: string) => Promise<boolean>,
   };
 };
