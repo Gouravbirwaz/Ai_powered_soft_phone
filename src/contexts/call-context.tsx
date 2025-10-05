@@ -37,7 +37,7 @@ type CallAction =
   | { type: 'ADD_OR_UPDATE_CALL_IN_HISTORY'; payload: { call: Call } }
   | { type: 'REPLACE_CALL_IN_HISTORY'; payload: { tempId: string, finalCall: Call } }
   | { type: 'SET_CALL_HISTORY'; payload: Call[] }
-  | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string } }
+  | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string; leadId?: string; phoneNumber?: string } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } }
@@ -80,7 +80,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       const newHistory = [call, ...historyWithoutCall];
       return {
         ...state,
-        callHistory: newHistory.sort((a,b) => b.startTime - a.startTime),
+        callHistory: newHistory.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
       };
     }
     case 'REPLACE_CALL_IN_HISTORY': {
@@ -88,7 +88,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         const newHistory = state.callHistory.map(c => c.id === tempId ? finalCall : c);
         return {
             ...state,
-            callHistory: newHistory.sort((a,b) => b.startTime - a.startTime),
+            callHistory: newHistory.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
         }
     }
     case 'SET_CALL_HISTORY':
@@ -135,9 +135,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = state.currentAgent;
   }, [state.currentAgent]);
 
-  const fetchCallHistory = useCallback(async () => {
+  const fetchCallHistory = useCallback(async (agentId?: string) => {
     try {
-      const response = await fetch('/api/twilio/call_logs');
+      const url = agentId ? `/api/twilio/call_logs?agent_id=${agentId}` : '/api/twilio/call_logs';
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch call history. Status: ${response.status}`);
       }
@@ -220,7 +221,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
-const updateCallOnBackend = useCallback(async (call: Call) => {
+const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
     if (!call.agentId) {
         console.error("Cannot update call on backend without an agent ID.", call);
         toast({
@@ -232,6 +233,8 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
     }
 
     try {
+        const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+        
         const body = {
             call_log_id: call.id,
             notes: call.notes,
@@ -241,7 +244,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
             status: call.status,
             lead_id: call.leadId,
             agent_id: call.agentId,
-            phone_number: call.direction === 'outgoing' ? call.to : call.from,
+            phone_number: phoneNumber,
             direction: call.direction,
         };
 
@@ -253,7 +256,6 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Failed to update call log:', errorText);
             let errorDetails = errorText;
             try {
                 const errorJson = JSON.parse(errorText);
@@ -261,6 +263,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
             } catch (e) {
                 // Not a JSON response
             }
+            console.error('Failed to update call log:', errorDetails);
             toast({
                 title: 'Update Error',
                 description: `Failed to update call log: ${errorDetails}`,
@@ -314,7 +317,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
     
     updateCallOnBackend(finalCallState).then(() => {
         dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: finalCallState } });
-        if (status === 'completed') {
+        if (status === 'completed' || status === 'canceled' || status === 'busy' || status === 'failed') {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
         } else {
             dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
@@ -603,11 +606,15 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
   }, []);
 
-  const handleUpdateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
+  const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.callHistory.find(c => c.id === callId);
     
     if(callToUpdate) {
-      const updatedCall = { ...callToUpdate, notes, summary };
+      const updatedCall: Partial<Call> = { 
+        ...callToUpdate,
+        notes, 
+        summary,
+      };
       dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary }});
       updateCallOnBackend(updatedCall);
     }
@@ -616,10 +623,9 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
       initializeTwilio();
-      fetchCallHistory();
-    } else if (state.currentAgent) {
-      fetchCallHistory();
     }
+    // Fetch all call history for lead status checking, regardless of who is logged in
+    fetchCallHistory(); 
   }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio, fetchCallHistory]);
 
   const logout = useCallback(() => {
@@ -644,7 +650,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
       endActiveCall,
       getActiveTwilioCall,
       closeSoftphone,
-      updateNotesAndSummary: handleUpdateNotesAndSummary,
+      updateNotesAndSummary,
     }}>
       {children}
     </CallContext.Provider>
