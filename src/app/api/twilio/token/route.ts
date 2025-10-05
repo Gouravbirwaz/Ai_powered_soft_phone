@@ -36,5 +36,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to proxy token request' }, { status: 500 });
   }
 }
-
-    
