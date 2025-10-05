@@ -144,8 +144,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.currentAgent]);
 
   const fetchCallHistory = useCallback(async (agentId?: string) => {
+    if (!state.currentAgent) return;
     try {
-      const url = '/api/twilio/call_logs';
+      const url = agentId ? `/api/twilio/call_logs?agent_id=${agentId}` : '/api/twilio/call_logs';
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch call history. Status: ${response.status}`);
@@ -154,8 +155,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
         id: log.call_log_id,
         direction: log.direction || 'outgoing', 
-        from: log.direction === 'incoming' ? log.phone_number : (log.agent_phone || 'Unknown'),
-        to: log.direction === 'outgoing' ? log.phone_number : (log.agent_phone || 'Unknown'),
+        from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
+        to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
         startTime: new Date(log.started_at).getTime(),
         endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
         duration: log.duration || 0,
@@ -176,7 +177,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         description: error.message || 'Could not fetch call history.'
       });
     }
-  }, [toast]);
+  }, [toast, state.currentAgent]);
 
   const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
     if (!call || !call.agentId || !call.id) {
@@ -325,7 +326,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const callData: Call = {
       id: twilioCall.parameters.CallSid,
       from: fromNumber,
-      to: twilioCall.parameters.To,
+      to: currentAgentRef.current?.phone || '',
       direction: 'incoming',
       status: 'ringing-incoming',
       startTime: Date.now(),
@@ -596,3 +597,6 @@ export const useCall = () => {
     updateNotesAndSummary: (callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => void 
   };
 };
+
+
+    
