@@ -246,6 +246,9 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
             agent_id: call.agentId,
             phone_number: phoneNumber,
             direction: call.direction,
+            from: call.from,
+            to: call.to,
+            startTime: call.startTime,
         };
 
         const response = await fetch('/api/twilio/call_logs', {
@@ -259,7 +262,7 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
             let errorDetails = errorText;
             try {
                 const errorJson = JSON.parse(errorText);
-                errorDetails = errorJson.details || errorJson.error || errorText;
+                errorDetails = errorJson.message || errorJson.error || errorText;
             } catch (e) {
                 // Not a JSON response
             }
@@ -606,16 +609,25 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
   }, []);
 
-  const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
+  const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => {
     const callToUpdate = state.callHistory.find(c => c.id === callId);
     
     if(callToUpdate) {
-      const updatedCall: Partial<Call> = { 
+      const updatedCall: Call = { 
         ...callToUpdate,
         notes, 
         summary,
+        leadId: leadId || callToUpdate.leadId,
       };
-      dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary }});
+      
+      // Manually set phone number if provided, as it might not be in callToUpdate
+      if (updatedCall.direction === 'outgoing') {
+        updatedCall.to = phoneNumber || updatedCall.to;
+      } else {
+        updatedCall.from = phoneNumber || updatedCall.from;
+      }
+
+      dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary, leadId, phoneNumber }});
       updateCallOnBackend(updatedCall);
     }
   }, [state.callHistory, updateCallOnBackend]);
@@ -624,8 +636,11 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
       initializeTwilio();
     }
-    // Fetch all call history for lead status checking, regardless of who is logged in
-    fetchCallHistory(); 
+    if (state.currentAgent) {
+        fetchCallHistory(state.currentAgent.id);
+    } else {
+        fetchCallHistory();
+    }
   }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio, fetchCallHistory]);
 
   const logout = useCallback(() => {
@@ -664,8 +679,6 @@ export const useCall = () => {
   }
   return context as Omit<typeof context, 'dispatch'> & { 
     dispatch?: React.Dispatch<CallAction>, 
-    updateNotesAndSummary: (callId: string, notes: string, summary?: string) => void 
+    updateNotesAndSummary: (callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => void 
   };
 };
-
-    

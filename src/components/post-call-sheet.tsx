@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -84,10 +83,11 @@ export default function PostCallSheet({ call }: { call: Call }) {
   }
 
   const onSubmit = (data: NotesFormValues) => {
-    if(updateNotesAndSummary) {
-        updateNotesAndSummary(call.id, data.notes, data.summary);
+    if (updateNotesAndSummary) {
+        const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+        updateNotesAndSummary(call.id, data.notes, data.summary, call.leadId, phoneNumber);
     }
-    if(dispatch) {
+    if (dispatch) {
         dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
     }
   };
