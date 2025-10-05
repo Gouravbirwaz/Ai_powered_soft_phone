@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { Call, Lead, Agent, CallStatus } from '@/lib/types';
+import type { Call, Lead, Agent, CallStatus, CallDirection } from '@/lib/types';
 import React, {
   createContext,
   useContext,
@@ -339,6 +339,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
 
     // Update the local state immediately so the UI reflects the end of the call
+    // This is crucial for the post-call sheet to find the call.
     dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
     
     // Open the post-call sheet for the agent to complete notes
@@ -351,10 +352,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     activeTwilioCallRef.current = null;
 
-    // Refresh history so other agents see the latest status
-    await fetchAllCallHistory();
-
-  }, [fetchAllCallHistory]);
+  }, []);
 
 
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
