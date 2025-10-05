@@ -254,7 +254,7 @@ const ActiveCallView = () => {
   
   const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
-  const canSendVoicemail = isConnecting || ['busy', 'failed', 'canceled'].includes(activeCall.status);
+  const canSendVoicemail = isConnecting || ['busy', 'failed', 'canceled', 'in-progress'].includes(activeCall.status);
 
   const handleHangup = () => {
     if (isConnecting || isCallActive) {
@@ -443,5 +443,3 @@ export default function Softphone() {
     </div>
   );
 }
-
-    
