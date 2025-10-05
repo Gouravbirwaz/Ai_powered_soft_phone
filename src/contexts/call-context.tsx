@@ -180,6 +180,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         phone_number: phoneNumber,
         started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
         status: call.status,
+        direction: call.direction,
       };
 
       const response = await fetch('/api/twilio/call_logs', {
@@ -189,8 +190,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from logCall API.' }));
-        console.error('Failed to create call log:', errorData);
+        const errorText = await response.text();
+        console.error('Failed to create call log:', errorText);
+        let errorData = { details: errorText };
+        try {
+            errorData = JSON.parse(errorText);
+        } catch (e) {
+            // Not a JSON response
+        }
         toast({ 
           title: 'Logging Error', 
           description: `Failed to save call log: ${errorData.details || response.statusText}`, 
@@ -213,36 +220,55 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
-  const updateCallOnBackend = useCallback(async (call: Call) => {
+const updateCallOnBackend = useCallback(async (call: Call) => {
+    if (!call.agentId) {
+        console.error("Cannot update call on backend without an agent ID.", call);
+        toast({
+            title: 'Update Error',
+            description: 'Cannot save call details: Agent ID is missing.',
+            variant: 'destructive',
+        });
+        return;
+    }
+
     try {
+        const body = {
+            call_log_id: call.id,
+            notes: call.notes,
+            summary: call.summary,
+            ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
+            duration: call.duration,
+            status: call.status,
+            lead_id: call.leadId,
+            agent_id: call.agentId,
+            phone_number: call.direction === 'outgoing' ? call.to : call.from,
+            direction: call.direction,
+        };
+
         const response = await fetch('/api/twilio/call_logs', {
-            method: 'POST', // Using POST to update as well, backend should handle upsert
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                call_log_id: call.id,
-                notes: call.notes,
-                summary: call.summary,
-                ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
-                duration: call.duration,
-                status: call.status,
-                // Always include required fields for backend validation
-                lead_id: call.leadId,
-                agent_id: call.agentId,
-                phone_number: call.direction === 'outgoing' ? call.to : call.from,
-            }),
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response from updateCall API.' }));
-            console.error('Failed to update call log:', errorData);
+            const errorText = await response.text();
+            console.error('Failed to update call log:', errorText);
+            let errorDetails = errorText;
+            try {
+                const errorJson = JSON.parse(errorText);
+                errorDetails = errorJson.details || errorJson.error || errorText;
+            } catch (e) {
+                // Not a JSON response
+            }
             toast({
                 title: 'Update Error',
-                description: `Failed to update call log: ${errorData.details || response.statusText}`,
+                description: `Failed to update call log: ${errorDetails}`,
                 variant: 'destructive',
             });
         } else {
             console.log('Call log updated successfully for call:', call.id);
-            if (call.notes || call.summary) {
+            if (call.notes !== undefined || call.summary !== undefined) {
               toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
             }
         }
@@ -254,7 +280,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             variant: 'destructive',
         });
     }
-  }, [toast]);
+}, [toast]);
 
 
   const cleanupTwilio = useCallback(() => {
@@ -345,8 +371,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     // Create the call log immediately
     createCallOnBackend(callData).then(createdCall => {
       if (createdCall) {
-        dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: createdCall } });
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: createdCall } });
+        const finalCall = { ...createdCall, agentId: String(createdCall.agentId) };
+        dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: finalCall } });
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: finalCall } });
       }
     });
 
@@ -437,7 +464,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     // Immediately create a call log on the backend
     createCallOnBackend(callData).then(createdCall => {
       if(createdCall) {
-          dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: createdCall } });
+          const finalCall = { ...createdCall, agentId: String(createdCall.agentId) };
+          dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: finalCall } });
       }
     });
 
@@ -457,9 +485,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const errorBody = await makeCallResponse.text();
         throw new Error(`Backend failed to initiate call. Status: ${makeCallResponse.status}. Body: ${errorBody}`);
       }
-
-      // The conference SID is not directly available here, we need the TwilioCall object later.
-      // We will create the log immediately with a temporary ID.
       
       const twilioCall = await twilioDeviceRef.current.connect({
         params: { To: to },
@@ -470,24 +495,28 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const permanentCall: Call = { 
         ...callData, 
         id: twilioCall.parameters.CallSid, 
+        agentId: String(callData.agentId),
       };
       
-      // Create the call log on the backend as soon as we have the SID
       createCallOnBackend(permanentCall).then(createdCall => {
         if(createdCall) {
-            dispatch({ type: 'REPLACE_CALL_IN_HISTORY', payload: { tempId: tempId, finalCall: createdCall } });
-            dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: createdCall } });
+            const finalCall = { ...createdCall, agentId: String(createdCall.agentId) };
+            dispatch({ type: 'REPLACE_CALL_IN_HISTORY', payload: { tempId: tempId, finalCall: finalCall } });
+            dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: finalCall } });
         }
       });
+      
       dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: permanentCall } });
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
 
       twilioCall.on('accept', () => {
-        const acceptedCall = { ...activeCallRef.current, status: 'in-progress' } as Call;
-        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
-        updateCallOnBackend(acceptedCall);
-        dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: acceptedCall } });
-
+        const currentCall = activeCallRef.current;
+        if(currentCall) {
+          const acceptedCall = { ...currentCall, status: 'in-progress' } as Call;
+          dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
+          updateCallOnBackend(acceptedCall);
+          dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: acceptedCall } });
+        }
       });
 
       twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
@@ -632,3 +661,5 @@ export const useCall = () => {
     updateNotesAndSummary: (callId: string, notes: string, summary?: string) => void 
   };
 };
+
+    
