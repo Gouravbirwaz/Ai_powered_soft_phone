@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  // Use the server-side environment variable BASE_URL
   const makeCallEndpoint = `${process.env.BASE_URL}/api/twilio/make_call`;
 
   if (!process.env.BASE_URL) {
@@ -15,20 +14,29 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
+    // Ensure agent_id is in the body being forwarded
+    if (!body.agent_id || !body.to) {
+        return NextResponse.json({ error: "Missing 'agent_id' or 'to' in request body" }, { status: 400 });
+    }
+    
     const response = await fetch(makeCallEndpoint, {
       method: 'POST',
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body), // Forward the original body
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Error from make_call endpoint:', errorText);
-      // Proxy the error response from the backend
-      return NextResponse.json({ error: `Failed to initiate call from backend. Status: ${response.status} ${response.statusText}` }, { status: response.status });
+      try {
+        const errorJson = JSON.parse(errorText);
+        return NextResponse.json({ error: errorJson.description || `Failed to initiate call from backend.` }, { status: response.status });
+      } catch (e) {
+        return NextResponse.json({ error: `Failed to initiate call from backend. Status: ${response.status}` }, { status: response.status });
+      }
     }
 
     const data = await response.json();
