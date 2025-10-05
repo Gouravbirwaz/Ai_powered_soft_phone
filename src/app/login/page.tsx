@@ -25,7 +25,7 @@ import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
 export default function LoginPage() {
-  const { fetchAgents, loginAsAgent, state, fetchCallHistory } = useCall();
+  const { fetchAgents, loginAsAgent, state } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +75,6 @@ export default function LoginPage() {
 
     if (agentToLogin) {
       loginAsAgent(agentToLogin);
-      await fetchCallHistory();
       router.push('/');
     }
   };

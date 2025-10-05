@@ -37,7 +37,7 @@ type CallAction =
   | { type: 'ADD_OR_UPDATE_CALL_IN_HISTORY'; payload: { call: Call } }
   | { type: 'REPLACE_CALL_IN_HISTORY'; payload: { tempId: string, finalCall: Call } }
   | { type: 'SET_CALL_HISTORY'; payload: Call[] }
-  | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string; leadId?: string; phoneNumber?: string } }
+  | { type: 'UPDATE_NOTES_AND_SUMMARY'; payload: { callId: string; notes: string; summary?: string; } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } }
@@ -221,7 +221,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
-const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
+const updateCallOnBackend = useCallback(async (call: Call) => {
     if (!call.agentId) {
         console.error("Cannot update call on backend without an agent ID.", call);
         toast({
@@ -235,6 +235,7 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
     try {
         const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
         
+        // Ensure all required fields are present
         const body = {
             call_log_id: call.id,
             notes: call.notes,
@@ -246,9 +247,7 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
             agent_id: call.agentId,
             phone_number: phoneNumber,
             direction: call.direction,
-            from: call.from,
-            to: call.to,
-            startTime: call.startTime,
+            started_at: new Date(call.startTime).toISOString(),
         };
 
         const response = await fetch('/api/twilio/call_logs', {
@@ -607,9 +606,10 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-  }, []);
+    fetchCallHistory(); // Fetch all call history on login
+  }, [fetchCallHistory]);
 
-  const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => {
+  const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.callHistory.find(c => c.id === callId);
     
     if(callToUpdate) {
@@ -617,31 +617,21 @@ const updateCallOnBackend = useCallback(async (call: Partial<Call>) => {
         ...callToUpdate,
         notes, 
         summary,
-        leadId: leadId || callToUpdate.leadId,
       };
-      
-      // Manually set phone number if provided, as it might not be in callToUpdate
-      if (updatedCall.direction === 'outgoing') {
-        updatedCall.to = phoneNumber || updatedCall.to;
-      } else {
-        updatedCall.from = phoneNumber || updatedCall.from;
-      }
-
-      dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary, leadId, phoneNumber }});
+      dispatch({ type: 'UPDATE_NOTES_AND_SUMMARY', payload: { callId, notes, summary }});
       updateCallOnBackend(updatedCall);
+    } else {
+      console.error("Could not find call to update notes for:", callId);
+      toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-  }, [state.callHistory, updateCallOnBackend]);
+  }, [state.callHistory, updateCallOnBackend, toast]);
 
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
       initializeTwilio();
     }
-    if (state.currentAgent) {
-        fetchCallHistory(state.currentAgent.id);
-    } else {
-        fetchCallHistory();
-    }
-  }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio, fetchCallHistory]);
+    // No longer fetch call history here, it's done on login
+  }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio]);
 
   const logout = useCallback(() => {
     cleanupTwilio();
@@ -679,6 +669,6 @@ export const useCall = () => {
   }
   return context as Omit<typeof context, 'dispatch'> & { 
     dispatch?: React.Dispatch<CallAction>, 
-    updateNotesAndSummary: (callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => void 
+    updateNotesAndSummary: (callId: string, notes: string, summary?: string) => void 
   };
 };

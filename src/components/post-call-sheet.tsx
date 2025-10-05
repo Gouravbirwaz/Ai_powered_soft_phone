@@ -84,8 +84,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
 
   const onSubmit = (data: NotesFormValues) => {
     if (updateNotesAndSummary) {
-        const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
-        updateNotesAndSummary(call.id, data.notes, data.summary, call.leadId, phoneNumber);
+        updateNotesAndSummary(call.id, data.notes, data.summary);
     }
     if (dispatch) {
         dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
