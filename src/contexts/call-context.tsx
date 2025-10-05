@@ -155,9 +155,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const mapCallLog = useCallback((log: any): Call => ({
     id: String(log.id),
-    direction: log.direction || (log.phone_number === currentAgentRef.current?.phone ? 'outgoing' : 'incoming'), 
-    from: log.direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
-    to: log.direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
+    direction: log.direction || (log.agent_id == currentAgentRef.current?.id ? 'outgoing' : 'incoming'), 
+    from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
+    to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
     startTime: new Date(log.started_at).getTime(),
     endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
     duration: log.duration || 0,
@@ -168,7 +168,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     leadId: log.lead_id,
     followUpRequired: log.follow_up_required || false,
     callAttemptNumber: log.call_attempt_number || 1,
-  }), []);
+  }), [state.currentAgent]);
 
   const fetchCallHistory = useCallback(async (agentId: string) => {
     try {
@@ -282,8 +282,25 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'uninitialized' } });
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
   }, []);
+
+  const fetchTranscript = async (callSid: string) => {
+    try {
+        const response = await fetch(`/api/twilio/transcript/${callSid}`);
+        if (!response.ok) {
+            // Don't throw, just return null if no transcript
+            console.warn(`Could not fetch transcript for ${callSid}. Status: ${response.status}`);
+            return null;
+        }
+        const data = await response.json();
+        // Assuming the transcript is in data.recordings[0].transcript
+        return data.recordings?.[0]?.transcript || null;
+    } catch (error) {
+        console.error('Error fetching transcript:', error);
+        return null;
+    }
+  };
   
-  const handleCallDisconnect = useCallback((twilioCall: TwilioCall | null, status: CallStatus = 'completed') => {
+  const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, status: CallStatus = 'completed') => {
     const callInState = activeCallRef.current;
     if (!callInState) {
         console.warn('handleCallDisconnect called but no active call in state.');
@@ -304,11 +321,17 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const endTime = Date.now();
     const duration = Math.round((endTime - callInState.startTime) / 1000);
 
+    let transcript = null;
+    if (status === 'completed' || status === 'canceled') {
+        transcript = await fetchTranscript(callInState.id);
+    }
+
     const finalCallState: Call = {
       ...callInState,
       status,
       endTime,
       duration,
+      notes: transcript || callInState.notes || '', // Pre-fill notes with transcript
     };
     
     createOrUpdateCallOnBackend(finalCallState).then((savedCall) => {
