@@ -620,7 +620,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch('/api/twilio/send_voicemail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to, script }),
+            body: JSON.stringify({ phone: to, script }),
         });
 
         if (!response.ok) {
