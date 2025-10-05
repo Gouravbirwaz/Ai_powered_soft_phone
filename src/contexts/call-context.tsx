@@ -170,11 +170,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast, state.currentAgent]);
 
   const createCallOnBackend = useCallback(async (call: Partial<Call>) => {
-    if (!call.agentId || !call.leadId) {
-      console.warn('Cannot log call without an agentId and leadId.', call);
-      return null;
-    }
-    
     try {
       const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
       
@@ -230,7 +225,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
                 duration: call.duration,
                 status: call.status,
-                // Include keys the backend expects for creation, even if null/undefined
+                // Always include required fields for backend validation
                 lead_id: call.leadId,
                 agent_id: call.agentId,
                 phone_number: call.direction === 'outgoing' ? call.to : call.from,
@@ -439,6 +434,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
     
+    // Immediately create a call log on the backend
+    createCallOnBackend(callData).then(createdCall => {
+      if(createdCall) {
+          dispatch({ type: 'ADD_OR_UPDATE_CALL_IN_HISTORY', payload: { call: createdCall } });
+      }
+    });
+
     try {
       const makeCallResponse = await fetch(`/api/twilio/make_call`, {
         method: 'POST',
