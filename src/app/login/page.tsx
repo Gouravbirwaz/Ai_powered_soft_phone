@@ -19,21 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { useToast } from '@/hooks/use-toast';
-
-const TEST_PASSWORD = 'caprare@123';
 
 export default function LoginPage() {
   const { fetchAgents, loginAsAgent, state, fetchCallHistory } = useCall();
-  const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
-  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
@@ -77,15 +71,6 @@ export default function LoginPage() {
   }, [fetchAgents]);
 
   const handleLogin = async () => {
-    if (password !== TEST_PASSWORD) {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: 'Incorrect password. Please try again.',
-      });
-      return;
-    }
-
     const agentToLogin = agents.find((agent) => agent.id === selectedId);
 
     if (agentToLogin) {
@@ -132,20 +117,10 @@ export default function LoginPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                />
-              </div>
               <Button
                 className="w-full"
                 onClick={handleLogin}
-                disabled={!selectedId || !password}
+                disabled={!selectedId}
               >
                 Login
               </Button>
