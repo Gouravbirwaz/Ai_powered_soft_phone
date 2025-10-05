@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import type { CallStatus, Lead } from '@/lib/types';
 import LeadsDialog from './leads-dialog';
+import VoicemailDialog from './voicemail-dialog';
 
 
 const DialpadButton = ({
@@ -220,6 +221,7 @@ const ActiveCallView = () => {
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [showVoicemailDialog, setShowVoicemailDialog] = useState(false);
   const twilioCall = getActiveTwilioCall();
 
   useEffect(() => {
@@ -250,10 +252,12 @@ const ActiveCallView = () => {
 
   if (!activeCall) return null;
   
-  const isCallActive = activeCall.status === 'ringing-outgoing' || activeCall.status === 'in-progress' || activeCall.status === 'ringing-incoming' || activeCall.status === 'queued';
+  const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
+  const isCallActive = activeCall.status === 'in-progress';
+  const canSendVoicemail = isConnecting || ['busy', 'failed', 'canceled'].includes(activeCall.status);
 
   const handleHangup = () => {
-    if (isCallActive) {
+    if (isConnecting || isCallActive) {
       endActiveCall('canceled');
     } else {
       closeSoftphone();
@@ -266,6 +270,12 @@ const ActiveCallView = () => {
       currentTwilioCall.mute(!isMuted);
     }
   }
+
+  const handleVoicemailClick = () => {
+    if (canSendVoicemail) {
+      setShowVoicemailDialog(true);
+    }
+  }
   
   const statusTextMap: { [key in CallStatus]?: string } = {
     'ringing-outgoing': 'Ringing...',
@@ -276,6 +286,7 @@ const ActiveCallView = () => {
     'busy': 'Busy',
     'failed': 'Call Failed',
     'canceled': 'Canceled',
+    'voicemail-dropped': 'Voicemail Sent',
   }
 
   const getStatusInfo = () => {
@@ -293,6 +304,8 @@ const ActiveCallView = () => {
       case 'busy':
       case 'canceled':
         return { text, icon: <AlertCircle className="h-4 w-4 text-destructive" />, color: 'text-destructive' };
+      case 'voicemail-dropped':
+        return { text, icon: <Voicemail className="h-4 w-4 text-blue-500" />, color: 'text-blue-500' };
       default:
         return { text: 'Call Ended', icon: <PhoneOff className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
     }
@@ -301,40 +314,43 @@ const ActiveCallView = () => {
   const statusInfo = getStatusInfo();
   
   return (
-    <div className="flex flex-col items-center justify-between p-4 h-full min-h-[500px]">
-      <div className="text-center mt-8">
-        <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
-        <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
-          {statusInfo.icon}
-          <span>{statusInfo.text}</span>
+    <>
+      <div className="flex flex-col items-center justify-between p-4 h-full min-h-[500px]">
+        <div className="text-center mt-8">
+          <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
+          <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
+            {statusInfo.icon}
+            <span>{statusInfo.text}</span>
+          </div>
         </div>
-      </div>
-      
-      <div className="grid grid-cols-3 gap-4 my-8">
-        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
-          {isMuted ? <MicOff /> : <Mic />}
-          <span className="text-xs mt-1">Mute</span>
-        </Button>
-        <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
-          <Grid3x3 />
-          <span className="text-xs mt-1">Keypad</span>
-        </Button>
-        <Button variant="outline" className="h-16 w-16 rounded-full flex-col">
-          <Voicemail />
-          <span className="text-xs mt-1">Voicemail</span>
-        </Button>
-      </div>
+        
+        <div className="grid grid-cols-3 gap-4 my-8">
+          <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
+            {isMuted ? <MicOff /> : <Mic />}
+            <span className="text-xs mt-1">Mute</span>
+          </Button>
+          <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
+            <Grid3x3 />
+            <span className="text-xs mt-1">Keypad</span>
+          </Button>
+          <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleVoicemailClick} disabled={!canSendVoicemail}>
+            <Voicemail />
+            <span className="text-xs mt-1">Voicemail</span>
+          </Button>
+        </div>
 
-      <Button
-        size="lg"
-        variant={isCallActive ? 'destructive' : 'secondary'}
-        className="w-full rounded-full h-14"
-        onClick={handleHangup}
-      >
-        {isCallActive ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
-        {isCallActive ? 'End Call' : 'Close'}
-      </Button>
-    </div>
+        <Button
+          size="lg"
+          variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
+          className="w-full rounded-full h-14"
+          onClick={handleHangup}
+        >
+          {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
+          {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
+        </Button>
+      </div>
+      <VoicemailDialog open={showVoicemailDialog} onOpenChange={setShowVoicemailDialog} call={activeCall}/>
+    </>
   );
 };
 

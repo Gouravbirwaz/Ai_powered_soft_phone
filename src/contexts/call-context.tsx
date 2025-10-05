@@ -155,7 +155,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const mapCallLog = useCallback((log: any): Call => ({
     id: String(log.id),
-    direction: log.direction || (log.agent_id == currentAgentRef.current?.id ? 'outgoing' : 'incoming'), 
+    direction: log.agent_id == currentAgentRef.current?.id ? 'outgoing' : 'incoming',
     from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
     to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
     startTime: new Date(log.started_at).getTime(),
@@ -476,7 +476,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const { conference, customer_call_sid } = await response.json();
-
         if (!conference || !customer_call_sid) {
           throw new Error('Backend did not return a conference name or call SID.');
         }
@@ -615,6 +614,34 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.allCallHistory, state.currentAgent, createOrUpdateCallOnBackend, toast, mapCallLog]);
   
+  const sendVoicemail = useCallback(async (to: string, script: string, callId: string) => {
+    dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'voicemail-dropping' } } });
+    try {
+        const response = await fetch('/api/twilio/send_voicemail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to, script }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to send voicemail from backend.');
+        }
+
+        await response.json();
+        handleCallDisconnect(null, 'voicemail-dropped');
+        return true;
+    } catch (error: any) {
+        console.error('Error sending voicemail:', error);
+        toast({
+            title: 'Voicemail Failed',
+            description: error.message || 'Could not send the voicemail.',
+            variant: 'destructive',
+        });
+        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'failed' } } });
+        return false;
+    }
+}, [handleCallDisconnect, toast]);
+
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
       initializeTwilio();
@@ -646,6 +673,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       getActiveTwilioCall,
       closeSoftphone,
       updateNotesAndSummary,
+      sendVoicemail,
     }}>
       {children}
     </CallContext.Provider>
@@ -659,6 +687,7 @@ export const useCall = () => {
   }
   return context as Omit<typeof context, 'dispatch'> & { 
     dispatch?: React.Dispatch<CallAction>, 
-    updateNotesAndSummary: (callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => void 
+    updateNotesAndSummary: (callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => void,
+    sendVoicemail: (to: string, script: string, callId: string) => Promise<boolean>,
   };
 };
