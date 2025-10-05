@@ -7,8 +7,6 @@ export async function GET(req: NextRequest) {
 
   let getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
 
-  // This check is now removed to fetch all logs, but we keep the logic in case we need to filter later.
-  // The backend will now decide whether to filter or not based on the presence of the param.
   if (agentId) {
     getCallLogsEndpoint += `?agent_id=${agentId}`;
   }

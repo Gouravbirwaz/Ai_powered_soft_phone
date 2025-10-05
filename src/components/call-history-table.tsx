@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -20,7 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
-import { ArrowDown, ArrowUp, Edit, PhoneIncoming, PhoneOutgoing, Voicemail } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
 import { useCall } from '@/contexts/call-context';
 import type { Call, CallDirection, CallStatus } from '@/lib/types';
 import { formatDuration } from '@/lib/utils';
@@ -52,10 +52,17 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
 };
 
 export default function CallHistoryTable() {
-  const { state, dispatch } = useCall();
+  const { state, dispatch, fetchCallHistory } = useCall();
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<CallDirection | 'all'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
+
+  useEffect(() => {
+    if (state.currentAgent) {
+      fetchCallHistory();
+    }
+  }, [state.currentAgent, fetchCallHistory]);
+
 
   const handleSort = (key: keyof Call) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -70,7 +77,9 @@ export default function CallHistoryTable() {
   }
 
   const filteredAndSortedCalls = useMemo(() => {
-    let filtered = [...state.callHistory];
+    if (!state.currentAgent) return [];
+    
+    let filtered = state.callHistory.filter(call => call.agentId === state.currentAgent?.id);
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter((call) => call.status === statusFilter);
@@ -93,9 +102,14 @@ export default function CallHistoryTable() {
     }
 
     return filtered;
-  }, [state.callHistory, statusFilter, directionFilter, sortConfig]);
+  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig]);
 
-  const allStatuses = useMemo(() => ['all', ...Array.from(new Set(state.callHistory.map(c => c.status)))], [state.callHistory]);
+  const allStatuses = useMemo(() => {
+    if (!state.currentAgent) return ['all'];
+    const agentCalls = state.callHistory.filter(call => call.agentId === state.currentAgent?.id);
+    return ['all', ...Array.from(new Set(agentCalls.map(c => c.status)))];
+  }, [state.callHistory, state.currentAgent]);
+
 
   const SortableHeader = ({ tkey, label }: { tkey: keyof Call; label: string }) => (
     <TableHead onClick={() => handleSort(tkey)} className="cursor-pointer">
@@ -196,7 +210,7 @@ export default function CallHistoryTable() {
             ) : (
               <TableRow key="no-calls-row">
                 <TableCell colSpan={6} className="h-24 text-center">
-                  No calls found.
+                  No calls found for this agent.
                 </TableCell>
               </TableRow>
             )}
