@@ -5,11 +5,11 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
   const agentId = req.nextUrl.searchParams.get('agent_id');
 
-  if (!agentId) {
-    return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 });
-  }
+  let getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
 
-  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs?agent_id=${agentId}`;
+  if (agentId) {
+    getCallLogsEndpoint += `?agent_id=${agentId}`;
+  }
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(

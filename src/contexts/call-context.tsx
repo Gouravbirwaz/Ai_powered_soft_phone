@@ -135,10 +135,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = state.currentAgent;
   }, [state.currentAgent]);
 
-  const fetchCallHistory = useCallback(async (agentId?: string) => {
+  const fetchCallHistory = useCallback(async () => {
     try {
-      const url = agentId ? `/api/twilio/call_logs?agent_id=${agentId}` : '/api/twilio/call_logs';
-      const response = await fetch(url);
+      const response = await fetch('/api/twilio/call_logs');
       if (!response.ok) {
         throw new Error(`Failed to fetch call history. Status: ${response.status}`);
       }
@@ -146,8 +145,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
         id: log.call_log_id,
         direction: log.direction || 'outgoing', 
-        from: log.direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
-        to: log.direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
+        from: log.direction === 'incoming' ? log.phone_number : (log.agent_phone || 'Unknown'),
+        to: log.direction === 'outgoing' ? log.phone_number : (log.agent_phone || 'Unknown'),
         startTime: new Date(log.started_at).getTime(),
         endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
         duration: log.duration || 0,
