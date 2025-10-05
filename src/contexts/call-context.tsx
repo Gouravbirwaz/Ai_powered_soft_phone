@@ -222,11 +222,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast]);
 
 const updateCallOnBackend = useCallback(async (call: Call) => {
-    if (!call.agentId) {
-        console.error("Cannot update call on backend without an agent ID.", call);
+    if (!call || !call.agentId) {
+        console.error("Cannot update call on backend without a valid call object and agent ID.", call);
         toast({
             title: 'Update Error',
-            description: 'Cannot save call details: Agent ID is missing.',
+            description: 'Cannot save call details: Agent ID or call data is missing.',
             variant: 'destructive',
         });
         return;
@@ -247,7 +247,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
             agent_id: call.agentId,
             phone_number: phoneNumber,
             direction: call.direction,
-            started_at: new Date(call.startTime).toISOString(),
+            started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
         };
 
         const response = await fetch('/api/twilio/call_logs', {
@@ -297,10 +297,22 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
   }, []);
   
   const handleCallDisconnect = useCallback((twilioCall: TwilioCall | null, status: CallStatus = 'completed') => {
-    const call = activeCallRef.current;
-    
-    if (!call) {
+    // Instead of just the ref, get the latest call object from state.
+    const callInRef = activeCallRef.current;
+    if (!callInRef) {
         console.warn('handleCallDisconnect called but no active call in ref.');
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+        activeTwilioCallRef.current = null;
+        return;
+    }
+
+    // Find the most up-to-date version of the call from the history.
+    const call = state.callHistory.find(c => c.id === callInRef.id) || callInRef;
+    
+    if (!call || isNaN(call.startTime)) {
+        console.error('handleCallDisconnect: Could not find call or call has invalid startTime.', call);
+        // Clean up UI state to prevent getting stuck
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
         dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
         activeTwilioCallRef.current = null;
@@ -328,7 +340,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
 
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     activeTwilioCallRef.current = null;
-  }, [updateCallOnBackend]);
+  }, [updateCallOnBackend, state.callHistory]);
 
 
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
@@ -606,7 +618,7 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    fetchCallHistory(); // Fetch all call history on login
+    fetchCallHistory(agent.id); 
   }, [fetchCallHistory]);
 
   const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string) => {
@@ -630,7 +642,6 @@ const updateCallOnBackend = useCallback(async (call: Call) => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
       initializeTwilio();
     }
-    // No longer fetch call history here, it's done on login
   }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio]);
 
   const logout = useCallback(() => {
@@ -672,3 +683,5 @@ export const useCall = () => {
     updateNotesAndSummary: (callId: string, notes: string, summary?: string) => void 
   };
 };
+
+    
