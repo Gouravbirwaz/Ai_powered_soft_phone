@@ -33,7 +33,7 @@ export default function LeadsDialog({
   leads: Lead[];
 }) {
   const { startOutgoingCall, state } = useCall();
-  const { callHistory, activeCall } = state;
+  const { allCallHistory, activeCall } = state;
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
@@ -53,16 +53,16 @@ export default function LeadsDialog({
       return <Badge className="bg-green-500">In Call</Badge>;
     }
 
-    const hasBeenContacted = callHistory.some(
-      (call) => call.to === phoneNumber && call.status === 'completed'
+    const hasBeenContacted = allCallHistory.some(
+      (call) => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed'
     );
     if (hasBeenContacted) {
       return <Badge variant="secondary">Contacted</Badge>;
     }
     
     // Check for a recent non-completed call to avoid re-calling too soon
-    const recentlyAttempted = callHistory.some(
-        (call) => call.to === phoneNumber && (Date.now() - call.startTime < 3600 * 1000)
+    const recentlyAttempted = allCallHistory.some(
+        (call) => (call.to === phoneNumber || call.from === phoneNumber) && (Date.now() - call.startTime < 3600 * 1000)
     );
 
     if (recentlyAttempted) {
@@ -76,7 +76,7 @@ export default function LeadsDialog({
     const phoneNumber = lead.phone || lead.company_phone;
     if (!phoneNumber || activeCall) return false;
     
-    const hasBeenContacted = callHistory.some(call => call.to === phoneNumber && call.status === 'completed');
+    const hasBeenContacted = allCallHistory.some(call => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed');
     return !hasBeenContacted;
   }
 

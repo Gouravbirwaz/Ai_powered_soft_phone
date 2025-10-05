@@ -18,6 +18,7 @@ type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 
 interface CallState {
   callHistory: Call[];
+  allCallHistory: Call[]; // To track all calls for lead status
   activeCall: Call | null;
   softphoneOpen: boolean;
   showIncomingCall: boolean;
@@ -38,6 +39,7 @@ type CallAction =
   | { type: 'UPDATE_IN_HISTORY'; payload: { call: Call } }
   | { type: 'REPLACE_IN_HISTORY'; payload: { tempId: string, finalCall: Call } }
   | { type: 'SET_CALL_HISTORY'; payload: Call[] }
+  | { type: 'SET_ALL_CALL_HISTORY'; payload: Call[] }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } }
@@ -45,6 +47,7 @@ type CallAction =
 
 const initialState: CallState = {
   callHistory: [],
+  allCallHistory: [],
   activeCall: null,
   softphoneOpen: false,
   showIncomingCall: false,
@@ -76,42 +79,49 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
     }
     case 'ADD_TO_HISTORY': {
         const { call } = action.payload;
-        // Avoid adding duplicates
-        if (state.callHistory.some(c => c.id === call.id)) return state;
-        const newHistory = [call, ...state.callHistory];
+        
+        const newHistory = state.callHistory.some(c => c.id === call.id) 
+            ? state.callHistory 
+            : [call, ...state.callHistory];
+
+        const newAllHistory = state.allCallHistory.some(c => c.id === call.id)
+            ? state.allCallHistory
+            : [call, ...state.allCallHistory];
+
         return {
             ...state,
             callHistory: newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
+            allCallHistory: newAllHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
         };
     }
     case 'UPDATE_IN_HISTORY': {
         const { call } = action.payload;
-        const index = state.callHistory.findIndex(c => c.id === call.id);
-        if (index === -1) { 
-            const newHistory = [call, ...state.callHistory];
-             return {
-                ...state,
-                callHistory: newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
-            };
-        }
-        const newHistory = [...state.callHistory];
-        newHistory[index] = call;
+        const update = (history: Call[]) => {
+            const index = history.findIndex(c => c.id === call.id);
+            if (index === -1) return [call, ...history];
+            const newHistory = [...history];
+            newHistory[index] = call;
+            return newHistory;
+        };
         return {
             ...state,
-            callHistory: newHistory,
+            callHistory: update(state.callHistory),
+            allCallHistory: update(state.allCallHistory),
         };
     }
     case 'REPLACE_IN_HISTORY': {
         const { tempId, finalCall } = action.payload;
-        const newHistory = state.callHistory.map(c => c.id === tempId ? finalCall : c);
+        const replace = (history: Call[]) => history.map(c => c.id === tempId ? finalCall : c);
         return {
             ...state,
-            callHistory: newHistory.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
+            callHistory: replace(state.callHistory).sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
+            allCallHistory: replace(state.allCallHistory).sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
         }
     }
     case 'SET_CALL_HISTORY':
         return { ...state, callHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
-
+    case 'SET_ALL_CALL_HISTORY':
+        return { ...state, allCallHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
     case 'CLOSE_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
@@ -143,40 +153,62 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = state.currentAgent;
   }, [state.currentAgent]);
 
-  const fetchCallHistory = useCallback(async () => {
+  const mapCallLog = useCallback((log: any): Call => ({
+    id: String(log.id),
+    direction: log.direction || (log.phone_number === currentAgentRef.current?.phone ? 'outgoing' : 'incoming'), 
+    from: log.direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
+    to: log.direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
+    startTime: new Date(log.started_at).getTime(),
+    endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
+    duration: log.duration || 0,
+    status: log.status || 'completed',
+    notes: log.notes,
+    summary: log.summary,
+    agentId: String(log.agent_id),
+    leadId: log.lead_id,
+    followUpRequired: log.follow_up_required || false,
+    callAttemptNumber: log.call_attempt_number || 1,
+  }), []);
+
+  const fetchCallHistory = useCallback(async (agentId: string) => {
     try {
-      const url = '/api/twilio/call_logs';
+      const url = `/api/twilio/call_logs?agent_id=${agentId}`;
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Failed to fetch call history. Status: ${response.status}`);
+        throw new Error(`Failed to fetch agent call history. Status: ${response.status}`);
       }
       const data = await response.json();
-      const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
-        id: String(log.id),
-        direction: log.direction || 'outgoing', 
-        from: log.direction === 'incoming' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
-        to: log.direction === 'outgoing' ? log.phone_number : (state.currentAgent?.phone || 'Unknown'),
-        startTime: new Date(log.started_at).getTime(),
-        endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
-        duration: log.duration || 0,
-        status: log.status || 'completed',
-        notes: log.notes,
-        summary: log.summary,
-        agentId: String(log.agent_id),
-        leadId: log.lead_id,
-        followUpRequired: log.follow_up_required || false,
-        callAttemptNumber: log.call_attempt_number || 1,
-      }));
+      const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
     } catch (error: any) {
-      console.error("Fetch call history error:", error);
+      console.error("Fetch agent call history error:", error);
       toast({
         variant: 'destructive',
         title: 'API Error',
         description: error.message || 'Could not fetch call history.'
       });
     }
-  }, [toast, state.currentAgent]);
+  }, [toast, mapCallLog]);
+
+  const fetchAllCallHistory = useCallback(async () => {
+    try {
+      const url = '/api/twilio/call_logs';
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch all call history. Status: ${response.status}`);
+      }
+      const data = await response.json();
+      const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
+      dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: formattedCalls });
+    } catch (error: any) {
+      console.error("Fetch all call history error:", error);
+      toast({
+        variant: 'destructive',
+        title: 'API Error',
+        description: error.message || 'Could not fetch full call history.'
+      });
+    }
+  }, [toast, mapCallLog]);
 
 
   const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
@@ -281,7 +313,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     
     createOrUpdateCallOnBackend(finalCallState).then((savedCall) => {
         if(savedCall) {
-            const finalSavedCall = { ...savedCall, agentId: String(savedCall.agentId), id: String(savedCall.id) };
+            const finalSavedCall = mapCallLog(savedCall);
             dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callInState.id, finalCall: finalSavedCall } });
 
             if (status === 'completed' || status === 'canceled' || status === 'busy' || status === 'failed') {
@@ -295,7 +327,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     activeTwilioCallRef.current = null;
-  }, [createOrUpdateCallOnBackend]);
+  }, [createOrUpdateCallOnBackend, mapCallLog]);
 
 
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
@@ -528,11 +560,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback((agent: Agent) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    fetchCallHistory(); 
-  }, [fetchCallHistory]);
+    fetchCallHistory(agent.id); 
+    fetchAllCallHistory();
+  }, [fetchCallHistory, fetchAllCallHistory]);
 
   const updateNotesAndSummary = useCallback((callId: string, notes: string, summary?: string, leadId?: string, phoneNumber?: string) => {
-    const callToUpdate = state.callHistory.find(c => c.id === callId);
+    const callToUpdate = state.allCallHistory.find(c => c.id === callId);
     
     if(callToUpdate) {
         const updatedCall: Call = { 
@@ -548,7 +581,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         createOrUpdateCallOnBackend(updatedCall).then((savedCall) => {
             if (savedCall) {
-                const finalSavedCall = { ...savedCall, agentId: String(savedCall.agentId), id: String(savedCall.id) };
+                const finalSavedCall = mapCallLog(savedCall);
                 dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalSavedCall } });
                 toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
             }
@@ -557,7 +590,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-  }, [state.callHistory, state.currentAgent, createOrUpdateCallOnBackend, toast]);
+  }, [state.allCallHistory, state.currentAgent, createOrUpdateCallOnBackend, toast, mapCallLog]);
   
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
@@ -569,6 +602,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     cleanupTwilio();
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
     dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
+    dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
   }, [cleanupTwilio]);
 
   return (
@@ -578,6 +612,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       fetchLeads,
       fetchAgents,
       fetchCallHistory,
+      fetchAllCallHistory,
       loginAsAgent,
       logout,
       initializeTwilio,

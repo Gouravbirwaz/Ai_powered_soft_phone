@@ -59,7 +59,7 @@ export default function CallHistoryTable() {
 
   useEffect(() => {
     if (state.currentAgent) {
-      fetchCallHistory();
+      fetchCallHistory(state.currentAgent.id);
     }
   }, [state.currentAgent, fetchCallHistory]);
 
@@ -79,7 +79,8 @@ export default function CallHistoryTable() {
   const filteredAndSortedCalls = useMemo(() => {
     if (!state.currentAgent) return [];
     
-    let filtered = state.callHistory.filter(call => call.agentId === state.currentAgent?.id);
+    // Use state.callHistory which should be pre-filtered for the current agent
+    let filtered = state.callHistory;
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter((call) => call.status === statusFilter);
@@ -106,8 +107,7 @@ export default function CallHistoryTable() {
 
   const allStatuses = useMemo(() => {
     if (!state.currentAgent) return ['all'];
-    const agentCalls = state.callHistory.filter(call => call.agentId === state.currentAgent?.id);
-    return ['all', ...Array.from(new Set(agentCalls.map(c => c.status)))];
+    return ['all', ...Array.from(new Set(state.callHistory.map(c => c.status)))];
   }, [state.callHistory, state.currentAgent]);
 
 
