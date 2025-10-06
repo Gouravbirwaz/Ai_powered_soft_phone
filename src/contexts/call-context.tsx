@@ -618,7 +618,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const sendVoicemail = useCallback(async (to: string, script: string, callId: string) => {
     dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'voicemail-dropping' } } });
     try {
-        const response = await fetch('/api/twilio/api/v1/send_voicemail', {
+        const response = await fetch('/api/twilio/send_voicemail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: to, script }),

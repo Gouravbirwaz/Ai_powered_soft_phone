@@ -483,10 +483,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
     try {
-      const response = await fetch('/api/leads');
+      const response = await fetch('/api/v1/leads');
       if (!response.ok) {
         throw new Error(`Failed to fetch leads. Status: ${response.status}`);
-      }
+      } 
       const data = await response.json();
       return (data.leads || []) as Lead[];
     } catch (error: any) {

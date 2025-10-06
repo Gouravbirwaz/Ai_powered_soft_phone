@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
-  const agentsEndpoint = `${process.env.BASE_URL}/api/v1/agents`;
+  const agentsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/agents`;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Agents API endpoint is not configured.' },
       { status: 500 }

@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Identity is required' }, { status: 400 });
   }
 
-  // The backend endpoint for getting a token, using the server-side BASE_URL
-  const tokenEndpoint = `${process.env.BASE_URL}/api/twilio/token?identity=${identity}`;
+  // The backend endpoint for getting a token, using the server-side NEXT_PUBLIC_BASE_URL
+  const tokenEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/token?identity=${identity}`;
 
   try {
     const response = await fetch(tokenEndpoint, {

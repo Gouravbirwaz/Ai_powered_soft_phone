@@ -12,9 +12,9 @@ export async function GET(
     return NextResponse.json({ error: 'Call SID is required.' }, { status: 400 });
   }
   
-  const getTranscriptEndpoint = `${process.env.BASE_URL}/api/twilio/get_transcript/${call_sid}`;
+  const getTranscriptEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/get_transcript/${call_sid}`;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Transcript endpoint is not configured in environment variables.' },
       { status: 500 }
