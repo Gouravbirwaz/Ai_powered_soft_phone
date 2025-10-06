@@ -27,7 +27,6 @@ import { generateSummaryAction } from '@/lib/actions';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2 } from 'lucide-react';
-import { DUMMY_AUDIO_DATA_URI } from '@/lib/utils';
 
 const notesFormSchema = z.object({
   notes: z.string().min(1, 'Notes cannot be empty.'),
@@ -68,11 +67,11 @@ export default function PostCallSheet({ call }: { call: Call }) {
   const handleGenerateSummary = async () => {
     const notes = form.getValues('notes');
     if (!notes) {
-        form.setError('notes', { message: 'Please enter notes before generating a summary.' });
+        form.setError('notes', { message: 'Please enter notes or wait for transcript before generating a summary.' });
         return;
     }
     setIsSummarizing(true);
-    const result = await generateSummaryAction(notes, DUMMY_AUDIO_DATA_URI);
+    const result = await generateSummaryAction(notes);
     if (result.summary) {
         form.setValue('summary', result.summary);
         toast({ title: 'Summary Generated', description: 'AI summary has been successfully created.' });
@@ -118,10 +117,10 @@ export default function PostCallSheet({ call }: { call: Call }) {
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Call Notes</FormLabel>
+                    <FormLabel>Call Notes & Transcript</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Enter your notes here..."
+                        placeholder="Call transcript will appear here. You can add your own notes as well."
                         className="min-h-[120px]"
                         {...field}
                       />

@@ -10,20 +10,14 @@ const resultSchema = z.object({
 
 export async function generateSummaryAction(
   notes: string,
-  recordingDataUri: string
 ): Promise<z.infer<typeof resultSchema>> {
   if (!notes) {
-    return { error: 'Notes cannot be empty.' };
-  }
-
-  if (!recordingDataUri) {
-    return { error: 'Call recording is not available to generate a summary.' }
+    return { error: 'Notes/transcript cannot be empty.' };
   }
 
   try {
     const output = await summarizeCallNotes({
       notes,
-      recordingDataUri: recordingDataUri,
     });
     return { summary: output.summary };
   } catch (error) {

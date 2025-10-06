@@ -12,12 +12,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SummarizeCallNotesInputSchema = z.object({
-  recordingDataUri: z
-    .string()
-    .describe(
-      "A call recording, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
-    ),
-  notes: z.string().describe('The notes added by the agent after the call.'),
+  notes: z.string().describe('The transcript or notes from the call.'),
 });
 export type SummarizeCallNotesInput = z.infer<typeof SummarizeCallNotesInputSchema>;
 
@@ -34,11 +29,9 @@ const prompt = ai.definePrompt({
   name: 'summarizeCallNotesPrompt',
   input: {schema: SummarizeCallNotesInputSchema},
   output: {schema: SummarizeCallNotesOutputSchema},
-  prompt: `You are an AI assistant that summarizes phone calls between agents and customers. The agent will provide a recording of the call, and any notes they took during the call. Your job is to provide a short summary of the call, extracting the key information. The summary should be no more than 3 sentences long.
+  prompt: `You are an AI assistant that summarizes phone calls between agents and customers. You will be given a transcript or notes from the call. Your job is to provide a short summary, extracting the key information. The summary should be no more than 3 sentences long.
 
-Call Recording: {{media url=recordingDataUri}}
-
-Agent Notes: {{{notes}}}`,
+Call Notes/Transcript: {{{notes}}}`,
 });
 
 const summarizeCallNotesFlow = ai.defineFlow(
