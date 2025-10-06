@@ -11,7 +11,8 @@ export type CallStatus =
   | 'failed'
   | 'canceled'
   | 'voicemail-dropping'
-  | 'voicemail-dropped';
+  | 'voicemail-dropped'
+  | 'fetching-transcript';
 
 export type CallDirection = 'incoming' | 'outgoing';
 

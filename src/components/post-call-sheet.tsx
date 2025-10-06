@@ -57,15 +57,17 @@ export default function PostCallSheet({ call }: { call: Call }) {
   }, [call, form]);
 
   const handleOpenChange = (open: boolean) => {
-    if (!open && dispatch) {
-      dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
+    if (!open && !isSaving) {
+      if (dispatch) {
+        dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
+      }
     }
   };
   
   const handleGenerateSummary = async () => {
     const notes = form.getValues('notes');
     if (!notes) {
-        form.setError('notes', { message: 'Please enter notes before generating a summary.' });
+        form.setError('notes', { message: 'Please enter notes or wait for transcript before generating a summary.' });
         return;
     }
     setIsSummarizing(true);
@@ -115,10 +117,10 @@ export default function PostCallSheet({ call }: { call: Call }) {
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Call Notes</FormLabel>
+                    <FormLabel>Call Notes & Transcript</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Enter your notes here..."
+                        placeholder="Call transcript will appear here. You can add your own notes as well."
                         className="min-h-[120px]"
                         {...field}
                       />
