@@ -254,14 +254,11 @@ const ActiveCallView = () => {
   
   const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
-  const canSendVoicemail = isConnecting || ['busy', 'failed', 'canceled', 'in-progress'].includes(activeCall.status);
+  const isFetchingTranscript = activeCall.status === 'fetching-transcript';
+  const canSendVoicemail = isConnecting || isCallActive;
 
   const handleHangup = () => {
-    if (isConnecting || isCallActive) {
-      endActiveCall('canceled');
-    } else {
-      closeSoftphone();
-    }
+    endActiveCall('canceled');
   };
 
   const handleMute = () => {
@@ -287,6 +284,7 @@ const ActiveCallView = () => {
     'failed': 'Call Failed',
     'canceled': 'Canceled',
     'voicemail-dropped': 'Voicemail Sent',
+    'fetching-transcript': 'Getting transcript...',
   }
 
   const getStatusInfo = () => {
@@ -300,6 +298,8 @@ const ActiveCallView = () => {
         return { text, icon: <CircleDotDashed className="animate-spin h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
       case 'in-progress':
         return { text, icon: <Clock className="h-4 w-4 text-green-500" />, color: 'text-green-500' };
+      case 'fetching-transcript':
+        return { text, icon: <Loader2 className="animate-spin h-4 w-4 text-blue-500" />, color: 'text-blue-500' };
       case 'failed':
       case 'busy':
       case 'canceled':
@@ -324,30 +324,39 @@ const ActiveCallView = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-3 gap-4 my-8">
-          <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
-            {isMuted ? <MicOff /> : <Mic />}
-            <span className="text-xs mt-1">Mute</span>
-          </Button>
-          <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
-            <Grid3x3 />
-            <span className="text-xs mt-1">Keypad</span>
-          </Button>
-          <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleVoicemailClick} disabled={!canSendVoicemail}>
-            <Voicemail />
-            <span className="text-xs mt-1">Voicemail</span>
-          </Button>
-        </div>
+        {!isFetchingTranscript ? (
+            <>
+                <div className="grid grid-cols-3 gap-4 my-8">
+                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
+                        {isMuted ? <MicOff /> : <Mic />}
+                        <span className="text-xs mt-1">Mute</span>
+                    </Button>
+                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
+                        <Grid3x3 />
+                        <span className="text-xs mt-1">Keypad</span>
+                    </Button>
+                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleVoicemailClick} disabled={!canSendVoicemail}>
+                        <Voicemail />
+                        <span className="text-xs mt-1">Voicemail</span>
+                    </Button>
+                </div>
 
-        <Button
-          size="lg"
-          variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
-          className="w-full rounded-full h-14"
-          onClick={handleHangup}
-        >
-          {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
-          {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
-        </Button>
+                <Button
+                size="lg"
+                variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
+                className="w-full rounded-full h-14"
+                onClick={handleHangup}
+                >
+                {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
+                {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
+                </Button>
+            </>
+        ) : (
+            <div className='flex-1 flex items-center justify-center'>
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        )}
+
       </div>
       <VoicemailDialog open={showVoicemailDialog} onOpenChange={setShowVoicemailDialog} call={activeCall}/>
     </>

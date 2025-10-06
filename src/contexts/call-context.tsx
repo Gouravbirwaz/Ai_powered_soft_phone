@@ -291,6 +291,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchTranscript = async (callSid: string) => {
     try {
+        // Add a small delay to allow the recording to be available
+        await new Promise(resolve => setTimeout(resolve, 2000));
         const response = await fetch(`/api/twilio/transcript/${callSid}`);
         if (!response.ok) {
             console.warn(`Could not fetch transcript for ${callSid}. Status: ${response.status}`);
@@ -304,7 +306,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, status: CallStatus = 'completed') => {
+  const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, finalStatus: CallStatus = 'completed') => {
     const callInState = activeCallRef.current;
     if (!callInState) {
         console.warn('handleCallDisconnect called but no active call in state.');
@@ -314,6 +316,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
+    // Set status to fetching transcript immediately
+    dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
+    
     if (!callInState.startTime || isNaN(callInState.startTime)) {
         console.error('handleCallDisconnect: active call has invalid startTime.', callInState);
         activeTwilioCallRef.current = null;
@@ -322,32 +327,28 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
+    let transcript = null;
+    if (finalStatus === 'completed' || finalStatus === 'canceled') {
+        transcript = await fetchTranscript(callInState.id);
+    }
+    
     const endTime = Date.now();
     const duration = Math.round((endTime - callInState.startTime) / 1000);
 
-    let transcript = null;
-    if (status === 'completed' || status === 'canceled') {
-        transcript = await fetchTranscript(callInState.id);
-    }
-
     const finalCallState: Call = {
       ...callInState,
-      status,
+      status: finalStatus,
       endTime,
       duration,
       notes: transcript || callInState.notes || '', // Pre-fill notes with transcript
     };
 
-    // Update the local state immediately so the UI reflects the end of the call
-    // This is crucial for the post-call sheet to find the call.
     dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
     
-    // Open the post-call sheet for the agent to complete notes
-    if (status === 'completed' || status === 'canceled' || status === 'busy' || status === 'failed') {
-      dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
+    if (finalStatus !== 'voicemail-dropped') {
+        dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
     }
 
-    // Reset active call state
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     activeTwilioCallRef.current = null;
@@ -359,8 +360,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const twilioCall = activeTwilioCallRef.current;
     
     if (twilioCall) {
+      // The 'disconnect' event will trigger handleCallDisconnect
       twilioCall.disconnect();
     } else {
+      // If there's no twilioCall, we might be ending a call that failed to connect
       const call = activeCallRef.current;
       if (call) {
         handleCallDisconnect(null, status);
@@ -615,7 +618,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const sendVoicemail = useCallback(async (to: string, script: string, callId: string) => {
     dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'voicemail-dropping' } } });
     try {
-        const response = await fetch('/api/twilio/send_voicemail', {
+        const response = await fetch('/api/twilio/api/v1/send_voicemail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: to, script }),
@@ -626,6 +629,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         await response.json();
+        // Manually trigger disconnect logic for voicemail
         handleCallDisconnect(null, 'voicemail-dropped');
         return true;
     } catch (error: any) {
@@ -635,7 +639,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             description: error.message || 'Could not send the voicemail.',
             variant: 'destructive',
         });
-        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'failed' } } });
+        // If it fails, revert to a standard failed call status
+        handleCallDisconnect(null, 'failed');
         return false;
     }
 }, [handleCallDisconnect, toast]);
