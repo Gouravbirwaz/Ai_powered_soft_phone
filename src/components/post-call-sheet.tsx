@@ -27,6 +27,7 @@ import { generateSummaryAction } from '@/lib/actions';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2 } from 'lucide-react';
+import { DUMMY_AUDIO_DATA_URI } from '@/lib/utils';
 
 const notesFormSchema = z.object({
   notes: z.string().min(1, 'Notes cannot be empty.'),
@@ -57,8 +58,10 @@ export default function PostCallSheet({ call }: { call: Call }) {
   }, [call, form]);
 
   const handleOpenChange = (open: boolean) => {
-    if (!open && dispatch) {
-      dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
+    if (!open && !isSaving) {
+      if (dispatch) {
+        dispatch({ type: 'CLOSE_POST_CALL_SHEET' });
+      }
     }
   };
   
@@ -69,7 +72,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
         return;
     }
     setIsSummarizing(true);
-    const result = await generateSummaryAction(notes);
+    const result = await generateSummaryAction(notes, DUMMY_AUDIO_DATA_URI);
     if (result.summary) {
         form.setValue('summary', result.summary);
         toast({ title: 'Summary Generated', description: 'AI summary has been successfully created.' });

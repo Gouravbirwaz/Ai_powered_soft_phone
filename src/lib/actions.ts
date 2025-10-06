@@ -1,7 +1,6 @@
 'use server';
 
 import { summarizeCallNotes } from '@/ai/flows/summarize-call-notes';
-import { DUMMY_AUDIO_DATA_URI } from '@/lib/utils';
 import { z } from 'zod';
 
 const resultSchema = z.object({
@@ -10,16 +9,21 @@ const resultSchema = z.object({
 });
 
 export async function generateSummaryAction(
-  notes: string
+  notes: string,
+  recordingDataUri: string
 ): Promise<z.infer<typeof resultSchema>> {
   if (!notes) {
     return { error: 'Notes cannot be empty.' };
   }
 
+  if (!recordingDataUri) {
+    return { error: 'Call recording is not available to generate a summary.' }
+  }
+
   try {
     const output = await summarizeCallNotes({
       notes,
-      recordingDataUri: DUMMY_AUDIO_DATA_URI,
+      recordingDataUri: recordingDataUri,
     });
     return { summary: output.summary };
   } catch (error) {
