@@ -22,6 +22,7 @@ import type { Lead } from '@/lib/types';
 import { Badge } from './ui/badge';
 import { Mail, Phone, Voicemail } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
+import { formatRelative } from 'date-fns';
 
 export default function LeadsDialog({
   open,
@@ -59,31 +60,34 @@ export default function LeadsDialog({
 
   const getLeadStatus = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
-    if (!phoneNumber) {
-      return <Badge variant="destructive">No Number</Badge>;
-    }
-
     if (activeCall?.to === phoneNumber) {
       return <Badge className="bg-green-500">In Call</Badge>;
     }
     
-    const hasBeenContacted = allCallHistory.some(
-      c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber
-    );
+    const leadInteractions = allCallHistory
+        .filter(c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber)
+        .sort((a,b) => (b.startTime || 0) - (a.startTime || 0));
+
+    const lastInteraction = leadInteractions[0];
       
-    if (hasBeenContacted) {
-        return <Badge variant="secondary">Contacted</Badge>;
+    if (lastInteraction) {
+        return (
+            <div>
+                <Badge variant="secondary">Contacted</Badge>
+                <p className="text-xs text-muted-foreground mt-1">
+                    {formatRelative(new Date(lastInteraction.startTime), new Date())}
+                </p>
+            </div>
+        );
     }
 
     return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">Available</Badge>;
   };
   
-  const isCallable = (lead: Lead) => {
+  const isActionable = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
     return !!phoneNumber && !activeCall;
   }
-
-  const hasPhoneNumber = (lead: Lead) => !!(lead.phone || lead.company_phone);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,7 +129,7 @@ export default function LeadsDialog({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleCall(lead)}
-                                disabled={!isCallable(lead)}
+                                disabled={!isActionable(lead)}
                             >
                                 <Phone className="mr-2 h-4 w-4" />
                                 Call
@@ -134,7 +138,7 @@ export default function LeadsDialog({
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleVoicemail(lead)}
-                                disabled={!hasPhoneNumber(lead)}
+                                disabled={!isActionable(lead)}
                             >
                                 <Voicemail className="mr-2 h-4 w-4" />
                                 Voicemail
