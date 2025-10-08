@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const sendVoicemailEndpoint = `${process.env.BASE_URL}/api/twilio/send_voicemail`;
+  const sendVoicemailEndpoint = `${process.env.BASE_URL}/api/v1/send_voicemail`;
 
   if (!process.env.BASE_URL) {
     return NextResponse.json(
