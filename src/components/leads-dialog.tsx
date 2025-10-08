@@ -66,20 +66,27 @@ export default function LeadsDialog({
     if (activeCall?.to === phoneNumber) {
       return <Badge className="bg-green-500">In Call</Badge>;
     }
+    
+    const callsForLead = allCallHistory
+      .filter(c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber)
+      .sort((a, b) => b.startTime - a.startTime);
+      
+    const lastInteraction = callsForLead[0];
 
-    const hasBeenContacted = allCallHistory.some(
-      (call) => (call.to === phoneNumber || call.from === phoneNumber) && (call.status === 'completed' || call.status === 'voicemail-dropped')
-    );
-
-    const hasBeenEmailed = allCallHistory.some(call => call.leadId === lead.lead_id && call.status === 'emailed');
-
-    if (hasBeenContacted || hasBeenEmailed) {
-      return <Badge variant="secondary">Contacted</Badge>;
+    if (lastInteraction) {
+        if (lastInteraction.status === 'completed') {
+            return <Badge variant="secondary">Contacted</Badge>;
+        }
+        if (lastInteraction.status === 'voicemail-dropped') {
+            return <Badge variant="outline">Voicemail Sent</Badge>;
+        }
+        if (lastInteraction.status === 'emailed') {
+            return <Badge variant="outline">Emailed</Badge>;
+        }
     }
     
-    // Check for a recent non-completed call to avoid re-calling too soon
-    const recentlyAttempted = allCallHistory.some(
-        (call) => (call.to === phoneNumber || call.from === phoneNumber) && (Date.now() - call.startTime < 3600 * 1000)
+    const recentlyAttempted = callsForLead.some(
+        (call) => (Date.now() - call.startTime < 3600 * 1000)
     );
 
     if (recentlyAttempted) {
@@ -93,8 +100,12 @@ export default function LeadsDialog({
     const phoneNumber = lead.phone || lead.company_phone;
     if (!phoneNumber || activeCall) return false;
     
-    const hasBeenContacted = allCallHistory.some(call => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed');
-    return !hasBeenContacted;
+    // Only disable calling if a call was actually completed (i.e., a conversation happened).
+    const hasBeenSuccessfullyCalled = allCallHistory.some(
+        (call) => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed'
+    );
+    
+    return !hasBeenSuccessfullyCalled;
   }
 
   const hasPhoneNumber = (lead: Lead) => !!(lead.phone || lead.company_phone);
