@@ -58,20 +58,15 @@ export default function VoicemailDialog() {
         return;
     }
 
-    const success = await sendVoicemail(phoneNumber, script);
+    const success = await sendVoicemail(voicemailLeadTarget, script);
     if (success) {
       toast({
-        title: 'Voicemail Sent',
-        description: `Voicemail has been sent to ${phoneNumber}.`,
+        title: 'Voicemail Sent & Logged',
+        description: `Voicemail to ${phoneNumber} has been sent and logged.`,
       });
       handleClose();
-    } else {
-      toast({
-        title: 'Failed to Send',
-        description: 'The voicemail could not be sent. Please try again.',
-        variant: 'destructive',
-      });
     }
+    // Error toast is handled inside the context's sendVoicemail function
     setIsSending(false);
   };
 
@@ -85,7 +80,7 @@ export default function VoicemailDialog() {
         <DialogHeader>
           <DialogTitle>Send Voicemail</DialogTitle>
           <DialogDescription>
-            Edit the script below and send it as a voicemail to {voicemailLeadTarget.company} at {phoneNumber}.
+            Edit the script below and send it as a voicemail to {voicemailLeadTarget.company} at {phoneNumber}. This action will be logged.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
@@ -110,7 +105,7 @@ export default function VoicemailDialog() {
             ) : (
               <VoicemailIcon className="mr-2 h-4 w-4" />
             )}
-            Send Voicemail
+            Send & Log Voicemail
           </Button>
         </DialogFooter>
       </DialogContent>

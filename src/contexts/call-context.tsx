@@ -109,7 +109,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         };
         return {
             ...state,
-            callHistory: update(state.callHistory),
+            callHistory: state.currentAgent?.id === call.agentId ? update(state.callHistory) : state.callHistory,
             allCallHistory: update(state.allCallHistory),
         };
     }
@@ -325,7 +325,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     // Set status to fetching transcript immediately
-    dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
+    if (finalStatus !== 'failed' && finalStatus !== 'busy' && finalStatus !== 'canceled') {
+        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
+    }
     
     if (!callInState.startTime || isNaN(callInState.startTime)) {
         console.error('handleCallDisconnect: active call has invalid startTime.', callInState);
@@ -613,31 +615,50 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         if (savedCall) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
             toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
-            // Refresh both histories to ensure consistency
-            if (state.currentAgent) fetchCallHistory(state.currentAgent.id);
-            fetchAllCallHistory();
         }
     } else {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-  }, [state.allCallHistory, state.currentAgent, createOrUpdateCallOnBackend, toast, fetchCallHistory, fetchAllCallHistory]);
+  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
   
-  const sendVoicemail = useCallback(async (phone: string, script: string) => {
+  const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
+    const phoneNumber = lead.phone || lead.company_phone;
+    if (!phoneNumber || !state.currentAgent) return false;
+
     try {
         const response = await fetch('/api/twilio/send_voicemail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: phone, script: script }),
+            body: JSON.stringify({ to: phoneNumber, script: script }),
         });
 
         if (!response.ok) {
             throw new Error('Failed to send voicemail from backend.');
         }
 
-        await response.json();
-        // Since this is a "fire and forget" from the leads table, we don't need to tie it to call state.
-        // We can optionally create a "voicemail-dropped" log here if needed in the future.
+        const { call_sid } = await response.json();
+
+        const voicemailLog: Call = {
+          id: call_sid || `vm-${Date.now()}`,
+          direction: 'outgoing',
+          from: state.currentAgent.phone,
+          to: phoneNumber,
+          startTime: Date.now(),
+          endTime: Date.now(),
+          duration: 0,
+          status: 'voicemail-dropped',
+          notes: `Voicemail sent with script: "${script.substring(0, 100)}..."`,
+          summary: '',
+          agentId: state.currentAgent.id,
+          leadId: lead.lead_id
+        };
+
+        const savedCall = await createOrUpdateCallOnBackend(voicemailLog);
+        if(savedCall) {
+          dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+        }
+
         return true;
     } catch (error: any) {
         console.error('Error sending voicemail:', error);
@@ -648,7 +669,32 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         return false;
     }
-}, [toast]);
+}, [state.currentAgent, toast, createOrUpdateCallOnBackend]);
+
+  const logEmailInteraction = useCallback((lead: Lead) => {
+    if (!state.currentAgent) return;
+    
+    const emailLog: Call = {
+      id: `email-${Date.now()}`,
+      direction: 'outgoing',
+      from: state.currentAgent.email,
+      to: lead.owner_email,
+      startTime: Date.now(),
+      endTime: Date.now(),
+      duration: 0,
+      status: 'emailed',
+      notes: `Email initiated to ${lead.owner_email}`,
+      agentId: state.currentAgent.id,
+      leadId: lead.lead_id,
+    };
+    
+    createOrUpdateCallOnBackend(emailLog).then((savedCall) => {
+        if (savedCall) {
+            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+            toast({ title: 'Email Logged', description: `Email to ${lead.owner_email} has been logged.`})
+        }
+    });
+  }, [state.currentAgent, createOrUpdateCallOnBackend, toast]);
 
   const openVoicemailDialogForLead = useCallback((lead: Lead) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead }});
@@ -687,6 +733,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       updateNotesAndSummary,
       sendVoicemail,
       openVoicemailDialogForLead,
+      logEmailInteraction,
     }}>
       {children}
     </CallContext.Provider>
@@ -701,7 +748,8 @@ export const useCall = () => {
   return context as Omit<typeof context, 'dispatch'> & { 
     dispatch?: React.Dispatch<CallAction>, 
     updateNotesAndSummary: (callId: string, notes: string, summary?: string) => Promise<void>,
-    sendVoicemail: (to: string, script: string) => Promise<boolean>,
+    sendVoicemail: (lead: Lead, script: string) => Promise<boolean>,
     openVoicemailDialogForLead: (lead: Lead) => void;
+    logEmailInteraction: (lead: Lead) => void;
   };
 };

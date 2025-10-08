@@ -32,7 +32,7 @@ export default function LeadsDialog({
   onOpenChange: (open: boolean) => void;
   leads: Lead[];
 }) {
-  const { startOutgoingCall, state, openVoicemailDialogForLead } = useCall();
+  const { startOutgoingCall, state, openVoicemailDialogForLead, logEmailInteraction } = useCall();
   const { allCallHistory, activeCall } = state;
 
   const handleCall = (lead: Lead) => {
@@ -50,6 +50,13 @@ export default function LeadsDialog({
     }
   };
 
+  const handleEmail = (lead: Lead) => {
+    if (logEmailInteraction && lead.owner_email) {
+      logEmailInteraction(lead);
+      window.location.href = `mailto:${lead.owner_email}`;
+    }
+  };
+
   const getLeadStatus = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
     if (!phoneNumber) {
@@ -61,9 +68,12 @@ export default function LeadsDialog({
     }
 
     const hasBeenContacted = allCallHistory.some(
-      (call) => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed'
+      (call) => (call.to === phoneNumber || call.from === phoneNumber) && (call.status === 'completed' || call.status === 'voicemail-dropped')
     );
-    if (hasBeenContacted) {
+
+    const hasBeenEmailed = allCallHistory.some(call => call.leadId === lead.lead_id && call.status === 'emailed');
+
+    if (hasBeenContacted || hasBeenEmailed) {
       return <Badge variant="secondary">Contacted</Badge>;
     }
     
@@ -147,9 +157,7 @@ export default function LeadsDialog({
                                 variant="outline"
                                 size="sm"
                                 disabled={!lead.owner_email}
-                                onClick={() => {
-                                  if(lead.owner_email) window.location.href = `mailto:${lead.owner_email}`;
-                                }}
+                                onClick={() => handleEmail(lead)}
                             >
                                 <Mail className="mr-2 h-4 w-4" />
                                 Email

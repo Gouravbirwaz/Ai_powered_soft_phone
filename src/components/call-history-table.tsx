@@ -20,7 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
-import { ArrowDown, ArrowUp, Edit, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit, Mail, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
 import { useCall } from '@/contexts/call-context';
 import type { Call, CallDirection, CallStatus } from '@/lib/types';
 import { formatDuration } from '@/lib/utils';
@@ -34,6 +34,7 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
     busy: 'secondary',
     failed: 'destructive',
     canceled: 'destructive',
+    emailed: 'outline',
   };
 
   const text: { [key in CallStatus]?: string } = {
@@ -42,6 +43,7 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
     'in-progress': 'In Progress',
     'voicemail-dropping': 'Voicemail Left',
     'voicemail-dropped': 'Voicemail Left',
+    'emailed': 'Emailed',
   }
 
   return (
@@ -107,8 +109,8 @@ export default function CallHistoryTable() {
 
   const allStatuses = useMemo(() => {
     if (!state.currentAgent) return ['all'];
-    return ['all', ...Array.from(new Set(state.callHistory.map(c => c.status)))];
-  }, [state.callHistory, state.currentAgent]);
+    return ['all', ...Array.from(new Set(state.allCallHistory.map(c => c.status)))];
+  }, [state.allCallHistory, state.currentAgent]);
 
 
   const SortableHeader = ({ tkey, label }: { tkey: keyof Call; label: string }) => (
@@ -119,6 +121,16 @@ export default function CallHistoryTable() {
       </div>
     </TableHead>
   );
+
+  const getIconForCall = (call: Call) => {
+    if (call.status === 'emailed') {
+      return <Mail className="h-5 w-5 text-yellow-500" />;
+    }
+    if (call.direction === 'incoming') {
+      return <PhoneIncoming className="h-5 w-5 text-blue-500" />;
+    }
+    return <PhoneOutgoing className="h-5 w-5 text-green-500" />;
+  }
 
   return (
     <div className="space-y-4">
@@ -166,11 +178,7 @@ export default function CallHistoryTable() {
                 return (
                   <TableRow key={call.id}>
                     <TableCell>
-                      {call.direction === 'incoming' ? (
-                        <PhoneIncoming className="h-5 w-5 text-blue-500" />
-                      ) : (
-                        <PhoneOutgoing className="h-5 w-5 text-green-500" />
-                      )}
+                      {getIconForCall(call)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -199,7 +207,7 @@ export default function CallHistoryTable() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)}>
+                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed'}>
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Edit Notes</span>
                       </Button>
