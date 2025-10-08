@@ -23,6 +23,7 @@ import { Badge } from './ui/badge';
 import { Mail, Phone, Voicemail } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { formatRelative } from 'date-fns';
+import { useEffect, useState } from 'react';
 
 export default function LeadsDialog({
   open,
@@ -35,6 +36,13 @@ export default function LeadsDialog({
 }) {
   const { startOutgoingCall, state, openVoicemailDialogForLead, logEmailInteraction } = useCall();
   const { allCallHistory, activeCall } = state;
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    // Update current time every minute to keep relative times fresh
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
@@ -75,7 +83,7 @@ export default function LeadsDialog({
             <div>
                 <Badge variant="secondary">Contacted</Badge>
                 <p className="text-xs text-muted-foreground mt-1">
-                    {formatRelative(new Date(lastInteraction.startTime), new Date())}
+                    {formatRelative(new Date(lastInteraction.startTime), currentTime)}
                 </p>
             </div>
         );

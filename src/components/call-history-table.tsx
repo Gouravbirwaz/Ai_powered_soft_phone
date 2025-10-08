@@ -24,7 +24,8 @@ import { ArrowDown, ArrowUp, Edit, Mail, PhoneCall, PhoneIncoming, PhoneOutgoing
 import { useCall } from '@/contexts/call-context';
 import type { Call, CallStatus, ActionTaken } from '@/lib/types';
 import { formatDuration } from '@/lib/utils';
-import { format, formatRelative, isValid } from 'date-fns';
+import { format, isValid, formatRelative } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 
 const StatusBadge = ({ status }: { status: CallStatus }) => {
   const variant: { [key in CallStatus]?: 'default' | 'secondary' | 'destructive' | 'outline' } = {
@@ -58,6 +59,13 @@ export default function CallHistoryTable() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    // Update current time every minute to keep relative times fresh
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (state.currentAgent) {
@@ -136,6 +144,8 @@ export default function CallHistoryTable() {
         return <PhoneCall className="h-5 w-5 text-gray-500" />;
     }
   }
+  
+  const timeZone = 'America/New_York';
 
   return (
     <div className="space-y-4">
@@ -169,7 +179,7 @@ export default function CallHistoryTable() {
               <TableHead>Contact</TableHead>
               <SortableHeader tkey="status" label="Status" />
               <SortableHeader tkey="duration" label="Duration" />
-              <SortableHeader tkey="startTime" label="Timestamp" />
+              <SortableHeader tkey="startTime" label="Timestamp (US Eastern)" />
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -204,8 +214,10 @@ export default function CallHistoryTable() {
                     <TableCell>
                       {isDateValid ? (
                         <div className="flex flex-col">
-                          <span className='font-medium'>{formatRelative(callDate, new Date())}</span>
-                          <span className='text-sm text-muted-foreground'>{format(callDate, 'p')}</span>
+                          <span className='font-medium'>{formatRelative(callDate, currentTime)}</span>
+                          <span className='text-sm text-muted-foreground'>
+                            {formatInTimeZone(callDate, timeZone, 'MMM d, p')} ET
+                          </span>
                         </div>
                       ) : (
                         <div className="text-muted-foreground">Invalid date</div>
