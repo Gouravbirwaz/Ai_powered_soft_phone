@@ -20,9 +20,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
-import { ArrowDown, ArrowUp, Edit, Mail, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit, Mail, PhoneCall, PhoneIncoming, PhoneOutgoing, Voicemail } from 'lucide-react';
 import { useCall } from '@/contexts/call-context';
-import type { Call, CallDirection, CallStatus } from '@/lib/types';
+import type { Call, CallStatus, ActionTaken } from '@/lib/types';
 import { formatDuration } from '@/lib/utils';
 import { format, formatRelative, isValid } from 'date-fns';
 
@@ -56,7 +56,7 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
 export default function CallHistoryTable() {
   const { state, dispatch, fetchCallHistory } = useCall();
   const [statusFilter, setStatusFilter] = useState('all');
-  const [directionFilter, setDirectionFilter] = useState<CallDirection | 'all'>('all');
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
 
   useEffect(() => {
@@ -81,7 +81,6 @@ export default function CallHistoryTable() {
   const filteredAndSortedCalls = useMemo(() => {
     if (!state.currentAgent) return [];
     
-    // Use state.callHistory which should be pre-filtered for the current agent
     let filtered = state.callHistory;
 
     if (statusFilter !== 'all') {
@@ -122,14 +121,20 @@ export default function CallHistoryTable() {
     </TableHead>
   );
 
-  const getIconForCall = (call: Call) => {
-    if (call.status === 'emailed') {
-      return <Mail className="h-5 w-5 text-yellow-500" />;
+  const getIconForAction = (action?: ActionTaken, direction?: 'incoming' | 'outgoing') => {
+    switch (action) {
+      case 'email':
+        return <Mail className="h-5 w-5 text-yellow-500" />;
+      case 'voicemail':
+        return <Voicemail className="h-5 w-5 text-purple-500" />;
+      case 'call':
+        if (direction === 'incoming') {
+          return <PhoneIncoming className="h-5 w-5 text-blue-500" />;
+        }
+        return <PhoneOutgoing className="h-5 w-5 text-green-500" />;
+      default:
+        return <PhoneCall className="h-5 w-5 text-gray-500" />;
     }
-    if (call.direction === 'incoming') {
-      return <PhoneIncoming className="h-5 w-5 text-blue-500" />;
-    }
-    return <PhoneOutgoing className="h-5 w-5 text-green-500" />;
   }
 
   return (
@@ -145,7 +150,7 @@ export default function CallHistoryTable() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as CallDirection | 'all')}>
+        <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as 'all' | 'incoming' | 'outgoing')}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by direction" />
           </SelectTrigger>
@@ -173,21 +178,21 @@ export default function CallHistoryTable() {
               filteredAndSortedCalls.map((call) => {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
-                const contactNumber = call.direction === 'incoming' ? call.from : call.to;
+                const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
 
                 return (
                   <TableRow key={call.id}>
                     <TableCell>
-                      {getIconForCall(call)}
+                      {getIconForAction(call.action_taken, call.direction)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                          <AvatarFallback>{contactNumber?.charAt(0) || '?'}</AvatarFallback>
+                          <AvatarFallback>{contactIdentifier?.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{contactNumber}</div>
+                          <div className="font-medium">{contactIdentifier}</div>
                           {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
                         </div>
                       </div>
@@ -207,7 +212,7 @@ export default function CallHistoryTable() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed'}>
+                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed' || !call.notes}>
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Edit Notes</span>
                       </Button>

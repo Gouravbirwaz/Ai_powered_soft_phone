@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { Call, Lead, Agent, CallStatus, CallDirection } from '@/lib/types';
+import type { Call, Lead, Agent, CallStatus, CallDirection, ActionTaken } from '@/lib/types';
 import React, {
   createContext,
   useContext,
@@ -107,9 +107,10 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
             newHistory[index] = call;
             return newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
         };
+        const isCurrentAgentCall = state.currentAgent?.id === call.agentId;
         return {
             ...state,
-            callHistory: state.currentAgent?.id === call.agentId ? update(state.callHistory) : state.callHistory,
+            callHistory: isCurrentAgentCall ? update(state.callHistory) : state.callHistory,
             allCallHistory: update(state.allCallHistory),
         };
     }
@@ -162,11 +163,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.currentAgent]);
 
   const mapCallLog = useCallback((log: any): Call => {
-    const agentIsOnCall = String(log.agent_id) === String(currentAgentRef.current?.id);
-    const direction: CallDirection = (log.direction === 'outgoing' && agentIsOnCall) ? 'outgoing' : 'incoming';
+    const isAgentOnCall = String(log.agent_id) === String(currentAgentRef.current?.id);
+    const direction: CallDirection = (log.direction === 'outgoing' && isAgentOnCall) ? 'outgoing' : 'incoming';
   
     return {
-      id: String(log.id),
+      id: String(log.call_log_id || log.id),
       direction,
       from: direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
       to: direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
@@ -178,6 +179,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       summary: log.summary,
       agentId: String(log.agent_id),
       leadId: log.lead_id,
+      action_taken: log.action_taken || 'call',
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
     };
@@ -240,7 +242,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             call_log_id: call.id,
             notes: call.notes,
             summary: call.summary,
-            ended_at: call.endTime ? new Date(call.endTime).toISOString() : new Date().toISOString(),
+            ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
             started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
             duration: call.duration,
             status: call.status,
@@ -248,6 +250,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             agent_id: call.agentId,
             phone_number: call.direction === 'outgoing' ? call.to : call.from,
             direction: call.direction,
+            action_taken: call.action_taken || 'call',
         };
         
         const response = await fetch('/api/twilio/call_logs', {
@@ -274,7 +277,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         } else {
             console.log('Call log created/updated successfully for call:', call.id);
             const responseData = await response.json();
-            // The backend returns a full call log object. We should use it.
             return mapCallLog(responseData.call_log);
         }
     } catch (error) {
@@ -299,7 +301,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchTranscript = async (callSid: string) => {
     try {
-        // Add a small delay to allow the recording to be available
         await new Promise(resolve => setTimeout(resolve, 2000));
         const response = await fetch(`/api/twilio/transcript/${callSid}`);
         if (!response.ok) {
@@ -324,7 +325,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    // Set status to fetching transcript immediately
     if (finalStatus !== 'failed' && finalStatus !== 'busy' && finalStatus !== 'canceled') {
         dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
     }
@@ -350,30 +350,37 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       status: finalStatus,
       endTime,
       duration,
-      notes: transcript || callInState.notes || '', // Pre-fill notes with transcript
+      notes: transcript || callInState.notes || '',
     };
-
-    dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
     
-    if (finalStatus !== 'voicemail-dropped') {
-        dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
+    const savedCall = await createOrUpdateCallOnBackend(finalCallState);
+
+    if (savedCall) {
+        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+        if (finalStatus !== 'voicemail-dropped') {
+            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
+        }
+    } else {
+        // Even if saving fails, update history locally
+        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
+        if (finalStatus !== 'voicemail-dropped') {
+            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
+        }
     }
 
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     activeTwilioCallRef.current = null;
 
-  }, []);
+  }, [createOrUpdateCallOnBackend]);
 
 
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
     const twilioCall = activeTwilioCallRef.current;
     
     if (twilioCall) {
-      // The 'disconnect' event will trigger handleCallDisconnect
       twilioCall.disconnect();
     } else {
-      // If there's no twilioCall, we might be ending a call that failed to connect
       const call = activeCallRef.current;
       if (call) {
         handleCallDisconnect(null, status);
@@ -390,17 +397,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     console.log('Incoming call from', twilioCall.parameters.From);
     activeTwilioCallRef.current = twilioCall;
 
-    const fromNumber = twilioCall.parameters.From;
-
     const callData: Call = {
       id: twilioCall.parameters.CallSid,
-      from: fromNumber,
+      from: twilioCall.parameters.From,
       to: currentAgentRef.current?.phone || '',
       direction: 'incoming',
       status: 'ringing-incoming',
       startTime: Date.now(),
       duration: 0,
       agentId: currentAgentRef.current?.id,
+      action_taken: 'call',
       followUpRequired: false,
       callAttemptNumber: 1,
     };
@@ -510,6 +516,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             duration: 0,
             agentId: state.currentAgent.id,
             leadId: leadId,
+            action_taken: 'call',
             followUpRequired: false,
             callAttemptNumber: 1,
         };
@@ -648,10 +655,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           endTime: Date.now(),
           duration: 0,
           status: 'voicemail-dropped',
-          notes: `Voicemail sent with script: "${script.substring(0, 100)}..."`,
+          notes: `Voicemail script: "${script.substring(0, 100)}..."`,
           summary: '',
           agentId: state.currentAgent.id,
-          leadId: lead.lead_id
+          leadId: lead.lead_id,
+          action_taken: 'voicemail'
         };
 
         const savedCall = await createOrUpdateCallOnBackend(voicemailLog);
@@ -672,7 +680,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 }, [state.currentAgent, toast, createOrUpdateCallOnBackend]);
 
   const logEmailInteraction = useCallback((lead: Lead) => {
-    if (!state.currentAgent) return;
+    if (!state.currentAgent || !lead.owner_email) return;
     
     const emailLog: Call = {
       id: `email-${Date.now()}`,
@@ -686,6 +694,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       notes: `Email initiated to ${lead.owner_email}`,
       agentId: state.currentAgent.id,
       leadId: lead.lead_id,
+      action_taken: 'email'
     };
     
     createOrUpdateCallOnBackend(emailLog).then((savedCall) => {

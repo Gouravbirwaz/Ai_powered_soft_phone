@@ -17,6 +17,8 @@ export type CallStatus =
 
 export type CallDirection = 'incoming' | 'outgoing';
 
+export type ActionTaken = 'call' | 'voicemail' | 'email';
+
 export interface Call {
   id: string;
   direction: CallDirection;
@@ -33,6 +35,7 @@ export interface Call {
   leadId?: string;
   followUpRequired?: boolean;
   callAttemptNumber?: number;
+  action_taken?: ActionTaken;
 }
 
 export interface Lead {
