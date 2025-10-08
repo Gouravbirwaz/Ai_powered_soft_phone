@@ -12,9 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useCall } from '@/contexts/call-context';
-import type { Call } from '@/lib/types';
-import { useState } from 'react';
-import { Loader2, Voicemail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, Voicemail as VoicemailIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const DEFAULT_VOICEMAIL_SCRIPT = `Hello, this is Zackary Beckham from Caprae Capital Partners.
@@ -23,37 +22,49 @@ I’d be happy to share more details at your convenience.
 You can reach me directly at 480-518-2592, or reply to this message, and we’ll schedule a quick call.
 Once again, this is Zackary Beckham with Caprae Capital Partners. Thank you, and I look forward to connecting.`;
 
-export default function VoicemailDialog({
-  open,
-  onOpenChange,
-  call,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  call: Call | null;
-}) {
-  const { sendVoicemail } = useCall();
+export default function VoicemailDialog() {
+  const { sendVoicemail, state, dispatch } = useCall();
   const { toast } = useToast();
   const [script, setScript] = useState(DEFAULT_VOICEMAIL_SCRIPT);
   const [isSending, setIsSending] = useState(false);
 
+  const { voicemailLeadTarget } = state;
+
+  useEffect(() => {
+    // Reset script if the target changes
+    setScript(DEFAULT_VOICEMAIL_SCRIPT);
+  }, [voicemailLeadTarget]);
+
+  const handleClose = () => {
+    if (dispatch) {
+      dispatch({ type: 'CLOSE_VOICEMAIL_DIALOG' });
+    }
+  };
+
   const handleSend = async () => {
-    if (!call || !script) {
+    if (!voicemailLeadTarget || !script) {
       toast({
         title: 'Error',
-        description: 'Cannot send voicemail without a call and a script.',
+        description: 'Cannot send voicemail without a target lead and a script.',
         variant: 'destructive',
       });
       return;
     }
     setIsSending(true);
-    const success = await sendVoicemail(call.to, script, call.id);
+    const phoneNumber = voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
+    if (!phoneNumber) {
+        toast({ title: 'No Phone Number', description: 'This lead does not have a phone number.', variant: 'destructive' });
+        setIsSending(false);
+        return;
+    }
+
+    const success = await sendVoicemail(phoneNumber, script);
     if (success) {
       toast({
         title: 'Voicemail Sent',
-        description: `Voicemail has been sent to ${call.to}.`,
+        description: `Voicemail has been sent to ${phoneNumber}.`,
       });
-      onOpenChange(false);
+      handleClose();
     } else {
       toast({
         title: 'Failed to Send',
@@ -64,15 +75,17 @@ export default function VoicemailDialog({
     setIsSending(false);
   };
 
-  if (!call) return null;
+  if (!voicemailLeadTarget) return null;
+
+  const phoneNumber = voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={!!voicemailLeadTarget} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Send Voicemail</DialogTitle>
           <DialogDescription>
-            Edit the script below and send it as a voicemail to {call.to}.
+            Edit the script below and send it as a voicemail to {voicemailLeadTarget.company} at {phoneNumber}.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
@@ -86,16 +99,16 @@ export default function VoicemailDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={handleClose}
             disabled={isSending}
           >
             Cancel
           </Button>
-          <Button onClick={handleSend} disabled={isSending || !script}>
+          <Button onClick={handleSend} disabled={isSending || !script || !phoneNumber}>
             {isSending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Voicemail className="mr-2 h-4 w-4" />
+              <VoicemailIcon className="mr-2 h-4 w-4" />
             )}
             Send Voicemail
           </Button>

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { useCall } from '@/contexts/call-context';
 import type { Lead } from '@/lib/types';
 import { Badge } from './ui/badge';
-import { Phone } from 'lucide-react';
+import { Mail, Phone, Voicemail } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 
 export default function LeadsDialog({
@@ -32,13 +32,20 @@ export default function LeadsDialog({
   onOpenChange: (open: boolean) => void;
   leads: Lead[];
 }) {
-  const { startOutgoingCall, state } = useCall();
+  const { startOutgoingCall, state, openVoicemailDialogForLead } = useCall();
   const { allCallHistory, activeCall } = state;
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
     if (phoneNumber) {
       startOutgoingCall(phoneNumber, lead.lead_id);
+      onOpenChange(false);
+    }
+  };
+
+  const handleVoicemail = (lead: Lead) => {
+    if (openVoicemailDialogForLead) {
+      openVoicemailDialogForLead(lead);
       onOpenChange(false);
     }
   };
@@ -80,13 +87,15 @@ export default function LeadsDialog({
     return !hasBeenContacted;
   }
 
+  const hasPhoneNumber = (lead: Lead) => !!(lead.phone || lead.company_phone);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[70vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Available Leads</DialogTitle>
           <DialogDescription>
-            Select a lead from the list to initiate a call.
+            Select a lead from the list to initiate an action.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 relative">
@@ -98,7 +107,7 @@ export default function LeadsDialog({
                     <TableHead>Contact</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -115,15 +124,37 @@ export default function LeadsDialog({
                             {getLeadStatus(lead)}
                         </TableCell>
                         <TableCell className="text-right">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCall(lead)}
-                            disabled={!isCallable(lead)}
-                        >
-                            <Phone className="mr-2 h-4 w-4" />
-                            Call
-                        </Button>
+                          <div className='flex gap-2 justify-end'>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCall(lead)}
+                                disabled={!isCallable(lead)}
+                            >
+                                <Phone className="mr-2 h-4 w-4" />
+                                Call
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleVoicemail(lead)}
+                                disabled={!hasPhoneNumber(lead)}
+                            >
+                                <Voicemail className="mr-2 h-4 w-4" />
+                                Voicemail
+                            </Button>
+                             <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!lead.owner_email}
+                                onClick={() => {
+                                  if(lead.owner_email) window.location.href = `mailto:${lead.owner_email}`;
+                                }}
+                            >
+                                <Mail className="mr-2 h-4 w-4" />
+                                Email
+                            </Button>
+                          </div>
                         </TableCell>
                     </TableRow>
                     ))

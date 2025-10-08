@@ -8,7 +8,6 @@ import {
   PhoneOff,
   Mic,
   MicOff,
-  Voicemail,
   Clock,
   CircleDotDashed,
   Move,
@@ -32,7 +31,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import type { CallStatus, Lead } from '@/lib/types';
 import LeadsDialog from './leads-dialog';
-import VoicemailDialog from './voicemail-dialog';
 
 
 const DialpadButton = ({
@@ -221,7 +219,6 @@ const ActiveCallView = () => {
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [showVoicemailDialog, setShowVoicemailDialog] = useState(false);
   const twilioCall = getActiveTwilioCall();
 
   useEffect(() => {
@@ -255,7 +252,6 @@ const ActiveCallView = () => {
   const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
   const isFetchingTranscript = activeCall.status === 'fetching-transcript';
-  const canSendVoicemail = isConnecting || isCallActive;
 
   const handleHangup = () => {
     endActiveCall('canceled');
@@ -268,12 +264,6 @@ const ActiveCallView = () => {
     }
   }
 
-  const handleVoicemailClick = () => {
-    if (canSendVoicemail) {
-      setShowVoicemailDialog(true);
-    }
-  }
-  
   const statusTextMap: { [key in CallStatus]?: string } = {
     'ringing-outgoing': 'Ringing...',
     'in-progress': formatDuration(duration),
@@ -305,7 +295,7 @@ const ActiveCallView = () => {
       case 'canceled':
         return { text, icon: <AlertCircle className="h-4 w-4 text-destructive" />, color: 'text-destructive' };
       case 'voicemail-dropped':
-        return { text, icon: <Voicemail className="h-4 w-4 text-blue-500" />, color: 'text-blue-500' };
+        return { text: 'Voicemail Sent', icon: <PhoneOff className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
       default:
         return { text: 'Call Ended', icon: <PhoneOff className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
     }
@@ -315,7 +305,7 @@ const ActiveCallView = () => {
   
   return (
     <>
-      <div className="flex flex-col items-center justify-between p-4 h-full min-h-[500px]">
+      <div className="flex flex-col items-center justify-between p-4 h-full min-h-[400px]">
         <div className="text-center mt-8">
           <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
           <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
@@ -326,7 +316,7 @@ const ActiveCallView = () => {
         
         {!isFetchingTranscript ? (
             <>
-                <div className="grid grid-cols-3 gap-4 my-8">
+                <div className="grid grid-cols-2 gap-4 my-8">
                     <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
                         {isMuted ? <MicOff /> : <Mic />}
                         <span className="text-xs mt-1">Mute</span>
@@ -334,10 +324,6 @@ const ActiveCallView = () => {
                     <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
                         <Grid3x3 />
                         <span className="text-xs mt-1">Keypad</span>
-                    </Button>
-                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleVoicemailClick} disabled={!canSendVoicemail}>
-                        <Voicemail />
-                        <span className="text-xs mt-1">Voicemail</span>
                     </Button>
                 </div>
 
@@ -358,7 +344,6 @@ const ActiveCallView = () => {
         )}
 
       </div>
-      <VoicemailDialog open={showVoicemailDialog} onOpenChange={setShowVoicemailDialog} call={activeCall}/>
     </>
   );
 };

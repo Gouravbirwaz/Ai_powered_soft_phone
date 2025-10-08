@@ -23,6 +23,7 @@ interface CallState {
   softphoneOpen: boolean;
   showIncomingCall: boolean;
   showPostCallSheetForId: string | null;
+  voicemailLeadTarget: Lead | null;
   twilioDeviceStatus: TwilioDeviceStatus;
   audioPermissionsGranted: boolean;
   currentAgent: Agent | null;
@@ -42,6 +43,8 @@ type CallAction =
   | { type: 'SET_ALL_CALL_HISTORY'; payload: Call[] }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
+  | { type: 'OPEN_VOICEMAIL_DIALOG'; payload: { lead: Lead } }
+  | { type: 'CLOSE_VOICEMAIL_DIALOG' }
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } }
   | { type: 'SHOW_INCOMING_CALL'; payload: boolean };
 
@@ -52,6 +55,7 @@ const initialState: CallState = {
   softphoneOpen: false,
   showIncomingCall: false,
   showPostCallSheetForId: null,
+  voicemailLeadTarget: null,
   twilioDeviceStatus: 'uninitialized',
   audioPermissionsGranted: false,
   currentAgent: null,
@@ -126,6 +130,10 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: action.payload.callId };
+    case 'OPEN_VOICEMAIL_DIALOG':
+      return { ...state, voicemailLeadTarget: action.payload.lead };
+    case 'CLOSE_VOICEMAIL_DIALOG':
+      return { ...state, voicemailLeadTarget: null };
     case 'SET_CURRENT_AGENT':
         return { ...state, currentAgent: action.payload.agent };
     case 'SHOW_INCOMING_CALL':
@@ -615,13 +623,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.allCallHistory, state.currentAgent, createOrUpdateCallOnBackend, toast, fetchCallHistory, fetchAllCallHistory]);
   
-  const sendVoicemail = useCallback(async (to: string, script: string, callId: string) => {
-    dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'voicemail-dropping' } } });
+  const sendVoicemail = useCallback(async (phone: string, script: string) => {
     try {
-        const response = await fetch('/api/twilio/api/v1/send_voicemail', {
+        const response = await fetch('/api/twilio/send_voicemail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: to, script }),
+            body: JSON.stringify({ phone: phone, script: script }),
         });
 
         if (!response.ok) {
@@ -629,8 +636,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         await response.json();
-        // Manually trigger disconnect logic for voicemail
-        handleCallDisconnect(null, 'voicemail-dropped');
+        // Since this is a "fire and forget" from the leads table, we don't need to tie it to call state.
+        // We can optionally create a "voicemail-dropped" log here if needed in the future.
         return true;
     } catch (error: any) {
         console.error('Error sending voicemail:', error);
@@ -639,11 +646,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             description: error.message || 'Could not send the voicemail.',
             variant: 'destructive',
         });
-        // If it fails, revert to a standard failed call status
-        handleCallDisconnect(null, 'failed');
         return false;
     }
-}, [handleCallDisconnect, toast]);
+}, [toast]);
+
+  const openVoicemailDialogForLead = useCallback((lead: Lead) => {
+    dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead }});
+  }, []);
 
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
@@ -677,6 +686,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       closeSoftphone,
       updateNotesAndSummary,
       sendVoicemail,
+      openVoicemailDialogForLead,
     }}>
       {children}
     </CallContext.Provider>
@@ -691,8 +701,7 @@ export const useCall = () => {
   return context as Omit<typeof context, 'dispatch'> & { 
     dispatch?: React.Dispatch<CallAction>, 
     updateNotesAndSummary: (callId: string, notes: string, summary?: string) => Promise<void>,
-    sendVoicemail: (to: string, script: string, callId: string) => Promise<boolean>,
+    sendVoicemail: (to: string, script: string) => Promise<boolean>,
+    openVoicemailDialogForLead: (lead: Lead) => void;
   };
 };
-
-    
