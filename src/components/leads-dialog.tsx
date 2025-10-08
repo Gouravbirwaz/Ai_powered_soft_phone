@@ -69,24 +69,24 @@ export default function LeadsDialog({
     
     const callsForLead = allCallHistory
       .filter(c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber)
-      .sort((a, b) => b.startTime - a.startTime);
+      .sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
       
     const lastInteraction = callsForLead[0];
 
     if (lastInteraction) {
-        if (lastInteraction.status === 'completed') {
-            return <Badge variant="secondary">Contacted</Badge>;
-        }
-        if (lastInteraction.status === 'voicemail-dropped') {
+        if (lastInteraction.action_taken === 'voicemail') {
             return <Badge variant="outline">Voicemail Sent</Badge>;
         }
-        if (lastInteraction.status === 'emailed') {
+        if (lastInteraction.action_taken === 'email') {
             return <Badge variant="outline">Emailed</Badge>;
+        }
+        if (lastInteraction.action_taken === 'call' && lastInteraction.status === 'completed') {
+            return <Badge variant="secondary">Contacted</Badge>;
         }
     }
     
     const recentlyAttempted = callsForLead.some(
-        (call) => (Date.now() - call.startTime < 3600 * 1000)
+        (call) => (Date.now() - (call.startTime || 0) < 3600 * 1000)
     );
 
     if (recentlyAttempted) {
@@ -102,7 +102,7 @@ export default function LeadsDialog({
     
     // Only disable calling if a call was actually completed (i.e., a conversation happened).
     const hasBeenSuccessfullyCalled = allCallHistory.some(
-        (call) => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed'
+        (call) => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed' && call.action_taken === 'call'
     );
     
     return !hasBeenSuccessfullyCalled;
