@@ -67,30 +67,12 @@ export default function LeadsDialog({
       return <Badge className="bg-green-500">In Call</Badge>;
     }
     
-    const callsForLead = allCallHistory
-      .filter(c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber)
-      .sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
-      
-    const lastInteraction = callsForLead[0];
-
-    if (lastInteraction) {
-        if (lastInteraction.action_taken === 'voicemail') {
-            return <Badge variant="outline">Voicemail Sent</Badge>;
-        }
-        if (lastInteraction.action_taken === 'email') {
-            return <Badge variant="outline">Emailed</Badge>;
-        }
-        if (lastInteraction.action_taken === 'call' && lastInteraction.status === 'completed') {
-            return <Badge variant="secondary">Contacted</Badge>;
-        }
-    }
-    
-    const recentlyAttempted = callsForLead.some(
-        (call) => (Date.now() - (call.startTime || 0) < 3600 * 1000)
+    const hasBeenContacted = allCallHistory.some(
+      c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber
     );
-
-    if (recentlyAttempted) {
-        return <Badge variant="outline">Recently Attempted</Badge>
+      
+    if (hasBeenContacted) {
+        return <Badge variant="secondary">Contacted</Badge>;
     }
 
     return <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">Available</Badge>;
@@ -98,14 +80,7 @@ export default function LeadsDialog({
   
   const isCallable = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
-    if (!phoneNumber || activeCall) return false;
-    
-    // Only disable calling if a call was actually completed (i.e., a conversation happened).
-    const hasBeenSuccessfullyCalled = allCallHistory.some(
-        (call) => (call.to === phoneNumber || call.from === phoneNumber) && call.status === 'completed' && call.action_taken === 'call'
-    );
-    
-    return !hasBeenSuccessfullyCalled;
+    return !!phoneNumber && !activeCall;
   }
 
   const hasPhoneNumber = (lead: Lead) => !!(lead.phone || lead.company_phone);
