@@ -506,7 +506,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         if (!backendResponse.ok) {
             const error = await backendResponse.json();
-            throw new Error(error.description || 'Backend failed to initiate call.');
+            throw new Error(error.error || 'Backend failed to initiate call.');
         }
 
         const { conference, customer_call_sid } = await backendResponse.json();
@@ -531,6 +531,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             followUpRequired: false,
             callAttemptNumber: 1,
         };
+        
+        await createOrUpdateCallOnBackend(callData);
 
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
         dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
@@ -553,7 +555,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     }
-  }, [state.currentAgent, toast, handleCallDisconnect]);
+  }, [state.currentAgent, toast, handleCallDisconnect, createOrUpdateCallOnBackend]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -773,3 +775,5 @@ export const useCall = () => {
     logEmailInteraction: (lead: Lead) => void;
   };
 };
+
+    
