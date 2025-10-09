@@ -520,13 +520,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             startTime: Date.now(),
             duration: 0,
             agentId: state.currentAgent.id,
-            leadId: leadId, // Ensure leadId is included here
+            leadId: leadId,
             action_taken: 'call',
             followUpRequired: false,
             callAttemptNumber: 1,
         };
 
-        // Log the call immediately
         await createOrUpdateCallOnBackend(callData);
 
         const agentCall = await twilioDeviceRef.current.connect({
