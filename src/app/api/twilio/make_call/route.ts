@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
-    // Ensure agent_id is in the body being forwarded
+    // Ensure agent_id and to are in the body being forwarded
     if (!body.agent_id || !body.to) {
         return NextResponse.json({ error: "Missing 'agent_id' or 'to' in request body" }, { status: 400 });
     }

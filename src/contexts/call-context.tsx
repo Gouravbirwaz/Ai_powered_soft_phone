@@ -238,7 +238,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-        const body = {
+        const body: any = {
             call_log_id: call.id,
             notes: call.notes,
             summary: call.summary,
@@ -246,12 +246,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
             duration: call.duration,
             status: call.status,
-            lead_id: call.leadId,
             agent_id: call.agentId,
             phone_number: call.direction === 'outgoing' ? call.to : call.from,
             direction: call.direction,
             action_taken: call.action_taken || 'call',
         };
+
+        if (call.leadId) {
+            body.lead_id = call.leadId;
+        }
         
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
@@ -476,34 +479,42 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const startOutgoingCall = useCallback(async (to: string, leadId?: string) => {
     if (!state.currentAgent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
-      toast({ 
-        title: 'Softphone Not Ready', 
-        description: 'The softphone is not connected. Please login again.', 
-        variant: 'destructive' 
-      });
-      return;
+        toast({
+            title: 'Softphone Not Ready',
+            description: 'The softphone is not connected. Please login again.',
+            variant: 'destructive'
+        });
+        return;
     }
-    
+
     try {
-        const response = await fetch('/api/twilio/make_call', {
+        const dialer_type = leadId ? 'auto' : 'manual';
+        const payload: any = {
+            to: to,
+            agent_id: state.currentAgent.id,
+            dialer_type: dialer_type,
+        };
+        if (leadId) {
+            payload.lead_id = leadId;
+        }
+
+        const backendResponse = await fetch('/api/twilio/make_call', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: to, agent_id: state.currentAgent.id }),
+            body: JSON.stringify(payload),
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to initiate call from backend.');
+        if (!backendResponse.ok) {
+            const error = await backendResponse.json();
+            throw new Error(error.description || 'Backend failed to initiate call.');
         }
 
-        const { conference, customer_call_sid } = await response.json();
-        if (!conference || !customer_call_sid) {
-          throw new Error('Backend did not return a conference name or call SID.');
-        }
+        const { conference, customer_call_sid } = await backendResponse.json();
 
         const agentCall = await twilioDeviceRef.current.connect({
-          params: { To: `room:${conference}` }
+            params: { To: conference }
         });
+
         activeTwilioCallRef.current = agentCall;
         
         const callData: Call = {
@@ -534,13 +545,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
     } catch (error: any) {
-      console.error('Error starting outgoing call:', error);
-      toast({ 
-        title: 'Call Failed', 
-        description: error.message || 'Could not start the call.', 
-        variant: 'destructive' 
-      });
-      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+        console.error('Error starting outgoing call:', error);
+        toast({
+            title: 'Call Failed',
+            description: error.message || 'Could not start the call.',
+            variant: 'destructive'
+        });
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     }
   }, [state.currentAgent, toast, handleCallDisconnect]);
 
