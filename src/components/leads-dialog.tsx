@@ -116,14 +116,14 @@ export default function LeadsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[70vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[70vh] flex flex-col pt-4">
         <DialogHeader>
           <DialogTitle>Available Leads</DialogTitle>
           <DialogDescription>
             Select a lead from the list to initiate an action.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 relative">
+        <div className="flex-1 relative py-2">
             <ScrollArea className="absolute inset-0">
             <Table>
                 <TableHeader>
