@@ -226,14 +226,17 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast, mapCallLog]);
 
 
-  const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
+ const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
     if (!call || !call.agentId || !call.id) {
         console.error("Cannot create/update call log on backend: Missing critical data.", call);
-        toast({
-            title: 'Logging Error',
-            description: 'Cannot save call details: critical data is missing.',
-            variant: 'destructive',
-        });
+        return null;
+    }
+
+    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+    const agentIdNumber = parseInt(call.agentId, 10);
+
+    if (isNaN(agentIdNumber)) {
+        console.error("Cannot create/update call log on backend: Invalid Agent ID.", call.agentId);
         return null;
     }
 
@@ -245,8 +248,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
             status: call.status,
-            agent_id: call.agentId,
-            phone_number: call.direction === 'outgoing' ? call.to : call.from,
+            agent_id: agentIdNumber,
+            phone_number: phoneNumber,
             direction: call.direction,
             action_taken: call.action_taken || 'call',
             lead_id: call.leadId ?? null,
@@ -255,9 +258,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         if (call.startTime && !isNaN(call.startTime)) {
             body.started_at = new Date(call.startTime).toISOString();
         } else if (call.endTime && !isNaN(call.endTime)) {
-            body.started_at = new Date(call.endTime).toISOString();
+             body.started_at = new Date(call.endTime).toISOString();
         }
-        
+
+
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -265,13 +269,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            let errorDetails = errorText;
-             try {
-                const errorJson = JSON.parse(errorText);
-                errorDetails = errorJson.message || errorJson.error || `Failed to add or update call log. Status: ${response.status} ${response.statusText}`;
+            let errorDetails = `Failed to add or update call log. Status: ${response.status} ${response.statusText}`;
+            try {
+                const errorJson = await response.json();
+                errorDetails = errorJson.message || errorJson.error || errorDetails;
             } catch (e) {
-                errorDetails = `Failed to add or update call log. Status: ${response.status} ${response.statusText}`;
+                // Not a JSON response, use the default message
             }
             console.error(`Failed to create/update call log:`, errorDetails);
             toast({
@@ -659,6 +662,72 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
   
+  const logEmailInteraction = useCallback((lead: Lead) => {
+    if (!state.currentAgent || !lead.owner_email) return;
+    
+    const emailLog: Call = {
+      id: `email-${Date.now()}`,
+      direction: 'outgoing',
+      from: state.currentAgent.email,
+      to: lead.owner_email,
+      startTime: Date.now(),
+      endTime: Date.now(),
+      duration: 0,
+      status: 'emailed',
+      notes: `Email initiated to ${lead.owner_email}`,
+      agentId: state.currentAgent.id,
+      leadId: lead.lead_id,
+      action_taken: 'email'
+    };
+    
+    createOrUpdateCallOnBackend(emailLog).then((savedCall) => {
+        if (savedCall) {
+            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+            toast({ title: 'Email Logged', description: `Email to ${lead.owner_email} has been logged.`})
+        }
+    });
+  }, [state.currentAgent, createOrUpdateCallOnBackend, toast]);
+
+  const sendMissedCallEmail = useCallback(async (lead: Lead) => {
+    if (!lead.owner_email || !lead.owner_first_name) {
+      toast({ title: 'Missing Info', description: 'Cannot send email without lead name and email.', variant: 'destructive'});
+      return false;
+    }
+    
+    try {
+      const response = await fetch('/api/send_email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${lead.owner_first_name} ${lead.owner_last_name}`, email: lead.owner_email }),
+      });
+
+      if (!response.ok) {
+        let errorDetails = `Request failed with status ${response.status}`;
+        try {
+            const errorText = await response.text();
+            const errorJson = JSON.parse(errorText);
+            errorDetails = errorJson.details || errorJson.message || errorText;
+        } catch (e) {
+            // Not a JSON response, use the status text
+        }
+        throw new Error(errorDetails);
+      }
+      
+      logEmailInteraction(lead); // Log the interaction after successful send
+      toast({ title: 'Email Sent', description: `Missed call email sent to ${lead.owner_email}`});
+      return true;
+
+    } catch (error: any) {
+      console.error('Error sending missed call email:', error);
+      toast({
+          title: 'Email Failed',
+          description: error.message || 'Could not send the email.',
+          variant: 'destructive',
+      });
+      return false;
+    }
+  }, [toast, logEmailInteraction]);
+
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const phoneNumber = lead.phone || lead.company_phone;
     if (!phoneNumber || !state.currentAgent) return false;
@@ -708,72 +777,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return false;
     }
 }, [state.currentAgent, toast, createOrUpdateCallOnBackend]);
-
-  const logEmailInteraction = useCallback((lead: Lead) => {
-    if (!state.currentAgent || !lead.owner_email) return;
-    
-    const emailLog: Call = {
-      id: `email-${Date.now()}`,
-      direction: 'outgoing',
-      from: state.currentAgent.email,
-      to: lead.owner_email,
-      startTime: Date.now(),
-      endTime: Date.now(),
-      duration: 0,
-      status: 'emailed',
-      notes: `Email initiated to ${lead.owner_email}`,
-      agentId: state.currentAgent.id,
-      leadId: lead.lead_id,
-      action_taken: 'email'
-    };
-    
-    createOrUpdateCallOnBackend(emailLog).then((savedCall) => {
-        if (savedCall) {
-            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
-            toast({ title: 'Email Logged', description: `Email to ${lead.owner_email} has been logged.`})
-        }
-    });
-  }, [state.currentAgent, createOrUpdateCallOnBackend, toast]);
-
-  const sendMissedCallEmail = useCallback(async (lead: Lead) => {
-    if (!lead.owner_email || !lead.owner_first_name) {
-      toast({ title: 'Missing Info', description: 'Cannot send email without lead name and email.', variant: 'destructive'});
-      return false;
-    }
-    
-    try {
-      const response = await fetch('/api/send_email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: `${lead.owner_first_name} ${lead.owner_last_name}`, email: lead.owner_email }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorDetails = errorText;
-        try {
-            const errorJson = JSON.parse(errorText);
-            errorDetails = errorJson.details || errorJson.message || errorText;
-        } catch (e) {
-            // Not a JSON response, use the raw text
-        }
-        throw new Error(errorDetails);
-      }
-      
-      logEmailInteraction(lead); // Log the interaction after successful send
-      toast({ title: 'Email Sent', description: `Missed call email sent to ${lead.owner_email}`});
-      return true;
-
-    } catch (error: any) {
-      console.error('Error sending missed call email:', error);
-      toast({
-          title: 'Email Failed',
-          description: error.message || 'Could not send the email.',
-          variant: 'destructive',
-      });
-      return false;
-    }
-  }, [toast, logEmailInteraction]);
 
   const openVoicemailDialogForLead = useCallback((lead: Lead) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead }});
@@ -834,9 +837,3 @@ export const useCall = () => {
     sendMissedCallEmail: (lead: Lead) => Promise<boolean>;
   };
 };
-
-    
-
-    
-
-    
