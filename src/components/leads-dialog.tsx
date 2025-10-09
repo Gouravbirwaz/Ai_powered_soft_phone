@@ -26,7 +26,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { formatRelative } from 'date-fns';
 import { useEffect, useState, useMemo } from 'react';
 
-const LEADS_PER_PAGE = 10;
+const LEADS_PER_PAGE = 5;
 
 export default function LeadsDialog({
   open,
