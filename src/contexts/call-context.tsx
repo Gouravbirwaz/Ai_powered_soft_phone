@@ -524,7 +524,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 leadId: leadId,
                 action_taken: 'call',
             };
-            await createOrUpdateCallOnBackend(initialLog);
+            if (leadId) {
+                await createOrUpdateCallOnBackend(initialLog);
+            }
         }
         
         const agentCall = await twilioDeviceRef.current.connect({
