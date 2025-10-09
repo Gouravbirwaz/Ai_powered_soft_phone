@@ -240,20 +240,22 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
         const body: any = {
             call_log_id: call.id,
-            notes: call.notes,
-            summary: call.summary,
-            ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
-            started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
+            notes: call.notes ?? null,
+            summary: call.summary ?? null,
+            ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
             status: call.status,
             agent_id: call.agentId,
             phone_number: call.direction === 'outgoing' ? call.to : call.from,
             direction: call.direction,
             action_taken: call.action_taken || 'call',
+            lead_id: call.leadId ?? null,
         };
 
-        if (call.leadId) {
-            body.lead_id = call.leadId;
+        if (call.startTime && !isNaN(call.startTime)) {
+            body.started_at = new Date(call.startTime).toISOString();
+        } else if (call.endTime && !isNaN(call.endTime)) {
+            body.started_at = new Date(call.endTime).toISOString();
         }
         
         const response = await fetch('/api/twilio/call_logs', {
@@ -267,8 +269,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             let errorDetails = errorText;
              try {
                 const errorJson = JSON.parse(errorText);
-                errorDetails = errorJson.message || errorJson.error || errorText;
+                errorDetails = errorJson.message || errorJson.error || `Failed to add or update call log. Status: ${response.status} ${response.statusText}`;
             } catch (e) {
+                errorDetails = `Failed to add or update call log. Status: ${response.status} ${response.statusText}`;
             }
             console.error(`Failed to create/update call log:`, errorDetails);
             toast({
@@ -831,5 +834,9 @@ export const useCall = () => {
     sendMissedCallEmail: (lead: Lead) => Promise<boolean>;
   };
 };
+
+    
+
+    
 
     
