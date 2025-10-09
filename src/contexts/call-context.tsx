@@ -227,46 +227,37 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
-    // Backend requires lead_id, agent_id, and phone_number.
-    if (!call.leadId || !call.agentId) {
-        console.warn("Cannot log call to backend: Missing lead_id or agent_id. This is expected for manual dials without a selected lead.", call);
-        if (call.leadId) { // Only show toast if it was a real call that should have been logged
+    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+
+    if (!call.leadId || !call.agentId || !phoneNumber) {
+        console.warn("Cannot log call to backend: Missing one of required fields: lead_id, agent_id, phone_number.", call);
+        if (call.leadId || call.agentId) { // Only show toast if it seems like it was intended to be logged
             toast({
                 title: 'Logging Skipped',
-                description: 'Notes for this manual call are saved locally but not to the server because no lead was associated.',
+                description: 'Could not save call to server because critical data was missing.',
                 variant: 'default',
             });
         }
         return null;
     }
 
-    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
-    const agentIdNumber = parseInt(call.agentId, 10);
-
-    if (isNaN(agentIdNumber)) {
-        console.error("Cannot create/update call log on backend: Invalid Agent ID.", call.agentId);
-        return null;
-    }
-
     try {
-        const body: any = {
+        const agentIdNumber = parseInt(call.agentId, 10);
+        if (isNaN(agentIdNumber)) {
+            throw new Error("Invalid Agent ID format.");
+        }
+
+        const body: { [key: string]: any } = {
+            lead_id: call.leadId,
+            agent_id: agentIdNumber,
+            phone_number: phoneNumber,
             notes: call.notes ?? null,
             summary: call.summary ?? null,
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
-            status: call.status,
-            agent_id: agentIdNumber,
-            phone_number: phoneNumber,
-            direction: call.direction,
             action_taken: call.action_taken || 'call',
-            lead_id: call.leadId,
+            started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
         };
-
-        if (call.startTime && !isNaN(call.startTime)) {
-            body.started_at = new Date(call.startTime).toISOString();
-        } else if (call.endTime && !isNaN(call.endTime)) {
-             body.started_at = new Date(call.endTime).toISOString();
-        }
 
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
@@ -275,30 +266,26 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
         if (!response.ok) {
-            let errorDetails = `Failed to add or update call log. Status: ${response.status} ${response.statusText}`;
+            let errorDetails = `Request failed with status ${response.status}`;
             try {
                 const errorJson = await response.json();
-                errorDetails = errorJson.message || errorJson.error || errorDetails;
+                errorDetails = errorJson.error || errorJson.message || errorDetails;
             } catch (e) {
-                // Not a JSON response, use the default message
+                 const text = await response.text();
+                 errorDetails = text || errorDetails;
             }
-            console.error(`Failed to create/update call log:`, errorDetails);
-            toast({
-                title: 'Logging Error',
-                description: `Failed to save call log: ${errorDetails}`,
-                variant: 'destructive',
-            });
-            return null;
-        } else {
-            console.log('Call log created/updated successfully for call:', call.id);
-            const responseData = await response.json();
-            return mapCallLog(responseData.call_log);
+            throw new Error(errorDetails);
         }
-    } catch (error) {
-        console.error('Error in createOrUpdateCallOnBackend function:', error);
+
+        const responseData = await response.json();
+        console.log('Call log created/updated successfully:', responseData.call_log);
+        return mapCallLog(responseData.call_log);
+
+    } catch (error: any) {
+        console.error('Failed to create/update call log:', error.message);
         toast({
             title: 'Logging Error',
-            description: 'An unexpected error occurred while saving the call log.',
+            description: `Failed to save call log: ${error.message}`,
             variant: 'destructive',
         });
         return null;
