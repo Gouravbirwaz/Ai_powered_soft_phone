@@ -511,6 +511,28 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { conference, customer_call_sid } = await backendResponse.json();
 
+        if (leadId) {
+            const initialLog: Call = {
+                id: customer_call_sid,
+                from: state.currentAgent.phone,
+                to: to,
+                direction: 'outgoing',
+                status: 'ringing-outgoing',
+                startTime: Date.now(),
+                duration: 0,
+                agentId: state.currentAgent.id,
+                leadId: leadId,
+                action_taken: 'call',
+            };
+            await createOrUpdateCallOnBackend(initialLog);
+        }
+        
+        const agentCall = await twilioDeviceRef.current.connect({
+            params: { To: conference }
+        });
+
+        activeTwilioCallRef.current = agentCall;
+        
         const callData: Call = {
             id: customer_call_sid,
             from: state.currentAgent.phone,
@@ -525,16 +547,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             followUpRequired: false,
             callAttemptNumber: 1,
         };
-
-        if (leadId) {
-          await createOrUpdateCallOnBackend(callData);
-        }
-        
-        const agentCall = await twilioDeviceRef.current.connect({
-            params: { To: conference }
-        });
-
-        activeTwilioCallRef.current = agentCall;
         
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
         dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
