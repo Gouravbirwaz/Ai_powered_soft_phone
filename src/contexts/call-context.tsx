@@ -746,8 +746,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Failed to send email from backend.');
+        const errorText = await response.text();
+        let errorDetails = errorText;
+        try {
+            const errorJson = JSON.parse(errorText);
+            errorDetails = errorJson.details || errorJson.message || errorText;
+        } catch (e) {
+            // Not a JSON response, use the raw text
+        }
+        throw new Error(errorDetails);
       }
       
       logEmailInteraction(lead); // Log the interaction after successful send
