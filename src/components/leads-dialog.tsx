@@ -7,6 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -23,7 +24,9 @@ import { Badge } from './ui/badge';
 import { Mail, Phone, Voicemail } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { formatRelative } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+
+const LEADS_PER_PAGE = 10;
 
 export default function LeadsDialog({
   open,
@@ -37,12 +40,26 @@ export default function LeadsDialog({
   const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
   const { allCallHistory, activeCall } = state;
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    // Reset to first page when dialog is opened or leads change
+    setCurrentPage(1);
+  }, [open, leads]);
+
+  const totalPages = Math.ceil(leads.length / LEADS_PER_PAGE);
+
+  const paginatedLeads = useMemo(() => {
+    const startIndex = (currentPage - 1) * LEADS_PER_PAGE;
+    const endIndex = startIndex + LEADS_PER_PAGE;
+    return leads.slice(startIndex, endIndex);
+  }, [leads, currentPage]);
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
@@ -119,8 +136,8 @@ export default function LeadsDialog({
                 </TableRow>
                 </TableHeader>
                 <TableBody>
-                {leads.length > 0 ? (
-                    leads.map((lead) => (
+                {paginatedLeads.length > 0 ? (
+                    paginatedLeads.map((lead) => (
                     <TableRow key={lead.lead_id}>
                         <TableCell>
                             <div className="font-medium">{lead.company}</div>
@@ -175,6 +192,29 @@ export default function LeadsDialog({
             </Table>
             </ScrollArea>
         </div>
+        <DialogFooter>
+          <div className="flex items-center justify-end space-x-2">
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
