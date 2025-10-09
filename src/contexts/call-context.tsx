@@ -227,8 +227,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
-    if (!call || !call.agentId || !call.id) {
-        console.error("Cannot create/update call log on backend: Missing critical data.", call);
+    // Backend requires lead_id, agent_id, and phone_number.
+    if (!call.leadId || !call.agentId) {
+        console.warn("Cannot log call to backend: Missing lead_id or agent_id. This is expected for manual dials without a selected lead.", call);
+        if (call.leadId) { // Only show toast if it was a real call that should have been logged
+            toast({
+                title: 'Logging Skipped',
+                description: 'Notes for this manual call are saved locally but not to the server because no lead was associated.',
+                variant: 'default',
+            });
+        }
         return null;
     }
 
@@ -242,7 +250,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     try {
         const body: any = {
-            call_log_id: call.id,
             notes: call.notes ?? null,
             summary: call.summary ?? null,
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
@@ -252,7 +259,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             phone_number: phoneNumber,
             direction: call.direction,
             action_taken: call.action_taken || 'call',
-            lead_id: call.leadId ?? null,
+            lead_id: call.leadId,
         };
 
         if (call.startTime && !isNaN(call.startTime)) {
@@ -260,7 +267,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         } else if (call.endTime && !isNaN(call.endTime)) {
              body.started_at = new Date(call.endTime).toISOString();
         }
-
 
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
@@ -517,6 +523,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { conference, customer_call_sid } = await backendResponse.json();
 
+        // For auto-dialer calls, log the attempt immediately.
         if (dialer_type === 'auto' && leadId) {
             const initialLog: Call = {
                 id: customer_call_sid,
@@ -530,7 +537,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 leadId: leadId,
                 action_taken: 'call',
             };
-            await createOrUpdateCallOnBackend(initialLog);
+            // Fire-and-forget, don't await this
+            createOrUpdateCallOnBackend(initialLog);
         }
         
         const agentCall = await twilioDeviceRef.current.connect({
@@ -623,7 +631,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      return (data.agents || []) as Agent[];
+      return (data.agents || []) as Lead[];
     } catch (error: any) {
       console.error("Fetch agents error:", error);
       toast({
@@ -663,7 +671,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
   
   const logEmailInteraction = useCallback((lead: Lead) => {
-    if (!state.currentAgent || !lead.owner_email) return;
+    if (!state.currentAgent || !lead.owner_email || !lead.lead_id) return;
     
     const emailLog: Call = {
       id: `email-${Date.now()}`,
@@ -730,7 +738,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const phoneNumber = lead.phone || lead.company_phone;
-    if (!phoneNumber || !state.currentAgent) return false;
+    if (!phoneNumber || !state.currentAgent || !lead.lead_id) return false;
 
     try {
         const response = await fetch('/api/twilio/send_voicemail', {
