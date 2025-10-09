@@ -195,7 +195,7 @@ export default function LeadsDialog({
         <DialogFooter>
           <div className="flex items-center justify-end space-x-2">
             <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
+              Page {currentPage} of {totalPages > 0 ? totalPages : 1}
             </span>
             <Button
               variant="outline"
@@ -209,7 +209,7 @@ export default function LeadsDialog({
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
+              disabled={currentPage === totalPages || totalPages === 0}
             >
               Next
             </Button>
