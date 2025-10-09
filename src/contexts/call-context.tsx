@@ -494,7 +494,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             agent_id: state.currentAgent.id,
             dialer_type: dialer_type,
         };
-        if (leadId) {
+        if (dialer_type === 'auto') {
             payload.lead_id = leadId;
         }
 
@@ -511,7 +511,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { conference, customer_call_sid } = await backendResponse.json();
 
-        if (leadId) {
+        if (dialer_type === 'auto' && leadId) {
             const initialLog: Call = {
                 id: customer_call_sid,
                 from: state.currentAgent.phone,
@@ -524,13 +524,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 leadId: leadId,
                 action_taken: 'call',
             };
-            if (leadId) {
-                await createOrUpdateCallOnBackend(initialLog);
-            }
+            await createOrUpdateCallOnBackend(initialLog);
         }
         
         const agentCall = await twilioDeviceRef.current.connect({
-            params: { To: conference }
+            params: { To: `room:${conference}` }
         });
 
         activeTwilioCallRef.current = agentCall;
