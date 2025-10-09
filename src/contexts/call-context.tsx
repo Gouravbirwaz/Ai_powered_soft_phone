@@ -530,7 +530,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           await createOrUpdateCallOnBackend(callData);
         }
         
-
         const agentCall = await twilioDeviceRef.current.connect({
             params: { To: conference }
         });
@@ -778,9 +777,5 @@ export const useCall = () => {
     logEmailInteraction: (lead: Lead) => void;
   };
 };
-
-    
-
-    
 
     
