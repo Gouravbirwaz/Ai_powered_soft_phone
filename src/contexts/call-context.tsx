@@ -732,6 +732,39 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [state.currentAgent, createOrUpdateCallOnBackend, toast]);
 
+  const sendMissedCallEmail = useCallback(async (lead: Lead) => {
+    if (!lead.owner_email || !lead.owner_first_name) {
+      toast({ title: 'Missing Info', description: 'Cannot send email without lead name and email.', variant: 'destructive'});
+      return false;
+    }
+    
+    try {
+      const response = await fetch('/api/send_email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${lead.owner_first_name} ${lead.owner_last_name}`, email: lead.owner_email }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Failed to send email from backend.');
+      }
+      
+      logEmailInteraction(lead); // Log the interaction after successful send
+      toast({ title: 'Email Sent', description: `Missed call email sent to ${lead.owner_email}`});
+      return true;
+
+    } catch (error: any) {
+      console.error('Error sending missed call email:', error);
+      toast({
+          title: 'Email Failed',
+          description: error.message || 'Could not send the email.',
+          variant: 'destructive',
+      });
+      return false;
+    }
+  }, [toast, logEmailInteraction]);
+
   const openVoicemailDialogForLead = useCallback((lead: Lead) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead }});
   }, []);
@@ -770,6 +803,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       sendVoicemail,
       openVoicemailDialogForLead,
       logEmailInteraction,
+      sendMissedCallEmail,
     }}>
       {children}
     </CallContext.Provider>
@@ -787,6 +821,7 @@ export const useCall = () => {
     sendVoicemail: (lead: Lead, script: string) => Promise<boolean>,
     openVoicemailDialogForLead: (lead: Lead) => void;
     logEmailInteraction: (lead: Lead) => void;
+    sendMissedCallEmail: (lead: Lead) => Promise<boolean>;
   };
 };
 

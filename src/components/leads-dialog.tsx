@@ -34,7 +34,7 @@ export default function LeadsDialog({
   onOpenChange: (open: boolean) => void;
   leads: Lead[];
 }) {
-  const { startOutgoingCall, state, openVoicemailDialogForLead, logEmailInteraction } = useCall();
+  const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
   const { allCallHistory, activeCall } = state;
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -60,9 +60,9 @@ export default function LeadsDialog({
   };
 
   const handleEmail = (lead: Lead) => {
-    if (logEmailInteraction && lead.owner_email) {
-      logEmailInteraction(lead);
-      window.location.href = `mailto:${lead.owner_email}`;
+    if (sendMissedCallEmail) {
+      sendMissedCallEmail(lead);
+      // We no longer open the mailto link, just trigger the backend API
     }
   };
 
