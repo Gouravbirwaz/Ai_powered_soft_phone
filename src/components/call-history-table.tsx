@@ -54,24 +54,26 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
   );
 };
 
+const CALLS_PER_PAGE = 10;
+
 export default function CallHistoryTable() {
-  const { state, dispatch, fetchCallHistory } = useCall();
+  const { state, dispatch } = useCall();
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
-
+  
+  // Reset page when filters change
   useEffect(() => {
-    if (state.currentAgent) {
-      fetchCallHistory(state.currentAgent.id);
-    }
-  }, [state.currentAgent, fetchCallHistory]);
+    setCurrentPage(1);
+  }, [statusFilter, directionFilter]);
 
 
   const handleSort = (key: keyof Call) => {
@@ -83,11 +85,13 @@ export default function CallHistoryTable() {
   };
   
   const handleEditNotes = (callId: string) => {
-    dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
+    if (dispatch) {
+      dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
+    }
   }
 
-  const filteredAndSortedCalls = useMemo(() => {
-    if (!state.currentAgent) return [];
+  const { paginatedCalls, totalPages } = useMemo(() => {
+    if (!state.currentAgent) return { paginatedCalls: [], totalPages: 0 };
     
     let filtered = state.callHistory;
 
@@ -111,8 +115,12 @@ export default function CallHistoryTable() {
       });
     }
 
-    return filtered;
-  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig]);
+    const calculatedTotalPages = Math.ceil(filtered.length / CALLS_PER_PAGE);
+    const startIndex = (currentPage - 1) * CALLS_PER_PAGE;
+    const paginated = filtered.slice(startIndex, startIndex + CALLS_PER_PAGE);
+
+    return { paginatedCalls: paginated, totalPages: calculatedTotalPages };
+  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig, currentPage]);
 
   const allStatuses = useMemo(() => {
     if (!state.currentAgent) return ['all'];
@@ -184,8 +192,8 @@ export default function CallHistoryTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSortedCalls.length > 0 ? (
-              filteredAndSortedCalls.map((call) => {
+            {paginatedCalls.length > 0 ? (
+              paginatedCalls.map((call) => {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
                 const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
@@ -235,13 +243,36 @@ export default function CallHistoryTable() {
             ) : (
               <TableRow key="no-calls-row">
                 <TableCell colSpan={6} className="h-24 text-center">
-                  No calls found for this agent.
+                  No calls found.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+       <div className="flex items-center justify-end space-x-2 pt-4">
+        <span className="text-sm text-muted-foreground">
+          Page {currentPage} of {totalPages > 0 ? totalPages : 1}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages || totalPages === 0}
+        >
+          Next
+        </Button>
+      </div>
     </div>
   );
 }
+
+    
