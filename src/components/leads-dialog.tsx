@@ -87,7 +87,7 @@ export default function LeadsDialog({
     const phoneNumber = lead.phone || lead.company_phone;
     if (activeCall?.to === phoneNumber) {
       return (
-        <div className="flex flex-col items-start h-10 justify-center">
+        <div className="flex flex-col items-start justify-center">
             <Badge className="bg-green-500">In Call</Badge>
         </div>
       )
@@ -101,7 +101,7 @@ export default function LeadsDialog({
       
     if (lastInteraction) {
         return (
-            <div className="flex flex-col items-start h-10 justify-center">
+            <div className="flex flex-col items-start justify-center">
                 <Badge variant="secondary">Contacted</Badge>
                 <p className="text-xs text-muted-foreground mt-1">
                     {formatRelative(new Date(lastInteraction.startTime), currentTime)}
@@ -111,9 +111,8 @@ export default function LeadsDialog({
     }
 
     return (
-        <div className="flex flex-col items-start h-10 justify-center">
+        <div className="flex flex-col items-start justify-center">
             <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">Available</Badge>
-            {/* This empty p tag is to maintain consistent height with contacted leads */}
             <p className="text-xs text-muted-foreground mt-1">&nbsp;</p>
         </div>
     );
@@ -148,7 +147,7 @@ export default function LeadsDialog({
                 <TableBody>
                 {paginatedLeads.length > 0 ? (
                     paginatedLeads.map((lead) => (
-                    <TableRow key={lead.lead_id}>
+                    <TableRow key={lead.lead_id} className="h-16">
                         <TableCell>
                             <div className="font-medium">{lead.company}</div>
                             <div className="text-sm text-muted-foreground">{lead.industry}</div>
