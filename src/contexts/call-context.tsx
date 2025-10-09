@@ -631,7 +631,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      return (data.agents || []) as Lead[];
+      return (data.agents || []) as Agent[];
     } catch (error: any) {
       console.error("Fetch agents error:", error);
       toast({
@@ -845,3 +845,6 @@ export const useCall = () => {
     sendMissedCallEmail: (lead: Lead) => Promise<boolean>;
   };
 };
+
+
+    
