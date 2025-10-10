@@ -20,14 +20,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { useCall } from '@/contexts/call-context';
 import type { Lead } from '@/lib/types';
-import { Check, Mail, Phone, Voicemail, RefreshCw } from 'lucide-react';
+import { Mail, Phone, Voicemail, RefreshCw } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
-import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
 const LEADS_PER_PAGE = 5;
-
-type ActionStatus = 'idle' | 'success';
 
 export default function LeadsDialog({
   open,
@@ -88,10 +85,6 @@ export default function LeadsDialog({
   const handleRefresh = () => {
     onRefreshLeads();
   }
-  
-  const isActionable = () => {
-    return !state.activeCall;
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,9 +106,7 @@ export default function LeadsDialog({
             </TableHeader>
             <TableBody>
               {paginatedLeads.length > 0 ? (
-                paginatedLeads.map((lead) => {
-                  const leadIsActionable = isActionable();
-                  return (
+                paginatedLeads.map((lead) => (
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
                       <div className="font-medium">{lead.company}</div>
@@ -128,7 +119,7 @@ export default function LeadsDialog({
                           variant="outline"
                           size="sm"
                           onClick={() => handleCall(lead)}
-                          disabled={!leadIsActionable || !lead.company_phone}
+                          disabled={!!state.activeCall || !lead.company_phone}
                           className="whitespace-nowrap"
                         >
                           <Phone className="mr-2 h-4 w-4" />
@@ -138,7 +129,7 @@ export default function LeadsDialog({
                           variant="outline"
                           size="sm"
                           onClick={() => handleVoicemail(lead)}
-                          disabled={!leadIsActionable || !lead.company_phone}
+                          disabled={!!state.activeCall || !lead.company_phone}
                           className="whitespace-nowrap"
                         >
                           <Voicemail className="mr-2 h-4 w-4" />
@@ -147,7 +138,7 @@ export default function LeadsDialog({
                       </div>
                     </TableCell>
                   </TableRow>
-                )})
+                ))
               ) : (
                 <TableRow>
                   <TableCell colSpan={3} className="h-24 text-center">
