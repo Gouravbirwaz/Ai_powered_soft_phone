@@ -228,19 +228,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
-    const agentId = currentAgentRef.current?.id;
+    const agentId = call.agentId || currentAgentRef.current?.id;
     
-    if (!agentId) {
-        console.error("Cannot log call: missing agent ID.", call);
-        // Don't show toast for this internal issue, just log it.
-        return null;
-    }
-
     try {
         const body: { [key: string]: any } = {
             call_log_id: call.id.startsWith('temp-') ? undefined : call.id,
             lead_id: call.leadId,
-            agent_id: parseInt(agentId, 10),
+            agent_id: agentId ? parseInt(agentId, 10) : undefined,
             phone_number: phoneNumber,
             notes: call.notes,
             summary: call.summary,
@@ -801,5 +795,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
