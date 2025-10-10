@@ -62,7 +62,6 @@ export interface Lead {
   owner_linkedin: string;
   owner_phone_number: string;
   owner_email: string;
-  phone: string;
   source: string;
   status: string;
   is_edited: string;
