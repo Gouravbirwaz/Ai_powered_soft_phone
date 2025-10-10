@@ -358,7 +358,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     } else {
         // Even if saving fails (e.g. no leadId), update history locally
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
-        if (finalStatus !== 'voicemail-dropped' && callInState.leadId) { // Only open if it was intended to be saved
+        if (finalStatus !== 'voicemail-dropped') {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
         }
     }
@@ -613,7 +613,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [fetchCallHistory, fetchAllCallHistory]);
 
   const logEmailInteraction = useCallback((lead: Lead) => {
-    if (!state.currentAgent || !lead.owner_email || !lead.lead_id) return;
+    if (!state.currentAgent || !lead.owner_email) return;
     
     const emailLog: Call = {
       id: `email-${Date.now()}`,
@@ -702,7 +702,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const phoneNumber = lead.phone || lead.company_phone;
-    if (!phoneNumber || !state.currentAgent || !lead.lead_id) return false;
+    if (!phoneNumber || !state.currentAgent) return false;
 
     try {
         const response = await fetch('/api/twilio/send_voicemail', {
@@ -808,3 +808,5 @@ export const useCall = () => {
     sendMissedCallEmail: (lead: Lead) => Promise<boolean>;
   };
 };
+
+    
