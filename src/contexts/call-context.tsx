@@ -339,10 +339,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const callToEnd = activeCallRef.current;
     if (!callToEnd) {
         console.warn('handleCallDisconnect called but no active call in state.');
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+        activeTwilioCallRef.current = null;
         return;
     }
 
-    // Immediately free up the UI
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     activeTwilioCallRef.current = null;
@@ -350,8 +352,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     if (initialStatus !== 'voicemail-dropped' && initialStatus !== 'emailed') {
         dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: callToEnd.id } });
     }
-
-    // Perform background processing
+    
     (async () => {
         if (!callToEnd.startTime || isNaN(callToEnd.startTime)) {
             console.error('handleCallDisconnect: call has invalid startTime.', callToEnd);
@@ -384,7 +385,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         if (savedCall) {
             dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callToEnd.id, finalCall: savedCall } });
         } else {
-            // If backend save fails, at least update the history with the client-side state
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
         }
     })();
@@ -492,7 +492,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
-    if (!state.currentAgent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
+    const agent = currentAgentRef.current;
+    if (!agent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
         toast({
             title: 'Softphone Not Ready',
             description: 'The softphone is not connected. Please login again.',
@@ -501,31 +502,70 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
+    // --- Step 1: Tell the backend to initiate the call to the customer and create a conference ---
+    let backendResponse;
+    try {
+        const res = await fetch('/api/twilio/make_call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: to,
+                agent_id: agent.id,
+                dialer_type: leadId ? 'auto' : 'manual',
+                lead_id: leadId,
+            }),
+        });
+
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ description: 'Failed to initiate call from backend.' }));
+            throw new Error(error.description);
+        }
+        backendResponse = await res.json();
+    } catch (error: any) {
+        console.error('Error initiating call via backend:', error);
+        toast({ title: 'Call Failed', description: error.message, variant: 'destructive' });
+        return;
+    }
+
+    const { conference, customer_call_sid } = backendResponse;
+    if (!conference) {
+        toast({ title: 'Call Failed', description: 'Backend did not provide a conference room.', variant: 'destructive' });
+        return;
+    }
+    
+    // --- Step 2: Connect the agent's softphone to that conference room ---
     const tempId = `temp-${Date.now()}`;
     const callData: Call = {
-        id: tempId,
-        from: state.currentAgent.phone,
+        id: tempId, // Temporary ID
+        from: agent.phone,
         to: to,
         direction: 'outgoing',
         status: 'ringing-outgoing',
         startTime: Date.now(),
         duration: 0,
-        agentId: state.currentAgent.id,
+        agentId: agent.id,
         leadId: leadId,
         action_taken: 'call',
-        followUpRequired: false,
-        callAttemptNumber: 1,
         contactName: contactName,
     };
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
     dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
-
-
+    
     try {
-        const twilioCall = await twilioDeviceRef.current.connect({ params: { To: to } });
+        const twilioCall = await twilioDeviceRef.current.connect({
+            params: { To: `room:${conference}` }, // Connect agent to the conference room
+        });
         activeTwilioCallRef.current = twilioCall;
 
-        twilioCall.on('accept', () => dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress', id: twilioCall.parameters.CallSid } } }));
+        const permanentCall: Call = { ...callData, id: customer_call_sid };
+        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: tempId, finalCall: permanentCall } });
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
+
+        twilioCall.on('accept', () => {
+             const updatedCall = { ...permanentCall, status: 'in-progress' as CallStatus, startTime: Date.now() };
+             dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: updatedCall } });
+             createOrUpdateCallOnBackend(updatedCall);
+        });
         twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
         twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
         twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
@@ -535,18 +575,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
 
     } catch (error: any) {
-        console.error('Error starting outgoing call:', error);
-        toast({
-            title: 'Call Failed',
-            description: error.message || 'Could not start the call.',
-            variant: 'destructive'
-        });
+        console.error('Error connecting agent to conference:', error);
+        toast({ title: 'Call Failed', description: 'Could not connect agent to the call.', variant: 'destructive' });
         const failedCall: Call = { ...callData, status: 'failed', endTime: Date.now() };
-        createOrUpdateCallOnBackend(failedCall);
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: failedCall } });
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     }
-  }, [state.currentAgent, toast, handleCallDisconnect, createOrUpdateCallOnBackend]);
+  }, [toast, handleCallDisconnect, createOrUpdateCallOnBackend]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;

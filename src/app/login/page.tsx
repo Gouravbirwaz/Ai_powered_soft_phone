@@ -12,23 +12,22 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
+// NOTE: Since the backend is hardcoded for 'agent_1', we use a default agent here.
+const DEFAULT_AGENT: Agent = {
+  id: 'agent_1',
+  name: 'Zackary Beckham',
+  email: 'zackary.beckham@capraecapital.com',
+  phone: '+14805182592', 
+  status: 'available',
+};
+
 export default function LoginPage() {
-  const { fetchAgents, loginAsAgent, state } = useCall();
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedId, setSelectedId] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
+  const { loginAsAgent, state } = useCall();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -37,46 +36,11 @@ export default function LoginPage() {
     }
   }, [state.currentAgent, router]);
 
-  useEffect(() => {
-    const getAgents = async () => {
-      // Don't set loading to true here to avoid re-renders triggering hydration issues
-      const fetchedData = await fetchAgents();
-      const fetchedAgents = fetchedData || [];
-
-      const validAgents = fetchedAgents.filter(
-        (agent) => agent.id !== undefined && agent.id !== null
-      );
-
-      if (process.env.NODE_ENV === 'development') {
-        if (validAgents.length !== fetchedAgents.length) {
-          console.warn(
-            `[Data Warning] Removed ${
-              fetchedAgents.length - validAgents.length
-            } agent(s) with invalid ID.`
-          );
-        }
-      }
-
-      setAgents(validAgents);
-
-      if (validAgents.length > 0) {
-        setSelectedId(validAgents[0].id);
-      } else {
-        setSelectedId('');
-      }
-
-      setIsLoading(false);
-    };
-    getAgents();
-  }, [fetchAgents]);
-
   const handleLogin = async () => {
-    const agentToLogin = agents.find((agent) => agent.id === selectedId);
-
-    if (agentToLogin) {
-      loginAsAgent(agentToLogin);
-      router.push('/');
-    }
+    setIsLoggingIn(true);
+    // Directly log in as the default agent.
+    await loginAsAgent(DEFAULT_AGENT);
+    // The router push will be handled by the effect.
   };
 
   return (
@@ -92,39 +56,21 @@ export default function LoginPage() {
             unoptimized
           />
           <CardTitle className="text-2xl">Caprae Capital Partners</CardTitle>
-          <CardDescription>Select an agent to continue</CardDescription>
+          <CardDescription>Ready to start your session?</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center p-8">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="agent-select">Agent</Label>
-                <Select value={selectedId} onValueChange={setSelectedId}>
-                  <SelectTrigger id="agent-select">
-                    <SelectValue placeholder="Select an agent..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {agents.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        {agent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                className="w-full"
-                onClick={handleLogin}
-                disabled={!selectedId}
-              >
-                Login
-              </Button>
-            </div>
-          )}
+          <div className="space-y-4">
+            <Button
+              className="w-full"
+              onClick={handleLogin}
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? (
+                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Login as {DEFAULT_AGENT.name}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
