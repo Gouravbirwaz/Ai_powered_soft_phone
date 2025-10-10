@@ -229,21 +229,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
  const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
 
-    if (!call.leadId || !call.agentId || !phoneNumber) {
-        console.warn("Cannot log call to backend: Missing one of required fields: lead_id, agent_id, phone_number.", call);
-        toast({
-            title: 'Logging Skipped',
-            description: 'Could not save to server because critical data was missing (e.g., no lead associated). Notes are saved locally.',
-            variant: 'default',
-        });
-        // Still update locally
-        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call } });
-        if (call.status !== 'voicemail-dropped') {
-            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: call.id } });
-        }
-        return null;
-    }
-
     try {
         const agentIdNumber = parseInt(call.agentId, 10);
         if (isNaN(agentIdNumber)) {
