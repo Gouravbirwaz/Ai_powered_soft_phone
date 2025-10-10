@@ -257,7 +257,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const finalNotes = call.summary ? `SUMMARY: ${call.summary}\n---\nNOTES: ${call.notes || ''}` : call.notes;
 
     try {
-        const body = {
+        const body: any = {
             agent_id: agentId,
             phone_number: phoneNumber,
             started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
@@ -272,6 +272,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             contact_name: call.contactName,
             action_taken: call.action_taken,
         };
+
+        if (call.id && !call.id.startsWith('temp-')) {
+          body.call_log_id = call.id;
+        }
 
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
@@ -345,17 +349,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
+    const callData = { ...callToEnd };
+
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
     activeTwilioCallRef.current = null;
 
     if (initialStatus !== 'voicemail-dropped' && initialStatus !== 'emailed') {
-        dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: callToEnd.id } });
+        dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: callData.id } });
     }
     
     (async () => {
-        if (!callToEnd.startTime || isNaN(callToEnd.startTime)) {
-            console.error('handleCallDisconnect: call has invalid startTime.', callToEnd);
+        if (!callData.startTime || isNaN(callData.startTime)) {
+            console.error('handleCallDisconnect: call has invalid startTime.', callData);
             return;
         }
 
@@ -365,25 +371,25 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const endTime = Date.now();
-        const duration = Math.round((endTime - callToEnd.startTime) / 1000);
+        const duration = Math.round((endTime - callData.startTime) / 1000);
 
         let finalStatus = initialStatus;
-        if (finalStatus === 'completed' && duration <= 5 && callToEnd.direction === 'outgoing') {
+        if (finalStatus === 'completed' && duration <= 5 && callData.direction === 'outgoing') {
             finalStatus = 'canceled';
         }
 
         const finalCallState: Call = {
-            ...callToEnd,
+            ...callData,
             status: finalStatus,
             endTime,
             duration,
-            notes: transcript || callToEnd.notes || '',
+            notes: transcript || callData.notes || '',
         };
 
         const savedCall = await createOrUpdateCallOnBackend(finalCallState);
 
         if (savedCall) {
-            dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callToEnd.id, finalCall: savedCall } });
+            dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: callData.id, finalCall: savedCall } });
         } else {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
         }
