@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export default function LoginPage() {
   const { loginAsAgent, state, fetchAgents } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [isLoggingIn, setIsLoggingIn] = useState<string | null>(null); // Store agentId
+  const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null); // Store agentId
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();

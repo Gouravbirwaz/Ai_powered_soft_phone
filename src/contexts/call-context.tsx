@@ -193,7 +193,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       status: log.status || 'completed',
       notes: notes,
       summary: summary,
-      agentId: String(log.agent_id),
+      agentId: Number(log.agent_id),
       leadId: log.lead_id, 
       action_taken: log.action_taken || 'call',
       followUpRequired: log.follow_up_required || false,
@@ -202,7 +202,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  const fetchCallHistory = useCallback(async (agentId: string) => {
+  const fetchCallHistory = useCallback(async (agentId: number) => {
     try {
       const url = `/api/twilio/call_logs?agent_id=${agentId}`;
       const response = await fetch(url);
@@ -212,7 +212,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
         id: String(log.call_log_id || log.id),
-        direction: (String(log.agent_id) === agentId && log.direction === 'outgoing') ? 'outgoing' : 'incoming',
+        direction: (log.agent_id === agentId && log.direction === 'outgoing') ? 'outgoing' : 'incoming',
         from: log.direction === 'incoming' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
         to: log.direction === 'outgoing' ? log.phone_number : (currentAgentRef.current?.phone || 'Unknown'),
         startTime: new Date(log.started_at).getTime(),
@@ -221,7 +221,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         status: log.status || 'completed',
         notes: log.notes,
         summary: log.summary,
-        agentId: String(log.agent_id),
+        agentId: Number(log.agent_id),
         leadId: log.lead_id,
         action_taken: log.action_taken || 'call',
         followUpRequired: log.follow_up_required || false,
@@ -258,24 +258,25 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     try {
         const body: any = {
-            agent_id: agentId,
+            agent_id: Number(agentId),
             phone_number: phoneNumber,
             started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
-            ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
-            duration: call.duration,
-            notes: finalNotes,
-            summary: call.summary,
-            status: call.status,
             direction: call.direction,
-            follow_up_required: call.followUpRequired,
-            call_attempt_number: call.callAttemptNumber,
-            contact_name: call.contactName,
-            action_taken: call.action_taken,
         };
 
         if (call.id && !call.id.startsWith('temp-')) {
           body.call_log_id = call.id;
         }
+        if (call.endTime) body.ended_at = new Date(call.endTime).toISOString();
+        if (call.duration) body.duration = call.duration;
+        if (finalNotes) body.notes = finalNotes;
+        if (call.summary) body.summary = call.summary;
+        if (call.status) body.status = call.status;
+        if (call.followUpRequired) body.follow_up_required = call.followUpRequired;
+        if (call.callAttemptNumber) body.call_attempt_number = call.callAttemptNumber;
+        if (call.contactName) body.contact_name = call.contactName;
+        if (call.action_taken) body.action_taken = call.action_taken;
+
 
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
@@ -616,7 +617,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      return (data.agents || []) as Agent[];
+      // Ensure agent IDs are numbers
+      return (data.agents || []).map((agent: any) => ({
+        ...agent,
+        id: Number(agent.id)
+      })) as Agent[];
     } catch (error: any) {
       console.error("Fetch agents error:", error);
       toast({

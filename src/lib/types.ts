@@ -32,7 +32,7 @@ export interface Call {
   notes?: string;
   summary?: string;
   avatarUrl?: string;
-  agentId?: string;
+  agentId?: number;
   leadId?: string;
   followUpRequired?: boolean;
   callAttemptNumber?: number;
@@ -59,10 +59,9 @@ export interface Lead {
 }
 
 export interface Agent {
-    id: string;
+    id: number;
     name: string;
     email: string;
     phone: string;
     status: string;
 }
-
