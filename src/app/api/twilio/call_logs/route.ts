@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
   const agentId = req.nextUrl.searchParams.get('agent_id');
 
-  let getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
+  let getCallLogsEndpoint = `${process.env.BASE_URL}/api/twilio/call_logs`;
 
   if (agentId) {
     getCallLogsEndpoint += `?agent_id=${agentId}`;
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
 // Handles POST requests to create or update a call log
 export async function POST(req: NextRequest) {
-    const postCallLogEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
+    const postCallLogEndpoint = `${process.env.BASE_URL}/api/twilio/call_logs`;
   
     if (!process.env.BASE_URL) {
       return NextResponse.json(
