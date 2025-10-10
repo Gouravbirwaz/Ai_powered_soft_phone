@@ -157,14 +157,6 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
   const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
   
   useEffect(() => {
-    const handleLeadsUpdated = (event: Event) => {
-        const customEvent = event as CustomEvent;
-        setFetchedLeads(customEvent.detail);
-        setShowLeadsDialog(true);
-    };
-
-    window.addEventListener('leadsUpdated', handleLeadsUpdated);
-
     // Load persisted leads on mount
     const persistedLeads = localStorage.getItem('uploadedLeads');
     if (persistedLeads) {
@@ -174,6 +166,15 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
             console.error("Failed to parse persisted leads", e);
         }
     }
+    
+    // This event listener is critical for updating the dialog with newly uploaded leads
+    const handleLeadsUpdated = (event: Event) => {
+        const customEvent = event as CustomEvent;
+        setFetchedLeads(customEvent.detail);
+        setShowLeadsDialog(true); // Open the dialog automatically with new leads
+    };
+
+    window.addEventListener('leadsUpdated', handleLeadsUpdated);
 
     return () => {
         window.removeEventListener('leadsUpdated', handleLeadsUpdated);
@@ -412,40 +413,46 @@ export default function Softphone() {
 
   const parseCSV = (text: string): Lead[] => {
     try {
-      const lines = text.trim().split(/\r\n|\n/);
-      if (lines.length < 2) return [];
+        const lines = text.trim().split(/\r\n|\n/);
+        if (lines.length < 2) return [];
 
-      const delimiter = /[\t,]/.exec(lines[0])?.[0] || ',';
-      const headers = lines[0].split(delimiter).map(h => h.trim());
+        // Use a regex to detect delimiter (comma or tab)
+        const delimiter = /[\t,]/.exec(lines[0])?.[0] || ',';
+        const headers = lines[0].split(delimiter).map(h => h.trim());
 
-      const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
-        const values = line.split(delimiter);
-        const leadData: { [key: string]: any } = {};
+        const leads = lines.slice(1).map((line, rowIndex) => {
+            const values = line.split(delimiter);
+            const leadData: { [key: string]: any } = {};
 
-        headers.forEach((header, i) => {
-          let value = values[i] ? values[i].trim() : '';
+            headers.forEach((header, i) => {
+                // Ensure value exists for the header index to prevent crash
+                let value = values.length > i ? (values[i] || '').trim() : '';
 
-          // Specifically handle phone numbers in scientific notation
-          if ((header === 'owner_phone_number' || header === 'company_phone' || header === 'phone') && /e/i.test(value)) {
-              const num = parseFloat(value);
-              if (!isNaN(num)) {
-                  value = String(BigInt(Math.round(num)));
-              }
-          }
-          
-          leadData[header] = value;
+                // Specifically handle phone numbers in scientific notation
+                if ((header === 'owner_phone_number' || header === 'company_phone' || header === 'phone') && /e/i.test(value)) {
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                        // Use BigInt for precision with large numbers
+                        value = String(BigInt(Math.round(num)));
+                    }
+                }
+                
+                leadData[header] = value;
+            });
+            
+            // Assign a unique ID if one doesn't exist
+            leadData['lead_id'] = leadData['lead_id'] || `gen_${Date.now()}_${rowIndex}`;
+
+            return leadData as Lead;
         });
 
-        leadData['lead_id'] = leadData['lead_id'] || `gen_${Date.now()}_${rowIndex}`;
-        return leadData as Lead;
-      });
-
-      return leads.filter(lead => lead.company || lead.owner_first_name);
+        // Filter out any potentially empty rows that were processed
+        return leads.filter(lead => lead.company || lead.owner_first_name);
 
     } catch (e) {
-      console.error("Failed to parse CSV", e);
-      toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
-      return [];
+        console.error("Failed to parse CSV", e);
+        toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
+        return [];
     }
   };
 
@@ -455,24 +462,30 @@ export default function Softphone() {
         const reader = new FileReader();
         reader.onload = (e) => {
           const text = e.target?.result as string;
-          try {
-            const parsedLeads = parseCSV(text);
-            if (parsedLeads.length > 0) {
-              localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
-              window.dispatchEvent(new CustomEvent('leadsUpdated', { detail: parsedLeads }));
-              toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
-            } else if (text) {
-               toast({ title: 'Parsing Error', description: 'No valid leads found in the file.', variant: 'destructive' });
-            } else {
-               toast({ title: 'Upload Failed', description: 'The file is empty.', variant: 'destructive' });
-            }
-
-          } catch (error) {
-            toast({ title: 'Upload Failed', description: 'Could not process the file.', variant: 'destructive' });
+          if (text) {
+              try {
+                const parsedLeads = parseCSV(text);
+                if (parsedLeads.length > 0) {
+                  localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
+                  window.dispatchEvent(new CustomEvent('leadsUpdated', { detail: parsedLeads }));
+                  toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+                } else {
+                  toast({ title: 'Parsing Error', description: 'No valid leads found in the file. Please check the file content and format.', variant: 'destructive' });
+                }
+              } catch (error) {
+                console.error("Error processing file:", error);
+                toast({ title: 'Upload Failed', description: 'An unexpected error occurred while processing the file.', variant: 'destructive' });
+              }
+          } else {
+             toast({ title: 'Upload Failed', description: 'The file appears to be empty.', variant: 'destructive' });
           }
         };
+        reader.onerror = () => {
+            toast({ title: 'Upload Failed', description: 'Could not read the file.', variant: 'destructive' });
+        }
         reader.readAsText(file);
       }
+      // Reset file input to allow re-uploading the same file
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }

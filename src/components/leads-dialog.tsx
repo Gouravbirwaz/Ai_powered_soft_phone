@@ -20,14 +20,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { useCall } from '@/contexts/call-context';
 import type { Lead } from '@/lib/types';
-import { Badge } from './ui/badge';
 import { Check, Mail, Phone, Voicemail, RefreshCw } from 'lucide-react';
-import { ScrollArea } from './ui/scroll-area';
-import { formatRelative } from 'date-fns';
 import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-
 
 const LEADS_PER_PAGE = 5;
 
@@ -45,23 +41,15 @@ export default function LeadsDialog({
   onRefreshLeads: () => void;
 }) {
   const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
-  const { activeCall } = state;
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const { toast } = useToast();
 
-
   useEffect(() => {
     setLeads(initialLeads);
   }, [initialLeads]);
   
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
   useEffect(() => {
     // Reset to first page when dialog is opened or leads change
     if(open) {
@@ -94,14 +82,16 @@ export default function LeadsDialog({
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.owner_phone_number;
     
-    // Use a regex to validate if it's a plausible phone number.
-    const phoneRegex = /^\+?[0-9\s()-]+$/;
-
-    if (phoneNumber && phoneRegex.test(phoneNumber)) {
+    // Validate that the phone number is a string containing digits
+    if (phoneNumber && /\d/.test(phoneNumber)) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
     } else {
-        toast({ title: "Invalid or Missing Phone Number", description: "The 'owner_phone_number' for this lead is not a valid phone number. Cannot initiate call.", variant: "destructive" });
+        toast({ 
+            title: "Invalid or Missing Phone Number", 
+            description: "The 'owner_phone_number' for this lead is not valid. Cannot initiate call.", 
+            variant: "destructive" 
+        });
     }
   };
 
@@ -174,9 +164,10 @@ export default function LeadsDialog({
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
                       <div className="font-medium">{lead.company}</div>
+                      <div className="text-sm text-muted-foreground">{lead.owner_first_name} {lead.owner_last_name}</div>
                     </TableCell>
                     <TableCell>{lead.owner_email}</TableCell>
-                    <TableCell>{lead.owner_phone_number || lead.company_phone}</TableCell>
+                    <TableCell>{lead.owner_phone_number}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
                         <Button
@@ -195,7 +186,7 @@ export default function LeadsDialog({
                           icon={Voicemail}
                           label="Voicemail"
                           onClick={() => handleVoicemail(lead)}
-                          disabled={!leadIsActionable}
+                          disabled={!leadIsActionable || !lead.owner_phone_number}
                         />
                         <ActionButton
                           lead={lead}
