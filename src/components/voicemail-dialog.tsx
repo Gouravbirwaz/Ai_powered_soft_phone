@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -32,7 +33,7 @@ export default function VoicemailDialog() {
 
   useEffect(() => {
     // Reset script if the target changes
-    setScript(DEFAULT_VOICEMAIL_SCRIPT);
+    setScript(DEFAULT_VOICEMAIL_SCRIPT.replace('Hello,', `Hello ${voicemailLeadTarget?.company || ''},`));
   }, [voicemailLeadTarget]);
 
   const handleClose = () => {

@@ -64,12 +64,12 @@ export default function LeadsDialog({
     const phoneNumber = lead.companyPhone;
     
     if (phoneNumber && /^\+?\d+$/.test(phoneNumber.replace(/[\s()-]/g, ''))) {
-      startOutgoingCall(phoneNumber, lead.lead_id);
+      startOutgoingCall(phoneNumber, lead.company, lead.lead_id);
       onOpenChange(false);
     } else {
         toast({ 
             title: "Invalid or Missing Phone Number", 
-            description: "A valid 'companyPhone' is required to make a call.", 
+            description: `The phone number for ${lead.company} is not valid.`,
             variant: "destructive" 
         });
     }

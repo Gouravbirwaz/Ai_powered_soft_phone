@@ -182,6 +182,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       action_taken: log.action_taken || 'call',
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
+      contactName: log.contact_name,
     } as Call;
   }, []);
 
@@ -253,6 +254,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             action_taken: call.action_taken, // Pass action_taken to backend
             status: call.status,
             started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
+            contact_name: call.contactName,
         };
         
         const response = await fetch('/api/twilio/call_logs', {
@@ -418,6 +420,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       action_taken: 'call',
       followUpRequired: false,
       callAttemptNumber: 1,
+      contactName: 'Unknown Caller',
     };
     
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
@@ -483,7 +486,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
 
-  const startOutgoingCall = useCallback(async (to: string, leadId?: string) => {
+  const startOutgoingCall = useCallback(async (to: string, contactName: string, leadId?: string) => {
     if (!state.currentAgent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
         toast({
             title: 'Softphone Not Ready',
@@ -537,6 +540,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             action_taken: 'call',
             followUpRequired: false,
             callAttemptNumber: 1,
+            contactName: contactName,
         };
         
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
@@ -675,7 +679,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { call_log } = await response.json();
         
-        const finalLog = { ...mapCallLog(call_log), action_taken: 'voicemail' as ActionTaken };
+        const finalLog = { ...mapCallLog(call_log), action_taken: 'voicemail' as ActionTaken, contactName: lead.company };
         
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalLog } });
         toast({ title: 'Voicemail Sent', description: `Voicemail to ${phoneNumber} was sent successfully.` });
@@ -703,6 +707,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       agentId: agent.id,
       leadId: lead.lead_id,
       action_taken: 'email',
+      contactName: lead.company,
     };
 
     const savedLog = await createOrUpdateCallOnBackend(interactionLog as Call);

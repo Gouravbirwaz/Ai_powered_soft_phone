@@ -141,10 +141,6 @@ export default function CallHistoryTable() {
   const handleEmail = async (call: Call) => {
     const lead = getLeadForCall(call);
     if (lead && sendMissedCallEmail) {
-       if (!lead.owner.email) {
-            toast({ title: "Cannot Send Email", description: "This lead does not have an email address.", variant: 'destructive' });
-            return;
-        }
       const success = await sendMissedCallEmail(lead);
       if (success) {
         showActionFeedback(call.id, 'email');
@@ -165,7 +161,8 @@ export default function CallHistoryTable() {
             const searchTerm = searchQuery.toLowerCase();
             const from = call.from?.toLowerCase() || '';
             const to = call.to?.toLowerCase() || '';
-            return from.includes(searchTerm) || to.includes(searchTerm);
+            const name = call.contactName?.toLowerCase() || '';
+            return from.includes(searchTerm) || to.includes(searchTerm) || name.includes(searchTerm);
         });
     }
 
@@ -250,7 +247,7 @@ export default function CallHistoryTable() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
-          placeholder="Search by phone number..."
+          placeholder="Search by name or number..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full sm:w-[250px]"
@@ -295,7 +292,7 @@ export default function CallHistoryTable() {
               paginatedCalls.map((call) => {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
-                const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
+                const contactIdentifier = call.direction === 'incoming' ? call.from : call.to;
                 
                 return (
                   <TableRow key={call.id}>
@@ -306,11 +303,11 @@ export default function CallHistoryTable() {
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                          <AvatarFallback>{contactIdentifier?.charAt(0) || '?'}</AvatarFallback>
+                          <AvatarFallback>{(call.contactName || contactIdentifier)?.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{contactIdentifier}</div>
-                          {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
+                          <div className="font-medium">{call.contactName || contactIdentifier}</div>
+                          <p className="text-sm text-muted-foreground">{call.direction === 'outgoing' ? call.to : call.from}</p>
                         </div>
                       </div>
                     </TableCell>

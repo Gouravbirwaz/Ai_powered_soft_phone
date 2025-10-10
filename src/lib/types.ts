@@ -37,6 +37,7 @@ export interface Call {
   followUpRequired?: boolean;
   callAttemptNumber?: number;
   action_taken?: ActionTaken;
+  contactName?: string;
 }
 
 export interface Lead {
@@ -64,3 +65,4 @@ export interface Agent {
     phone: string;
     status: string;
 }
+
