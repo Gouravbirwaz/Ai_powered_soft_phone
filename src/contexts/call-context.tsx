@@ -228,25 +228,27 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+    const agentId = currentAgentRef.current?.id;
+
+    if (!agentId || !phoneNumber) {
+        console.error("Cannot log call: missing agent ID or phone number.", call);
+        toast({ title: "Logging Error", description: "Cannot save call, agent or phone number is missing.", variant: "destructive" });
+        return null;
+    }
 
     try {
-        const agentIdNumber = parseInt(call.agentId, 10);
-        if (isNaN(agentIdNumber)) {
-            throw new Error("Invalid Agent ID format.");
-        }
-
         const body: { [key: string]: any } = {
             lead_id: call.leadId,
-            agent_id: agentIdNumber,
+            agent_id: parseInt(agentId, 10),
             phone_number: phoneNumber,
             notes: call.notes,
             summary: call.summary,
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
-            action_taken: call.action_taken,
+            action_taken: call.action_taken, // Pass action_taken to backend
             started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
         };
-
+        
         const response = await fetch('/api/twilio/call_logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -267,7 +269,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const responseData = await response.json();
         console.log('Call log created/updated successfully:', responseData.call_log);
-        return mapCallLog(responseData.call_log);
+        
+        // Trust the backend response but ensure action_taken from the original call is preserved
+        // if the backend doesn't return it.
+        const returnedLog = responseData.call_log;
+        if (returnedLog && !returnedLog.action_taken) {
+            returnedLog.action_taken = call.action_taken;
+        }
+
+        return mapCallLog(returnedLog);
 
     } catch (error: any) {
         console.error('Failed to create/update call log:', error.message);
@@ -356,7 +366,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
         }
     } else {
-        // Even if saving fails (e.g. no leadId), update history locally
+        // Even if saving fails, update history locally
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
         if (finalStatus !== 'voicemail-dropped') {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
@@ -486,7 +496,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             agent_id: state.currentAgent.id,
             dialer_type: dialer_type,
         };
-        // The backend will create a lead for manual calls, so we don't send lead_id
+        
         if (dialer_type === 'auto' && leadId) {
             payload.lead_id = leadId;
         }
@@ -519,7 +529,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             startTime: Date.now(),
             duration: 0,
             agentId: state.currentAgent.id,
-            leadId: leadId || returnedLeadId, // Use existing leadId or the one returned from backend
+            leadId: leadId || returnedLeadId,
             action_taken: 'call',
             followUpRequired: false,
             callAttemptNumber: 1,
