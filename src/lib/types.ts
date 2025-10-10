@@ -38,53 +38,36 @@ export interface Call {
   action_taken?: ActionTaken;
 }
 
-export interface Address {
-  street: string;
-  city: string;
-  state: string;
-  country: string;
-}
-
-export interface Company {
-    name: string;
-    website: string;
-    industry: string;
-    product_category: string;
-    business_type: string;
-    employees: number;
-    revenue: number;
-    year_founded: number;
-    bbb_rating: string;
-    phone: string;
-    linkedin: string;
-    address: Address;
-}
-
-export interface Owner {
-    first_name: string;
-    last_name: string;
-    title: string;
-    linkedin: string;
-    phone: string;
-    email: string;
-}
-
-export interface LeadInfo {
-    phone: string;
-    source: string;
-    status: string;
-    is_edited: boolean;
-}
-
 export interface Lead {
   lead_id: string;
   company_id?: string;
-  search_keywords?: string[];
-  company: Company;
-  owner: Owner;
-  lead?: LeadInfo;
+  search_keyword?: string; // Storing as string, can be parsed if needed
+  company: string;
+  website?: string;
+  industry?: string;
+  product_category?: string;
+  business_type?: string;
+  employees?: string;
+  revenue?: string;
+  year_founded?: string;
+  bbb_rating?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  company_phone?: string;
+  company_linkedin?: string;
+  owner_first_name?: string;
+  owner_last_name?: string;
+  owner_title?: string;
+  owner_linkedin?: string;
+  owner_phone_number?: string;
+  owner_email?: string;
+  phone?: string;
+  source?: string;
+  status?: string;
+  is_edited?: string;
 }
-
 
 export interface Agent {
     id: string;

@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -156,36 +157,38 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
   const [showLeadsDialog, setShowLeadsDialog] = useState(false);
   const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
   
+  useEffect(() => {
+    const handleLeadsUpdated = (event: Event) => {
+        const customEvent = event as CustomEvent;
+        const newLeads = customEvent.detail;
+
+        const shuffleArray = (array: any[]) => {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [
+                    array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+        setFetchedLeads(shuffleArray(newLeads));
+        setShowLeadsDialog(true);
+    };
+
+    window.addEventListener('leadsUpdated', handleLeadsUpdated);
+    return () => {
+        window.removeEventListener('leadsUpdated', handleLeadsUpdated);
+    };
+  }, []);
+
   const handleOpenLeads = () => {
     if (state.activeCall) {
         toast({ title: 'Finish current call first', variant: 'destructive' });
         return;
     }
-
-    const storedLeads = localStorage.getItem('uploadedLeads');
-    if (storedLeads) {
-        try {
-            const leads = JSON.parse(storedLeads);
-            const shuffleArray = (array: any[]) => {
-                let currentIndex = array.length, randomIndex;
-                while (currentIndex !== 0) {
-                    randomIndex = Math.floor(Math.random() * currentIndex);
-                    currentIndex--;
-                    [array[currentIndex], array[randomIndex]] = [
-                        array[randomIndex], array[currentIndex]];
-                }
-                return array;
-            }
-            setFetchedLeads(shuffleArray(leads));
-            setShowLeadsDialog(true);
-        } catch {
-            // If parsing fails, trigger upload
-            localStorage.removeItem('uploadedLeads');
-            onUploadLeads();
-        }
-    } else {
-        onUploadLeads();
-    }
+    // Directly trigger upload instead of checking local storage first
+    onUploadLeads();
   }
 
   const handleRefreshLeads = () => {
@@ -408,41 +411,73 @@ export default function Softphone() {
 
   const parseCSV = (text: string): Lead[] => {
     try {
-      const lines = text.trim().split('\n');
+      const lines = text.trim().split(/\r\n|\n/);
       if (lines.length < 2) return [];
 
-      const headerLine = lines[0].trim().replace(/\r/g, '');
-      const headers = headerLine.split(',').map(h => h.trim());
-
-      const leads: Lead[] = lines.slice(1).map((line, index) => {
-        const values = line.split(',');
+      // Improved header parsing to handle different delimiters
+      const headerLine = lines[0].trim();
+      const delimiter = /[\t,]/.exec(headerLine)?.[0] || ',';
+      const headers = headerLine.split(delimiter).map(h => h.trim());
+      
+      const leads: Lead[] = lines.slice(1).map((line) => {
+        const values = line.split(delimiter);
         const rowData: { [key: string]: any } = {};
 
         headers.forEach((header, i) => {
-          rowData[header] = values[i] ? values[i].trim() : '';
+          let value = values[i] ? values[i].trim() : '';
+          
+          // Sanitize value from quotes
+          if (value.startsWith('"') && value.endsWith('"')) {
+            value = value.substring(1, value.length - 1);
+          }
+          
+          // Handle scientific notation for phone numbers
+          if (header.toLowerCase().includes('phone') && value.includes('E+')) {
+              try {
+                rowData[header] = BigInt(value).toString();
+              } catch {
+                rowData[header] = value;
+              }
+          } else {
+            rowData[header] = value;
+          }
         });
 
+        // Use the exact headers from the CSV for mapping
         const lead: Lead = {
-          lead_id: `lead_${Date.now()}_${index}`,
-          company: rowData['company'] || '',
-          website: rowData['website'] || '',
-          industry: rowData['industry'] || '',
-          productCategory: rowData['productCategory'] || '',
-          businessType: rowData['businessType'] || '',
-          employees: parseInt(rowData['employees'], 10) || 0,
-          revenue: rowData['revenue'] || '',
-          yearFounded: parseInt(rowData['yearFounded'], 10) || 0,
-          bbbRating: rowData['bbbRating'] || '',
-          companyPhone: rowData['companyPhone'] || '',
-          companyLinkedin: rowData['companyLinkedin'] || '',
-          street: rowData['street'] || '',
-          city: rowData['city'] || '',
-          state: rowData['state'] || '',
+          lead_id: rowData['lead_id'] || `gen_${Date.now()}_${Math.random()}`,
+          company_id: rowData['company_id'],
+          search_keyword: rowData['search_keyword'],
+          company: rowData['company'],
+          website: rowData['website'],
+          industry: rowData['industry'],
+          product_category: rowData['product_category'],
+          business_type: rowData['business_type'],
+          employees: rowData['employees'],
+          revenue: rowData['revenue'],
+          year_founded: rowData['year_founded'],
+          bbb_rating: rowData['bbb_rating'],
+          street: rowData['street'],
+          city: rowData['city'],
+          state: rowData['state'],
+          country: rowData['country'],
+          company_phone: rowData['company_phone'],
+          company_linkedin: rowData['company_linkedin'],
+          owner_first_name: rowData['owner_first_name'],
+          owner_last_name: rowData['owner_last_name'],
+          owner_title: rowData['owner_title'],
+          owner_linkedin: rowData['owner_linkedin'],
+          owner_phone_number: rowData['owner_phone_number'],
+          owner_email: rowData['owner_email'],
+          phone: rowData['phone'],
+          source: rowData['source'],
+          status: rowData['status'],
+          is_edited: rowData['is_edited'],
         };
         return lead;
       });
 
-      return leads.filter(lead => lead.companyPhone);
+      return leads.filter(lead => lead.company_phone || lead.owner_phone_number || lead.phone);
     } catch (e) {
       console.error("Failed to parse CSV", e);
       toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
@@ -462,11 +497,12 @@ export default function Softphone() {
             if (parsedLeads.length > 0) {
               localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
               
+              // Dispatch event to notify that new leads are ready
               window.dispatchEvent(new CustomEvent('leadsUpdated', { detail: parsedLeads }));
 
               toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
             } else if (text) {
-               // The `parseCSV` function handles the error toast
+               toast({ title: 'Parsing Error', description: 'No valid leads with phone numbers found in the file.', variant: 'destructive' });
             } else {
                toast({ title: 'Upload Failed', description: 'The file is empty.', variant: 'destructive' });
             }
@@ -550,7 +586,7 @@ export default function Softphone() {
         ref={fileInputRef}
         onChange={handleFileChange}
         className="hidden"
-        accept=".csv"
+        accept=".csv,.tsv,.txt"
       />
     </div>
   );

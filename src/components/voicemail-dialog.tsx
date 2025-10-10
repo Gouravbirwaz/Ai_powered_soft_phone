@@ -51,7 +51,7 @@ export default function VoicemailDialog() {
       return;
     }
     setIsSending(true);
-    const phoneNumber = voicemailLeadTarget.owner.phone || voicemailLeadTarget.company.phone;
+    const phoneNumber = voicemailLeadTarget.owner_phone_number || voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
     if (!phoneNumber) {
         toast({ title: 'No Phone Number', description: 'This lead does not have a phone number.', variant: 'destructive' });
         setIsSending(false);
@@ -72,7 +72,8 @@ export default function VoicemailDialog() {
 
   if (!voicemailLeadTarget) return null;
 
-  const phoneNumber = voicemailLeadTarget.owner.phone || voicemailLeadTarget.company.phone;
+  const phoneNumber = voicemailLeadTarget.owner_phone_number || voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
+  const leadName = `${voicemailLeadTarget.owner_first_name || ''} ${voicemailLeadTarget.owner_last_name || ''}`.trim() || voicemailLeadTarget.company;
 
   return (
     <Dialog open={!!voicemailLeadTarget} onOpenChange={(open) => !open && handleClose()}>
@@ -80,7 +81,7 @@ export default function VoicemailDialog() {
         <DialogHeader>
           <DialogTitle>Send Voicemail</DialogTitle>
           <DialogDescription>
-            Edit the script below and send it as a voicemail to {voicemailLeadTarget.company.name} at {phoneNumber}. This action will be logged.
+            Edit the script below and send it as a voicemail to {leadName} at {phoneNumber}. This action will be logged.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">

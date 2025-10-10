@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -51,43 +52,18 @@ export default function LeadsDialog({
   useEffect(() => {
     setLeads(initialLeads);
   }, [initialLeads]);
-
+  
   useEffect(() => {
-    const handleLeadsUpdated = (event: Event) => {
-        const customEvent = event as CustomEvent;
-        const newLeads = customEvent.detail;
-
-        const shuffleArray = (array: any[]) => {
-            let currentIndex = array.length, randomIndex;
-            while (currentIndex !== 0) {
-                randomIndex = Math.floor(Math.random() * currentIndex);
-                currentIndex--;
-                [array[currentIndex], array[randomIndex]] = [
-                    array[randomIndex], array[currentIndex]];
-            }
-            return array;
-        }
-
-        setLeads(shuffleArray(newLeads));
-        onOpenChange(true); // Re-open the dialog
-    };
-
-    window.addEventListener('leadsUpdated', handleLeadsUpdated);
-
-    // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-
-    return () => {
-        window.removeEventListener('leadsUpdated', handleLeadsUpdated);
-        clearInterval(timer);
-    };
-  }, [onOpenChange]);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // Reset to first page when dialog is opened or leads change
-    setCurrentPage(1);
-    // Also reset action feedback
-    setActionFeedback({});
+    if(open) {
+      setCurrentPage(1);
+      setActionFeedback({});
+    }
   }, [open, leads]);
 
   const totalPages = Math.ceil(leads.length / LEADS_PER_PAGE);
@@ -112,7 +88,7 @@ export default function LeadsDialog({
   }
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.companyPhone;
+    const phoneNumber = lead.owner_phone_number || lead.phone || lead.company_phone;
     if (phoneNumber) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
@@ -128,8 +104,12 @@ export default function LeadsDialog({
   };
 
   const handleEmail = async (lead: Lead) => {
-    // This is a placeholder since the flat CSV structure doesn't have owner email.
-    // If you add email to your CSV, update the Lead type and this handler.
+    if (sendMissedCallEmail) {
+      const success = await sendMissedCallEmail(lead);
+      if (success) {
+        showActionFeedback(lead.lead_id, 'email');
+      }
+    }
   };
   
   const handleRefresh = () => {
@@ -138,7 +118,7 @@ export default function LeadsDialog({
   }
 
   const getLeadStatus = (lead: Lead) => {
-    const phoneNumber = lead.companyPhone;
+    const phoneNumber = lead.owner_phone_number || lead.phone || lead.company_phone;
     if (activeCall?.to === phoneNumber) {
       return (
         <div className="flex flex-col items-start justify-center">
@@ -173,8 +153,8 @@ export default function LeadsDialog({
   };
   
   const isActionable = (lead: Lead) => {
-    const phoneNumber = lead.companyPhone;
-    return !!phoneNumber && !activeCall;
+    const phoneNumber = lead.owner_phone_number || lead.phone || lead.company_phone;
+    return !!phoneNumber && !state.activeCall;
   }
 
   const ActionButton = ({ lead, action, icon: Icon, label, onClick, disabled }: { lead: Lead, action: 'email' | 'voicemail', icon: React.ElementType, label: string, onClick: () => void, disabled: boolean }) => {
@@ -203,7 +183,7 @@ export default function LeadsDialog({
             Select a lead from the list to initiate an action.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -216,19 +196,21 @@ export default function LeadsDialog({
             </TableHeader>
             <TableBody>
               {paginatedLeads.length > 0 ? (
-                paginatedLeads.map((lead) => (
+                paginatedLeads.map((lead) => {
+                  const leadIsActionable = isActionable(lead);
+                  return (
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
                       <div className="font-medium">{lead.company}</div>
                       <div className="text-sm text-muted-foreground">
-                        {lead.industry}
+                        {lead.lead_id}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>{lead.website}</div>
-                      <div className="text-sm text-muted-foreground">{lead.companyLinkedin}</div>
+                      <div>{lead.owner_first_name} {lead.owner_last_name}</div>
+                      <div className="text-sm text-muted-foreground">{lead.owner_email}</div>
                     </TableCell>
-                    <TableCell>{lead.companyPhone}</TableCell>
+                    <TableCell>{lead.owner_phone_number || lead.phone || lead.company_phone}</TableCell>
                     <TableCell>{getLeadStatus(lead)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
@@ -236,7 +218,7 @@ export default function LeadsDialog({
                           variant="outline"
                           size="sm"
                           onClick={() => handleCall(lead)}
-                          disabled={!isActionable(lead)}
+                          disabled={!leadIsActionable}
                           className="whitespace-nowrap"
                         >
                           <Phone className="mr-2 h-4 w-4" />
@@ -248,7 +230,7 @@ export default function LeadsDialog({
                           icon={Voicemail}
                           label="Voicemail"
                           onClick={() => handleVoicemail(lead)}
-                          disabled={!isActionable(lead)}
+                          disabled={!leadIsActionable}
                         />
                         <ActionButton
                           lead={lead}
@@ -256,12 +238,12 @@ export default function LeadsDialog({
                           icon={Mail}
                           label="Email"
                           onClick={() => handleEmail(lead)}
-                          disabled={true}
+                          disabled={!leadIsActionable || !lead.owner_email}
                         />
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                )})
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center">
