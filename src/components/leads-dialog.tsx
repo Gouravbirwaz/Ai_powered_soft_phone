@@ -132,7 +132,7 @@ export default function LeadsDialog({
             Select a lead from the list to initiate an action.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 relative py-2">
+        <div className="flex-1 relative py-2 min-h-[400px]">
             <ScrollArea className="absolute inset-0">
             <Table>
                 <TableHeader>
