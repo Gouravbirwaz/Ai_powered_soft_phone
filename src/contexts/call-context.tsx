@@ -501,6 +501,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             agent_id: state.currentAgent.id,
             dialer_type: dialer_type,
         };
+        // The backend will create a lead for manual calls, so we don't send lead_id
         if (dialer_type === 'auto' && leadId) {
             payload.lead_id = leadId;
         }
@@ -516,25 +517,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             throw new Error(error.error || 'Backend failed to initiate call.');
         }
 
-        const { conference, customer_call_sid } = await backendResponse.json();
-
-        // For auto-dialer calls, log the attempt immediately.
-        if (dialer_type === 'auto' && leadId) {
-            const initialLog: Call = {
-                id: customer_call_sid,
-                from: state.currentAgent.phone,
-                to: to,
-                direction: 'outgoing',
-                status: 'ringing-outgoing',
-                startTime: Date.now(),
-                duration: 0,
-                agentId: state.currentAgent.id,
-                leadId: leadId,
-                action_taken: 'call',
-            };
-            // Fire-and-forget, don't await this
-            createOrUpdateCallOnBackend(initialLog);
-        }
+        const { conference, customer_call_sid, lead_id: returnedLeadId } = await backendResponse.json();
         
         const agentCall = await twilioDeviceRef.current.connect({
             params: { To: `room:${conference}` }
@@ -551,7 +534,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             startTime: Date.now(),
             duration: 0,
             agentId: state.currentAgent.id,
-            leadId: leadId,
+            leadId: leadId || returnedLeadId, // Use existing leadId or the one returned from backend
             action_taken: 'call',
             followUpRequired: false,
             callAttemptNumber: 1,
@@ -578,7 +561,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     }
-  }, [state.currentAgent, toast, handleCallDisconnect, createOrUpdateCallOnBackend]);
+  }, [state.currentAgent, toast, handleCallDisconnect]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -644,27 +627,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     fetchAllCallHistory();
   }, [fetchCallHistory, fetchAllCallHistory]);
 
-  const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
-    const callToUpdate = state.allCallHistory.find(c => c.id === callId);
-    
-    if(callToUpdate) {
-        const updatedCall: Call = { 
-            ...callToUpdate,
-            notes, 
-            summary,
-        };
-
-        const savedCall = await createOrUpdateCallOnBackend(updatedCall);
-        if (savedCall) {
-            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
-            toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
-        }
-    } else {
-      console.error("Could not find call to update notes for:", callId);
-      toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
-    }
-  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
-  
   const logEmailInteraction = useCallback((lead: Lead) => {
     if (!state.currentAgent || !lead.owner_email || !lead.lead_id) return;
     
@@ -730,6 +692,28 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
   }, [toast, logEmailInteraction]);
+
+  const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
+    const callToUpdate = state.allCallHistory.find(c => c.id === callId);
+    
+    if(callToUpdate) {
+        const updatedCall: Call = { 
+            ...callToUpdate,
+            notes, 
+            summary,
+        };
+
+        const savedCall = await createOrUpdateCallOnBackend(updatedCall);
+        if (savedCall) {
+            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+            toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
+        }
+    } else {
+      console.error("Could not find call to update notes for:", callId);
+      toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
+    }
+  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
+  
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const phoneNumber = lead.phone || lead.company_phone;
@@ -818,7 +802,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       updateNotesAndSummary,
       sendVoicemail,
       openVoicemailDialogForLead,
-      logEmailInteraction,
       sendMissedCallEmail,
     }}>
       {children}
