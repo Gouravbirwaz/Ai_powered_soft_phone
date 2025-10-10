@@ -574,25 +574,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     return activeTwilioCallRef.current;
   }, []);
   
-  const fetchLeads = useCallback(async (): Promise<Lead[]> => {
-    try {
-      const response = await fetch('/api/leads');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch leads. Status: ${response.status}`);
-      }
-      const data = await response.json();
-      return (data.leads || []) as Lead[];
-    } catch (error: any) {
-      console.error("Fetch leads error:", error);
-      toast({
-        variant: 'destructive',
-        title: 'API Error',
-        description: error.message || 'Could not fetch leads.'
-      });
-      return [];
-    }
-  }, [toast]);
-
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
     try {
       const response = await fetch('/api/agents');
@@ -766,7 +747,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     <CallContext.Provider value={{
       state,
       dispatch,
-      fetchLeads,
       fetchAgents,
       fetchCallHistory,
       loginAsAgent,
@@ -795,3 +775,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    

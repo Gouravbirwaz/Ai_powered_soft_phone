@@ -11,7 +11,7 @@ import {
   Clock,
   CircleDotDashed,
   Move,
-  List,
+  Upload,
   AlertCircle,
   Loader2,
   X,
@@ -112,11 +112,55 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 
 
 const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
-    const { state, fetchLeads } = useCall();
+    const { state } = useCall();
     const { toast } = useToast();
-    const [isFetching, setIsFetching] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const [showLeadsDialog, setShowLeadsDialog] = useState(false);
     const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const parseCSV = (text: string): Lead[] => {
+      const rows = text.split('\n').filter(row => row.trim() !== '');
+      if (rows.length < 2) return [];
+
+      const headers = rows[0].split(',').map(h => h.trim());
+      const leadData = rows.slice(1).map(row => {
+        const values = row.split(',').map(v => v.trim());
+        const leadObject: { [key: string]: any } = {};
+        headers.forEach((header, index) => {
+          leadObject[header] = values[index];
+        });
+        return leadObject as Lead;
+      });
+      return leadData;
+    }
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        setIsProcessing(true);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          try {
+            const parsedLeads = parseCSV(text);
+            localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
+            setFetchedLeads(parsedLeads);
+            setShowLeadsDialog(true);
+            toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+          } catch (error) {
+            toast({ title: 'Upload Failed', description: 'Could not parse the CSV file.', variant: 'destructive' });
+          } finally {
+            setIsProcessing(false);
+          }
+        };
+        reader.readAsText(file);
+      }
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
     
     // Fisher-Yates shuffle algorithm
     const shuffleArray = (array: any[]) => {
@@ -130,20 +174,25 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
         return array;
     }
 
-    const handleFetchLeads = async () => {
+    const handleUploadLeads = () => {
         if (state.activeCall) {
             toast({ title: 'Finish current call first', variant: 'destructive' });
             return;
         }
-        setIsFetching(true);
-        const leads = await fetchLeads();
-        if(leads && leads.length > 0) {
-            setFetchedLeads(shuffleArray(leads));
-            setShowLeadsDialog(true);
+
+        const storedLeads = localStorage.getItem('uploadedLeads');
+        if (storedLeads) {
+            try {
+                const leads = JSON.parse(storedLeads);
+                setFetchedLeads(shuffleArray(leads));
+                setShowLeadsDialog(true);
+            } catch {
+                localStorage.removeItem('uploadedLeads');
+                fileInputRef.current?.click();
+            }
         } else {
-            toast({ title: 'No leads available', description: 'Could not fetch any leads at this time.', variant: 'destructive' });
+            fileInputRef.current?.click();
         }
-        setIsFetching(false);
     }
 
 
@@ -161,15 +210,22 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleFetchLeads} disabled={isFetching || !!state.activeCall}>
-                              {isFetching ? <Loader2 className="mr-2 animate-spin"/> : <List className="mr-2" />}
-                              Fetch Leads
+                          <Button variant="secondary" onClick={handleUploadLeads} disabled={isProcessing || !!state.activeCall}>
+                              {isProcessing ? <Loader2 className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
+                              Upload Leads
                           </Button>
                       </div>
                   </div>
               </CardContent>
           </Card>
       </div>
+       <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept=".csv"
+      />
       <LeadsDialog 
         open={showLeadsDialog}
         onOpenChange={setShowLeadsDialog}
@@ -449,3 +505,5 @@ export default function Softphone() {
     </div>
   );
 }
+
+    

@@ -61,7 +61,7 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
 const CALLS_PER_PAGE = 10;
 
 export default function CallHistoryTable() {
-  const { state, dispatch, openVoicemailDialogForLead, sendMissedCallEmail, fetchLeads } = useCall();
+  const { state, dispatch, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
@@ -75,15 +75,20 @@ export default function CallHistoryTable() {
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    const loadLeads = async () => {
-      if (fetchLeads) {
-        const leads = await fetchLeads();
-        setAllLeads(leads);
+    const loadLeads = () => {
+      const storedLeads = localStorage.getItem('uploadedLeads');
+      if (storedLeads) {
+        try {
+            const leads = JSON.parse(storedLeads);
+            setAllLeads(leads);
+        } catch (error) {
+            console.error("Failed to parse leads from local storage", error);
+        }
       }
     }
     loadLeads();
     return () => clearInterval(timer);
-  }, [fetchLeads]);
+  }, []);
   
   // Reset page when filters change
   useEffect(() => {
@@ -222,7 +227,7 @@ export default function CallHistoryTable() {
     }
   }
 
-  const ActionButton = ({ call, action, icon: Icon, onClick, disabled }: { call: Call, action: 'email' | 'voicemail', icon: React.ElementType, onClick: () => void, disabled: boolean }) => {
+  const ActionButton = ({ call, action, icon: Icon, onClick }: { call: Call, action: 'email' | 'voicemail', icon: React.ElementType, onClick: () => void }) => {
     const feedback = actionFeedback[call.id]?.[action];
     const isSuccess = feedback === 'success';
 
@@ -231,7 +236,7 @@ export default function CallHistoryTable() {
             variant="ghost"
             size="icon"
             onClick={onClick}
-            disabled={disabled || isSuccess}
+            disabled={isSuccess}
             className={cn(isSuccess && "text-green-500 hover:text-green-600")}
         >
             {isSuccess ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
@@ -336,14 +341,12 @@ export default function CallHistoryTable() {
                           action="voicemail"
                           icon={Voicemail}
                           onClick={() => handleVoicemail(call)}
-                          disabled={actionFeedback[call.id]?.voicemail === 'success'}
                         />
                         <ActionButton
                           call={call}
                           action="email"
                           icon={Mail}
                           onClick={() => handleEmail(call)}
-                          disabled={actionFeedback[call.id]?.email === 'success'}
                         />
                        </div>
                     </TableCell>
@@ -384,3 +387,5 @@ export default function CallHistoryTable() {
     </div>
   );
 }
+
+    
