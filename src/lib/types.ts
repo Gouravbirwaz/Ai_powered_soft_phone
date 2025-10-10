@@ -46,8 +46,8 @@ export interface Lead {
   industry: string;
   product_category: string;
   business_type: string;
-  employees: string; // Keep as string for parsing robustness
-  revenue: string; // Keep as string for parsing robustness
+  employees: string;
+  revenue: string;
   year_founded: string;
   bbb_rating: string;
   street: string;
