@@ -68,25 +68,12 @@ export default function CallHistoryTable() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
-  const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
   const { toast } = useToast();
 
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    const loadLeads = () => {
-      const storedLeads = localStorage.getItem('uploadedLeads');
-      if (storedLeads) {
-        try {
-            const leads = JSON.parse(storedLeads);
-            setAllLeads(leads);
-        } catch (error) {
-            console.error("Failed to parse leads from local storage", error);
-        }
-      }
-    }
-    loadLeads();
     return () => clearInterval(timer);
   }, []);
   
@@ -123,34 +110,40 @@ export default function CallHistoryTable() {
     }, 3000); // Reset after 3 seconds
   }
   
-  const getLeadForCall = (call: Call): Lead | undefined => {
-    if (!call.leadId) return undefined;
-    return allLeads.find(lead => lead.lead_id === call.leadId);
+  const constructLeadForAction = (call: Call): Lead | null => {
+    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+    const name = call.contactName || phoneNumber;
+
+    if (!phoneNumber) {
+        return null;
+    }
+
+    return {
+        lead_id: call.leadId || `call-${call.id}`,
+        company: name,
+        companyPhone: phoneNumber,
+    };
   }
 
   const handleVoicemail = (call: Call) => {
-    const lead = getLeadForCall(call);
-    if (lead && openVoicemailDialogForLead) {
-      openVoicemailDialogForLead(lead);
+    const leadForAction = constructLeadForAction(call);
+    if (leadForAction && openVoicemailDialogForLead) {
+      openVoicemailDialogForLead(leadForAction);
       showActionFeedback(call.id, 'voicemail');
     } else {
-      toast({ title: "Cannot Send Voicemail", description: "Lead information for this call could not be found.", variant: 'destructive' });
+      toast({ title: "Cannot Send Voicemail", description: "Contact name or phone number for this call could not be found.", variant: 'destructive' });
     }
   }
 
   const handleEmail = async (call: Call) => {
-    const lead = getLeadForCall(call);
-    if (lead && sendMissedCallEmail) {
-       if (!lead.owner_email) {
-            toast({ title: "Cannot Send Email", description: "This lead does not have an email address.", variant: 'destructive' });
-            return;
-        }
-      const success = await sendMissedCallEmail(lead);
+    const leadForAction = constructLeadForAction(call);
+    if (leadForAction && sendMissedCallEmail) {
+      const success = await sendMissedCallEmail(leadForAction);
       if (success) {
         showActionFeedback(call.id, 'email');
       }
     } else {
-      toast({ title: "Cannot Send Email", description: "Lead information for this call could not be found.", variant: 'destructive' });
+      toast({ title: "Cannot Send Email", description: "Contact name or phone number for this call could not be found.", variant: 'destructive' });
     }
   }
 
@@ -165,7 +158,8 @@ export default function CallHistoryTable() {
             const searchTerm = searchQuery.toLowerCase();
             const from = call.from?.toLowerCase() || '';
             const to = call.to?.toLowerCase() || '';
-            return from.includes(searchTerm) || to.includes(searchTerm);
+            const name = call.contactName?.toLowerCase() || '';
+            return from.includes(searchTerm) || to.includes(searchTerm) || name.includes(searchTerm);
         });
     }
 
@@ -250,7 +244,7 @@ export default function CallHistoryTable() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
-          placeholder="Search by phone number..."
+          placeholder="Search by name or number..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full sm:w-[250px]"
@@ -292,13 +286,14 @@ export default function CallHistoryTable() {
           </TableHeader>
           <TableBody>
             {paginatedCalls.length > 0 ? (
-              paginatedCalls.map((call) => {
+              paginatedCalls.map((call, index) => {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
-                const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
+                const contactIdentifier = call.direction === 'incoming' ? call.from : call.to;
+                const displayName = call.contactName || contactIdentifier;
                 
                 return (
-                  <TableRow key={call.id}>
+                  <TableRow key={`${call.id}-${index}`}>
                     <TableCell>
                       {getIconForAction(call.action_taken, call.direction)}
                     </TableCell>
@@ -306,11 +301,11 @@ export default function CallHistoryTable() {
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                          <AvatarFallback>{contactIdentifier?.charAt(0) || '?'}</AvatarFallback>
+                          <AvatarFallback>{displayName?.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{contactIdentifier}</div>
-                          {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
+                          <div className="font-medium">{displayName}</div>
+                          <p className="text-sm text-muted-foreground">{contactIdentifier}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -332,7 +327,7 @@ export default function CallHistoryTable() {
                     </TableCell>
                     <TableCell className="text-right">
                        <div className="flex items-center justify-end">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed'}>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditNotes(String(call.id))} disabled={call.status === 'emailed'}>
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit Notes</span>
                         </Button>
@@ -354,7 +349,7 @@ export default function CallHistoryTable() {
                 )
               })
             ) : (
-              <TableRow key="no-calls-row">
+              <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   No calls found.
                 </TableCell>

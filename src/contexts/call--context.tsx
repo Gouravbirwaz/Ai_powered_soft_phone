@@ -328,7 +328,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       status: 'ringing-incoming',
       startTime: Date.now(),
       duration: 0,
-      agentId: currentAgentRef.current?.id,
+      agentId: currentAgentRef.current!.id,
       followUpRequired: false,
       callAttemptNumber: 1,
     };

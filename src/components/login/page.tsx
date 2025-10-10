@@ -104,7 +104,7 @@ export default function LoginPage() {
                         <Button
                           size="sm"
                           onClick={() => handleLogin(agent)}
-                          disabled={!!isLoggingIn}
+                          disabled={isLoggingIn !== null}
                           className="w-24"
                         >
                           {isLoggingIn === agent.id ? (

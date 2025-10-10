@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -31,8 +32,13 @@ export default function VoicemailDialog() {
   const { voicemailLeadTarget } = state;
 
   useEffect(() => {
-    // Reset script if the target changes
-    setScript(DEFAULT_VOICEMAIL_SCRIPT);
+    // Reset script if the target changes, including the lead's name.
+    if (voicemailLeadTarget) {
+      const modifiedScript = DEFAULT_VOICEMAIL_SCRIPT.replace('Hello,', `Hello ${voicemailLeadTarget?.company || ''},`);
+      setScript(modifiedScript);
+    } else {
+      setScript(DEFAULT_VOICEMAIL_SCRIPT);
+    }
   }, [voicemailLeadTarget]);
 
   const handleClose = () => {
@@ -41,7 +47,7 @@ export default function VoicemailDialog() {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!voicemailLeadTarget || !script) {
       toast({
         title: 'Error',
@@ -50,29 +56,24 @@ export default function VoicemailDialog() {
       });
       return;
     }
-    setIsSending(true);
-    const phoneNumber = voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
+
+    const phoneNumber = voicemailLeadTarget.companyPhone;
     if (!phoneNumber) {
         toast({ title: 'No Phone Number', description: 'This lead does not have a phone number.', variant: 'destructive' });
-        setIsSending(false);
         return;
     }
-
-    const success = await sendVoicemail(voicemailLeadTarget, script);
-    if (success) {
-      toast({
-        title: 'Voicemail Sent & Logged',
-        description: `Voicemail to ${phoneNumber} has been sent and logged.`,
-      });
-      handleClose();
-    }
-    // Error toast is handled inside the context's sendVoicemail function
-    setIsSending(false);
+    
+    // Don't await here - let it run in the background
+    sendVoicemail(voicemailLeadTarget, script);
+    
+    // Close the dialog immediately
+    handleClose();
   };
 
   if (!voicemailLeadTarget) return null;
 
-  const phoneNumber = voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
+  const phoneNumber = voicemailLeadTarget.companyPhone;
+  const leadName = voicemailLeadTarget.company;
 
   return (
     <Dialog open={!!voicemailLeadTarget} onOpenChange={(open) => !open && handleClose()}>
@@ -80,7 +81,7 @@ export default function VoicemailDialog() {
         <DialogHeader>
           <DialogTitle>Send Voicemail</DialogTitle>
           <DialogDescription>
-            Edit the script below and send it as a voicemail to {voicemailLeadTarget.company} at {phoneNumber}. This action will be logged.
+            Edit the script below and send it as a voicemail to {leadName} at {phoneNumber}. This action will be logged.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">

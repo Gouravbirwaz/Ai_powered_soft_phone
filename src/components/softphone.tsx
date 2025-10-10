@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Loader2,
   X,
+  RefreshCw,
+  Users,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -111,93 +113,8 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 };
 
 
-const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
-    const { state } = useCall();
-    const { toast } = useToast();
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [showLeadsDialog, setShowLeadsDialog] = useState(false);
-    const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const parseCSV = (text: string): Lead[] => {
-      const rows = text.split('\n').filter(row => row.trim() !== '');
-      if (rows.length < 2) return [];
-
-      const headers = rows[0].split(',').map(h => h.trim());
-      const leadData = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim());
-        const leadObject: { [key: string]: any } = {};
-        headers.forEach((header, index) => {
-          leadObject[header] = values[index];
-        });
-        return leadObject as Lead;
-      });
-      return leadData;
-    }
-
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        setIsProcessing(true);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const text = e.target?.result as string;
-          try {
-            const parsedLeads = parseCSV(text);
-            localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
-            setFetchedLeads(parsedLeads);
-            setShowLeadsDialog(true);
-            toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
-          } catch (error) {
-            toast({ title: 'Upload Failed', description: 'Could not parse the CSV file.', variant: 'destructive' });
-          } finally {
-            setIsProcessing(false);
-          }
-        };
-        reader.readAsText(file);
-      }
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    };
-    
-    // Fisher-Yates shuffle algorithm
-    const shuffleArray = (array: any[]) => {
-        let currentIndex = array.length, randomIndex;
-        while (currentIndex !== 0) {
-            randomIndex = Math.floor(Math.random() * currentIndex);
-            currentIndex--;
-            [array[currentIndex], array[randomIndex]] = [
-                array[randomIndex], array[currentIndex]];
-        }
-        return array;
-    }
-
-    const handleUploadLeads = () => {
-        if (state.activeCall) {
-            toast({ title: 'Finish current call first', variant: 'destructive' });
-            return;
-        }
-
-        const storedLeads = localStorage.getItem('uploadedLeads');
-        if (storedLeads) {
-            try {
-                const leads = JSON.parse(storedLeads);
-                setFetchedLeads(shuffleArray(leads));
-                setShowLeadsDialog(true);
-            } catch {
-                localStorage.removeItem('uploadedLeads');
-                fileInputRef.current?.click();
-            }
-        } else {
-            fileInputRef.current?.click();
-        }
-    }
-
-
+const ChoiceView = ({ onDial, onViewLeads }: { onDial: () => void; onViewLeads: () => void; }) => {
   return (
-      <>
       <div className="p-4">
           <Card>
               <CardContent className="p-4">
@@ -210,35 +127,69 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleUploadLeads} disabled={isProcessing || !!state.activeCall}>
-                              {isProcessing ? <Loader2 className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
-                              Upload Leads
+                          <Button variant="secondary" onClick={onViewLeads}>
+                              <Users className="mr-2" />
+                              View Leads
                           </Button>
                       </div>
                   </div>
               </CardContent>
           </Card>
       </div>
-       <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        className="hidden"
-        accept=".csv"
-      />
-      <LeadsDialog 
-        open={showLeadsDialog}
-        onOpenChange={setShowLeadsDialog}
-        leads={fetchedLeads}
-      />
-      </>
   );
 };
 
 
-const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
+const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string) => void; onNewLeads: (leads: Lead[]) => void; }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
+  const { toast } = useToast();
+  const [showLeadsDialog, setShowLeadsDialog] = useState(false);
+  const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const persistedLeads = localStorage.getItem('uploadedLeads');
+    if (persistedLeads) {
+        try {
+            setFetchedLeads(JSON.parse(persistedLeads));
+        } catch (e) {
+            console.error("Failed to parse persisted leads", e);
+        }
+    }
+    
+    const handleNewLeadsEvent = (event: Event) => {
+        const customEvent = event as CustomEvent;
+        setFetchedLeads(customEvent.detail);
+        setShowLeadsDialog(true); 
+    };
+
+    window.addEventListener('leadsUpdated', handleNewLeadsEvent);
+    return () => {
+        window.removeEventListener('leadsUpdated', handleNewLeadsEvent);
+    };
+  }, []);
+
+  const handleViewLeads = () => {
+    if (state.activeCall) {
+        toast({ title: 'Finish current call first', variant: 'destructive' });
+        return;
+    }
+    if (fetchedLeads.length > 0) {
+        setShowLeadsDialog(true);
+    } else {
+        triggerFileUpload();
+    }
+  }
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  }
+
+  const handleRefreshLeads = () => {
+    setShowLeadsDialog(false);
+    triggerFileUpload();
+  }
 
   if (state.twilioDeviceStatus === 'error') {
       return (
@@ -255,6 +206,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   }
 
   return (
+    <>
     <AnimatePresence mode="wait">
       {view === 'choice' ? (
         <motion.div
@@ -264,7 +216,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
           exit={{ opacity: 0, x: 50 }}
           transition={{ duration: 0.2 }}
         >
-          <ChoiceView onDial={() => setView('dialpad')} />
+          <ChoiceView onDial={() => setView('dialpad')} onViewLeads={handleViewLeads} />
         </motion.div>
       ) : (
         <motion.div
@@ -278,12 +230,26 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
         </motion.div>
       )}
     </AnimatePresence>
+    <LeadsDialog 
+        open={showLeadsDialog}
+        onOpenChange={setShowLeadsDialog}
+        leads={fetchedLeads}
+        onRefreshLeads={handleRefreshLeads}
+      />
+    <input
+        type="file"
+        ref={fileInputRef}
+        onChange={onNewLeads}
+        className="hidden"
+        accept=".csv,.tsv,.txt"
+      />
+    </>
   );
 };
 
 
 const ActiveCallView = () => {
-  const { state, endActiveCall, getActiveTwilioCall, closeSoftphone } = useCall();
+  const { state, endActiveCall, getActiveTwilioCall } = useCall();
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -319,7 +285,6 @@ const ActiveCallView = () => {
   
   const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
-  const isFetchingTranscript = activeCall.status === 'fetching-transcript';
 
   const handleHangup = () => {
     endActiveCall('canceled');
@@ -342,7 +307,7 @@ const ActiveCallView = () => {
     'failed': 'Call Failed',
     'canceled': 'Canceled',
     'voicemail-dropped': 'Voicemail Sent',
-    'fetching-transcript': 'Getting transcript...',
+    'fetching-transcript': 'Finalizing...',
   }
 
   const getStatusInfo = () => {
@@ -375,42 +340,33 @@ const ActiveCallView = () => {
     <>
       <div className="flex flex-col items-center justify-between p-4 h-full min-h-[400px]">
         <div className="text-center mt-8">
-          <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
+          <p className="text-2xl font-semibold">{activeCall.contactName || (activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from)}</p>
           <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
             {statusInfo.icon}
             <span>{statusInfo.text}</span>
           </div>
         </div>
         
-        {!isFetchingTranscript ? (
-            <>
-                <div className="grid grid-cols-2 gap-4 my-8">
-                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
-                        {isMuted ? <MicOff /> : <Mic />}
-                        <span className="text-xs mt-1">Mute</span>
-                    </Button>
-                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
-                        <Grid3x3 />
-                        <span className="text-xs mt-1">Keypad</span>
-                    </Button>
-                </div>
+        <div className="grid grid-cols-2 gap-4 my-8">
+            <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
+                {isMuted ? <MicOff /> : <Mic />}
+                <span className="text-xs mt-1">Mute</span>
+            </Button>
+            <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
+                <Grid3x3 />
+                <span className="text-xs mt-1">Keypad</span>
+            </Button>
+        </div>
 
-                <Button
-                size="lg"
-                variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
-                className="w-full rounded-full h-14"
-                onClick={handleHangup}
-                >
-                {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
-                {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
-                </Button>
-            </>
-        ) : (
-            <div className='flex-1 flex items-center justify-center'>
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-        )}
-
+        <Button
+        size="lg"
+        variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
+        className="w-full rounded-full h-14"
+        onClick={handleHangup}
+        >
+        {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-s5" />}
+        {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
+        </Button>
       </div>
     </>
   );
@@ -420,21 +376,18 @@ const ActiveCallView = () => {
 export default function Softphone() {
   const { state, dispatch, startOutgoingCall, initializeTwilio } = useCall();
   const { toast } = useToast();
-  const { activeCall, softphoneOpen, audioPermissionsGranted, twilioDeviceStatus } = state;
+  const { activeCall, softphoneOpen, twilioDeviceStatus } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
   
   const handleCall = (number: string) => {
-    startOutgoingCall(number);
+    startOutgoingCall(number, number);
   };
   
   const handleToggle = async (open: boolean) => {
     if (open && twilioDeviceStatus === 'uninitialized') {
-        // If we are opening and the device is not set up, try to init.
-        // In the disabled state, this will just show a toast.
         initializeTwilio();
     }
-    
     dispatch({ type: 'TOGGLE_SOFTPHONE' });
   }
 
@@ -445,6 +398,95 @@ export default function Softphone() {
   };
   
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
+
+  const parseCSV = (text: string): Lead[] => {
+    try {
+      const lines = text.trim().split(/\r\n|\n/);
+      if (lines.length < 2) return [];
+
+      const delimiter = lines[0].includes('\t') ? '\t' : ',';
+      
+      const cleanHeader = (header: string) => {
+        let clean = header.trim().replace(/"/g, '');
+        // Convert to camelCase
+        clean = clean.replace(/[^a-zA-Z0-9]+(.)/g, (m, chr) => chr.toUpperCase());
+        return clean;
+      };
+
+      const headers = lines[0].split(delimiter).map(cleanHeader);
+
+      const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
+        const values = line.split(delimiter);
+        const leadData: { [key: string]: any } = {};
+
+        headers.forEach((header, index) => {
+          let value = (values[index] || '').trim().replace(/"/g, '');
+          
+          if (header === 'companyPhone') {
+              if (/e/i.test(value)) {
+                  const num = parseFloat(value);
+                  if (!isNaN(num)) {
+                      value = String(BigInt(Math.round(num)));
+                  }
+              }
+              value = value.replace(/[^\d+]/g, '');
+          }
+          
+          leadData[header] = value;
+        });
+
+        if (!leadData['lead_id']) {
+          leadData['lead_id'] = `gen_${Date.now()}_${rowIndex}`;
+        }
+        
+        return leadData as Lead;
+      });
+
+      return leads.filter(lead => lead.company);
+
+    } catch (e) {
+      console.error("Failed to parse CSV", e);
+      toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
+      return [];
+    }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          if (text) {
+              try {
+                const parsedLeads = parseCSV(text);
+                if (parsedLeads.length > 0) {
+                  localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
+                  window.dispatchEvent(new CustomEvent('leadsUpdated', { detail: parsedLeads }));
+                  toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+                } else {
+                  toast({ title: 'Parsing Error', description: 'No valid leads found in the file. Please check the file content and format.', variant: 'destructive' });
+                }
+              } catch (error) {
+                console.error("Error processing file:", error);
+                toast({ title: 'Upload Failed', description: 'An unexpected error occurred while processing the file.', variant: 'destructive' });
+              }
+          } else {
+             toast({ title: 'Upload Failed', description: 'The file appears to be empty.', variant: 'destructive' });
+          }
+        };
+        reader.onerror = () => {
+            toast({ title: 'Upload Failed', description: 'Could not read the file.', variant: 'destructive' });
+        }
+        reader.readAsText(file);
+      }
+      
+      const target = event.target;
+      if (target) {
+        target.value = '';
+      }
+  };
+
 
   return (
     <div ref={constraintsRef} className="fixed inset-0 pointer-events-none">
@@ -494,7 +536,7 @@ export default function Softphone() {
                         <ActiveCallView />
                       </motion.div>
                     ) : (
-                       <DialerContainer onCall={handleCall} />
+                       <DialerContainer onCall={handleCall} onNewLeads={handleFileChange} />
                     )}
                   </AnimatePresence>
                 </CardContent>
@@ -505,5 +547,3 @@ export default function Softphone() {
     </div>
   );
 }
-
-    
