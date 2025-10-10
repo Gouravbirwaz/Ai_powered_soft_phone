@@ -94,8 +94,8 @@ export default function LeadsDialog({
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.owner_phone_number;
     
-    // Use a regex to validate if it's a plausible phone number and not a URL or email
-    const phoneRegex = /^[+\d\s()-]+$/;
+    // Use a regex to validate if it's a plausible phone number.
+    const phoneRegex = /^\+?[0-9\s()-]+$/;
 
     if (phoneNumber && phoneRegex.test(phoneNumber)) {
       startOutgoingCall(phoneNumber, lead.lead_id);
@@ -299,3 +299,5 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
+
+    
