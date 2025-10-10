@@ -183,7 +183,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
     return {
-      id: String(log.call_log_id || log.id),
+      id: String(log.call_log_id || log.id), // Ensure ID is a string for frontend consistency
       direction: log.direction as CallDirection,
       from: log.from,
       to: log.to,
@@ -193,7 +193,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       status: log.status || 'completed',
       notes: notes,
       summary: summary,
-      agentId: Number(log.agent_id),
+      agentId: Number(log.agent_id), // Ensure agentId is a number
       leadId: log.lead_id, 
       action_taken: log.action_taken || 'call',
       followUpRequired: log.follow_up_required || false,
@@ -237,18 +237,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return null;
     }
     
+    // The backend expects notes and summary to be combined.
     const finalNotes = call.summary ? `SUMMARY: ${call.summary}\n---\nNOTES: ${call.notes || ''}` : call.notes;
 
     try {
         const body: any = {
-            agent_id: Number(agentId),
+            agent_id: Number(agentId), // Ensure it's a number
             phone_number: phoneNumber,
             direction: call.direction,
             started_at: call.startTime ? new Date(call.startTime).toISOString() : undefined,
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
             duration: call.duration,
-            notes: finalNotes,
-            summary: call.summary,
+            notes: finalNotes, // Send the combined notes
+            summary: call.summary, // Can still send summary separately if backend uses it
             status: call.status,
             follow_up_required: call.followUpRequired,
             call_attempt_number: call.callAttemptNumber,
@@ -277,6 +278,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const responseData = await response.json();
         console.log('Call log POST successful:', responseData.call_log);
         
+        // Use mapCallLog to ensure data consistency
         return mapCallLog(responseData.call_log);
 
     } catch (error: any) {
@@ -396,17 +398,23 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const handleIncomingCall = useCallback((twilioCall: TwilioCall) => {
     console.log('Incoming call from', twilioCall.parameters.From);
+    const agent = currentAgentRef.current;
+    if (!agent) {
+        console.error("Incoming call received but no agent is logged in.");
+        twilioCall.reject();
+        return;
+    }
     activeTwilioCallRef.current = twilioCall;
 
     const callData: Call = {
       id: twilioCall.parameters.CallSid,
       from: twilioCall.parameters.From,
-      to: currentAgentRef.current?.phone || '',
+      to: agent.phone || '',
       direction: 'incoming',
       status: 'ringing-incoming',
       startTime: Date.now(),
       duration: 0,
-      agentId: currentAgentRef.current?.id,
+      agentId: agent.id,
       action_taken: 'call',
       followUpRequired: false,
       callAttemptNumber: 1,
@@ -425,14 +433,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [handleCallDisconnect]);
 
   const initializeTwilio = useCallback(async () => {
-    if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || !state.currentAgent) {
+    const agent = currentAgentRef.current;
+    if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || !agent) {
       return;
     }
     
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
     
     try {
-      const response = await fetch(`/api/twilio/token?identity=${state.currentAgent.id}`);
+      const response = await fetch(`/api/twilio/token?identity=${agent.id}`);
       if (!response.ok) {
         throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
       }
@@ -474,7 +483,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         variant: 'destructive' 
       });
     }
-  }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
+  }, [state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     const agent = currentAgentRef.current;
@@ -617,26 +626,25 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [fetchCallHistory]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
-    const callInHistory = state.callHistory.find(c => c.id === callId);
+    const callInHistory = state.allCallHistory.find(c => c.id === callId);
     
     if (callInHistory) {
       const updatedCall: Call = { ...callInHistory, notes, summary };
       
-      dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: updatedCall } });
-
       const savedCall = await createOrUpdateCallOnBackend(updatedCall);
       if (savedCall) {
           dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
           toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
       } else {
+          // If backend fails, at least update the local state optimistically for the UI
+          dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: updatedCall } });
           toast({ title: 'Error Saving Notes', description: 'Could not save notes to the server.', variant: 'destructive'});
-          dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: callInHistory } });
       }
     } else {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-  }, [state.callHistory, createOrUpdateCallOnBackend, toast]);
+  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
 
   useEffect(() => {
     if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {

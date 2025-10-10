@@ -21,7 +21,7 @@ export type CallDirection = 'incoming' | 'outgoing';
 export type ActionTaken = 'call' | 'voicemail' | 'email';
 
 export interface Call {
-  id: string;
+  id: string; // Keep as string on frontend for consistency (temp IDs, etc.)
   direction: CallDirection;
   from: string;
   to: string;
@@ -32,7 +32,7 @@ export interface Call {
   notes?: string;
   summary?: string;
   avatarUrl?: string;
-  agentId?: number;
+  agentId: number; // Must be number to match backend
   leadId?: string;
   followUpRequired?: boolean;
   callAttemptNumber?: number;
@@ -59,7 +59,7 @@ export interface Lead {
 }
 
 export interface Agent {
-    id: number;
+    id: number; // Must be number to match backend
     name: string;
     email: string;
     phone: string;
