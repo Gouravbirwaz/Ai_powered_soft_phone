@@ -83,12 +83,6 @@ export interface Lead {
   company: Company;
   owner: Owner;
   lead: LeadInfo;
-  // For backwards compatibility with old flat structure if needed, can be removed later
-  owner_first_name?: string;
-  owner_last_name?: string;
-  owner_email?: string;
-  owner_phone?: string;
-  company_phone?: string;
 }
 
 
@@ -100,4 +94,4 @@ export interface Agent {
     status: string;
 }
 
-
+    

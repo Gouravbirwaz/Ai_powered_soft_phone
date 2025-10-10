@@ -432,15 +432,71 @@ export default function Softphone() {
   
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
 
-  const parseLeads = (text: string): Lead[] => {
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        console.error("Failed to parse JSON", e);
-        toast({ title: 'Upload Failed', description: 'File does not contain valid JSON.', variant: 'destructive' });
+  const parseCSV = (text: string): Lead[] => {
+    try {
+        const lines = text.trim().split('\n');
+        if (lines.length < 2) return [];
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const leads: Lead[] = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim());
+            if (values.length !== headers.length) continue;
+
+            const entry: any = {};
+            headers.forEach((header, index) => {
+                entry[header] = values[index];
+            });
+
+            // Reconstruct the nested object
+            const lead: Lead = {
+                lead_id: entry.lead_id,
+                company_id: entry.company_id,
+                search_keywords: entry.search_keywords?.split(';') || [],
+                company: {
+                    name: entry.company_name,
+                    website: entry.company_website,
+                    industry: entry.company_industry,
+                    product_category: entry.company_product_category,
+                    business_type: entry.company_business_type,
+                    employees: parseInt(entry.company_employees, 10),
+                    revenue: parseInt(entry.company_revenue, 10),
+                    year_founded: parseInt(entry.company_year_founded, 10),
+                    bbb_rating: entry.company_bbb_rating,
+                    phone: entry.company_phone,
+                    linkedin: entry.company_linkedin,
+                    address: {
+                        street: entry.company_address_street,
+                        city: entry.company_address_city,
+                        state: entry.company_address_state,
+                        country: entry.company_address_country,
+                    },
+                },
+                owner: {
+                    first_name: entry.owner_first_name,
+                    last_name: entry.owner_last_name,
+                    title: entry.owner_title,
+                    linkedin: entry.owner_linkedin,
+                    phone: entry.owner_phone,
+                    email: entry.owner_email,
+                },
+                lead: {
+                    phone: entry.lead_phone,
+                    source: entry.lead_source,
+                    status: entry.lead_status,
+                    is_edited: entry.lead_is_edited === 'true',
+                },
+            };
+            leads.push(lead);
+        }
+        return leads;
+    } catch (e) {
+        console.error("Failed to parse CSV", e);
+        toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
         return [];
-      }
-  }
+    }
+};
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -450,7 +506,7 @@ export default function Softphone() {
         reader.onload = (e) => {
           const text = e.target?.result as string;
           try {
-            const parsedLeads = parseLeads(text);
+            const parsedLeads = parseCSV(text);
             if (parsedLeads.length > 0) {
               localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
               
@@ -458,8 +514,8 @@ export default function Softphone() {
               window.dispatchEvent(new CustomEvent('leadsUpdated'));
 
               toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
-            } else if (text) { // If text exists but parsing failed, parseLeads shows a toast
-               // The `parseLeads` function now handles the error toast
+            } else if (text) { // If text exists but parsing failed, parseCSV shows a toast
+               // The `parseCSV` function now handles the error toast
             } else {
                toast({ title: 'Upload Failed', description: 'The file is empty.', variant: 'destructive' });
             }
@@ -544,7 +600,7 @@ export default function Softphone() {
         ref={fileInputRef}
         onChange={handleFileChange}
         className="hidden"
-        accept=".csv,.json"
+        accept=".csv"
       />
     </div>
   );
