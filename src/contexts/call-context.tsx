@@ -422,26 +422,25 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     console.log('Incoming call from', twilioCall.parameters.From);
     activeTwilioCallRef.current = twilioCall;
 
-    // Check if this is the agent's leg of an outgoing call
-    const isOutgoingLeg = twilioCall.parameters.To?.startsWith('room:');
+    // This handles both true inbound calls AND the agent's leg of an outbound call
+    const isOutgoingAgentLeg = twilioCall.parameters.To?.startsWith('room:');
 
-    if (isOutgoingLeg) {
-        // This is the agent connecting to the conference. Update the existing active call.
+    if (isOutgoingAgentLeg) {
         dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'ringing-outgoing' } } });
     } else {
-        // This is a true inbound call from a customer.
+        // True inbound call from a customer
         const callData: Call = {
-          id: twilioCall.parameters.CallSid,
-          from: twilioCall.parameters.From,
-          to: twilioCall.parameters.To,
-          direction: 'incoming',
-          status: 'ringing-incoming',
-          startTime: Date.now(),
-          duration: 0,
-          agentId: currentAgentRef.current!.id,
-          action_taken: 'call',
-          followUpRequired: false,
-          callAttemptNumber: 1,
+            id: twilioCall.parameters.CallSid,
+            from: twilioCall.parameters.From,
+            to: twilioCall.parameters.To,
+            direction: 'incoming',
+            status: 'ringing-incoming',
+            startTime: Date.now(),
+            duration: 0,
+            agentId: currentAgentRef.current!.id,
+            action_taken: 'call',
+            followUpRequired: false,
+            callAttemptNumber: 1,
         };
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
         dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
@@ -450,12 +449,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
 
+    twilioCall.on('accept', (call) => {
+      console.log('Call accepted, updating status to in-progress');
+      dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
+    });
     twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
     twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
     twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
-    twilioCall.on('accept', (call) => {
-      dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
-    })
 
   }, [handleCallDisconnect]);
 
@@ -524,75 +524,80 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     const agent = currentAgentRef.current;
-     if (!agent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
-        toast({
-            title: 'Softphone Not Ready',
-            description: 'The softphone is not connected. Please login again or check permissions.',
-            variant: 'destructive'
-        });
-        return;
+    if (!agent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
+      toast({
+        title: 'Softphone Not Ready',
+        description:
+          'Please wait for the softphone to connect before making a call.',
+        variant: 'destructive',
+      });
+      return;
     }
-
+  
     try {
-        const tempId = `temp-${Date.now()}`;
-        const callData: Call = {
-            id: tempId,
-            from: agent.phone,
-            to: to,
-            direction: 'outgoing',
-            status: 'queued',
-            startTime: Date.now(),
-            duration: 0,
-            agentId: agent.id,
-            leadId: leadId,
-            contactName: contactName,
-            action_taken: 'call',
-            followUpRequired: false,
-            callAttemptNumber: 1,
-        };
-        
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
-        dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
-
-        const backendResponse = await fetch('/api/twilio/make_call', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: to, agent_id: agent.id, dialer_type: 'manual', lead_id: leadId }),
-        });
-
-        if (!backendResponse.ok) {
-            const error = await backendResponse.json();
-            throw new Error(error.error || 'Backend failed to initiate call.');
-        }
-
-        const { conference, customer_call_sid } = await backendResponse.json();
-        
-        if (!conference) {
-            throw new Error("Backend did not return a conference room name.");
-        }
-        
-        const finalCallData: Call = { ...callData, id: customer_call_sid };
-        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId, finalCall: finalCallData } });
-        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { id: customer_call_sid } } });
-
-        // Now, connect the agent to the conference
-        const twilioCall = await twilioDeviceRef.current.connect({
-            params: { To: `room:${conference}` }
-        });
-
-        activeTwilioCallRef.current = twilioCall;
-
-        // Twilio event listeners are already set up in handleIncomingCall, which will now
-        // handle the connection events for the agent's leg of the call.
-
+      const tempId = `temp-${Date.now()}`;
+      const callData: Call = {
+        id: tempId,
+        from: agent.phone,
+        to: to,
+        direction: 'outgoing',
+        status: 'queued',
+        startTime: Date.now(),
+        duration: 0,
+        agentId: agent.id,
+        leadId: leadId,
+        contactName: contactName,
+        action_taken: 'call',
+        followUpRequired: false,
+        callAttemptNumber: 1,
+      };
+  
+      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
+      dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
+  
+      const backendResponse = await fetch('/api/twilio/make_call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: to,
+          agent_id: agent.id,
+          dialer_type: 'manual',
+          lead_id: leadId,
+        }),
+      });
+  
+      if (!backendResponse.ok) {
+        const error = await backendResponse.json();
+        throw new Error(error.error || 'Backend failed to initiate call.');
+      }
+  
+      const { conference, customer_call_sid } = await backendResponse.json();
+  
+      if (!conference) {
+        throw new Error('Backend did not return a conference room name.');
+      }
+  
+      // The customer call is initiated. Now, connect the agent to the conference.
+      const finalCallData: Call = { ...callData, id: customer_call_sid };
+      dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId, finalCall: finalCallData } });
+      dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { id: customer_call_sid } } });
+      
+      const twilioCall = await twilioDeviceRef.current.connect({
+        params: { To: `room:${conference}` },
+      });
+  
+      activeTwilioCallRef.current = twilioCall;
+  
+      // The 'incoming' handler for the device will now manage this call's state changes.
+      
     } catch (error: any) {
-        console.error('Error starting outgoing call:', error);
-        toast({
-            title: 'Call Failed',
-            description: error.message || 'Could not start the call.',
-            variant: 'destructive'
-        });
-        endActiveCall('failed');
+      console.error('Error starting outgoing call:', error);
+      toast({
+        title: 'Call Failed',
+        description: error.message || 'Could not start the call.',
+        variant: 'destructive',
+      });
+      endActiveCall('failed');
     }
   }, [toast, endActiveCall]);
 
