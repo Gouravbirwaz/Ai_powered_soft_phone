@@ -361,19 +361,20 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const callInState = activeCallRef.current;
     if (!callInState) {
         console.warn('handleCallDisconnect called but no active call in state.');
-        activeTwilioCallRef.current = null;
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-        return;
+        activeTwilioCallRef.current = null; // Ensure this is also cleared
+        return; // Stop execution if no active call
     }
     
+    // Clear the active call from the ref immediately to prevent race conditions
+    activeCallRef.current = null;
+    activeTwilioCallRef.current = null;
+
     if (initialStatus !== 'failed' && initialStatus !== 'busy' && initialStatus !== 'canceled') {
         dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
     }
     
     if (!callInState.startTime || isNaN(callInState.startTime)) {
         console.error('handleCallDisconnect: active call has invalid startTime.', callInState);
-        activeTwilioCallRef.current = null;
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
         dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
         return;
@@ -401,6 +402,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       notes: transcript ? `${transcript}\n\n${callInState.notes || ''}`.trim() : callInState.notes || '',
     };
     
+    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
+    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+    
     const savedCall = await createOrUpdateCallOnBackend(finalCallState);
 
     if (savedCall) {
@@ -415,10 +419,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
     }
 
-    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-    activeTwilioCallRef.current = null;
-
   }, [createOrUpdateCallOnBackend]);
 
 
@@ -428,6 +428,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     if (twilioCall) {
       twilioCall.disconnect();
     } else {
+      // This handles cases where the call exists in our state but not in Twilio's ref (e.g., failed to connect)
       const call = activeCallRef.current;
       if (call) {
         handleCallDisconnect(null, status);
@@ -442,7 +443,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const handleIncomingCall = useCallback((twilioCall: TwilioCall) => {
     console.log('Incoming call from', twilioCall.parameters.From);
-    activeTwilioCallRef.current = twilioCall;
 
     const callData: Call = {
         id: twilioCall.parameters.CallSid,
@@ -461,6 +461,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
     dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
     dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
+    
+    activeTwilioCallRef.current = twilioCall;
 
     twilioCall.on('accept', (call) => {
       console.log('Call accepted, updating status to in-progress');
@@ -547,8 +549,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   
     try {
-      const tempId = `temp-${Date.now()}`;
-      
+      // Step 1: Tell backend to call the customer
       const backendResponse = await fetch('/api/twilio/make_call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -572,11 +573,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const callData: Call = {
-        id: customer_call_sid || tempId,
+        id: customer_call_sid || `conf-${conference}`,
         from: agent.phone,
         to: to,
         direction: 'outgoing',
-        status: 'ringing-outgoing', // Start as ringing
+        status: 'queued', 
         startTime: Date.now(),
         duration: 0,
         agentId: agent.id,
@@ -590,6 +591,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
       dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
       
+      // Step 2: Connect the agent's softphone to the conference
       const twilioCall = await twilioDeviceRef.current.connect({
         params: { To: `room:${conference}` },
       });
