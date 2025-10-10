@@ -254,15 +254,17 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return null;
     }
     
+    // Combine notes and summary for backend
+    const finalNotes = call.summary ? `SUMMARY: ${call.summary}\n---\nNOTES: ${call.notes || ''}` : call.notes;
+
     try {
         const body = {
             agent_id: agentId,
             phone_number: phoneNumber,
             started_at: call.startTime ? new Date(call.startTime).toISOString() : new Date().toISOString(),
-            ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
+            ended_at: call.endTime ? new Date(call.endTime).toISOString() : undefined,
             duration: call.duration,
-            notes: call.notes,
-            summary: call.summary,
+            notes: finalNotes,
             status: call.status,
             direction: call.direction,
             follow_up_required: call.followUpRequired,
@@ -316,6 +318,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchTranscript = (callSid: string): Promise<string | null> => {
     return new Promise(resolve => {
+        // Delay to allow Twilio to process the recording
         setTimeout(async () => {
             try {
                 const response = await fetch(`/api/twilio/transcript/${callSid}`);
@@ -329,7 +332,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
                 console.error('Error fetching transcript:', error);
                 resolve(null);
             }
-        }, 3000);
+        }, 5000); // 5-second delay
     });
   };
   
@@ -595,20 +598,24 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [fetchCallHistory]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
-    const callToUpdate = state.callHistory.find(c => c.id === callId);
+    const callInHistory = state.callHistory.find(c => c.id === callId);
     
-    if(callToUpdate) {
-        const updatedCall: Call = { ...callToUpdate, notes, summary };
-        
-        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: updatedCall } });
+    if (callInHistory) {
+      const updatedCall: Call = { ...callInHistory, notes, summary };
+      
+      // Optimistically update the UI
+      dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: updatedCall } });
 
-        const savedCall = await createOrUpdateCallOnBackend(updatedCall);
-        if (savedCall) {
-            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
-            toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
-        } else {
-            toast({ title: 'Error Saving Notes', description: 'Could not save notes to the server.', variant: 'destructive'});
-        }
+      const savedCall = await createOrUpdateCallOnBackend(updatedCall);
+      if (savedCall) {
+          // If the backend returns an updated object, replace it in the store
+          dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+          toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
+      } else {
+          toast({ title: 'Error Saving Notes', description: 'Could not save notes to the server.', variant: 'destructive'});
+          // Optional: Revert optimistic update if backend save fails
+          dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: callInHistory } });
+      }
     } else {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
@@ -645,10 +652,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const toastId = toast({
+    const { id: toastId, update: updateToast } = toast({
       title: 'Sending Voicemail...',
       description: `Sending to ${phoneNumber}`,
-    }).id;
+    });
 
     (async () => {
       try {
@@ -660,7 +667,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         if (!response.ok) {
           const error = await response.json();
-          throw new Error(error.message || 'Failed to send voicemail');
+          throw new Error(error.message || `Failed to send voicemail. Status: ${response.status}`);
         }
 
         const resultData = await response.json();
@@ -673,13 +680,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           dispatch({ type: 'ADD_TO_HISTORY', payload: { call: finalLog } });
         }
 
-        toast.update(toastId, {
+        updateToast({
           title: 'Voicemail Sent',
           description: `Voicemail to ${phoneNumber} was sent successfully.`,
         });
       } catch (error: any) {
         console.error('Error sending voicemail:', error);
-        toast.update(toastId, {
+        updateToast({
           title: 'Voicemail Failed',
           description: error.message,
           variant: 'destructive',
@@ -750,3 +757,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
