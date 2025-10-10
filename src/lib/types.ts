@@ -60,7 +60,7 @@ export interface Lead {
   owner_last_name: string;
   owner_title: string;
   owner_linkedin: string;
-  owner_phone_number: string;
+  owner_phone: string;
   owner_email: string;
   source: string;
   status: string;
@@ -76,3 +76,4 @@ export interface Agent {
     phone: string;
     status: string;
 }
+

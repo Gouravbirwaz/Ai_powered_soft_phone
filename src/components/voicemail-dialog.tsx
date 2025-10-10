@@ -51,7 +51,7 @@ export default function VoicemailDialog() {
       return;
     }
     setIsSending(true);
-    const phoneNumber = voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
+    const phoneNumber = voicemailLeadTarget.owner_phone || voicemailLeadTarget.company_phone;
     if (!phoneNumber) {
         toast({ title: 'No Phone Number', description: 'This lead does not have a phone number.', variant: 'destructive' });
         setIsSending(false);
@@ -72,7 +72,7 @@ export default function VoicemailDialog() {
 
   if (!voicemailLeadTarget) return null;
 
-  const phoneNumber = voicemailLeadTarget.phone || voicemailLeadTarget.company_phone;
+  const phoneNumber = voicemailLeadTarget.owner_phone || voicemailLeadTarget.company_phone;
 
   return (
     <Dialog open={!!voicemailLeadTarget} onOpenChange={(open) => !open && handleClose()}>

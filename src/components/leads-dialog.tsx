@@ -83,7 +83,7 @@ export default function LeadsDialog({
   }
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
+    const phoneNumber = lead.owner_phone || lead.company_phone;
     if (phoneNumber) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
@@ -113,7 +113,7 @@ export default function LeadsDialog({
   }
 
   const getLeadStatus = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
+    const phoneNumber = lead.owner_phone || lead.company_phone;
     if (activeCall?.to === phoneNumber) {
       return (
         <div className="flex flex-col items-start justify-center">
@@ -148,7 +148,7 @@ export default function LeadsDialog({
   };
   
   const isActionable = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
+    const phoneNumber = lead.owner_phone || lead.company_phone;
     return !!phoneNumber && !activeCall;
   }
 
@@ -203,7 +203,7 @@ export default function LeadsDialog({
                       <div>{lead.owner_first_name} {lead.owner_last_name}</div>
                       <div className="text-sm text-muted-foreground">{lead.owner_email}</div>
                     </TableCell>
-                    <TableCell>{lead.owner_phone_number || lead.company_phone}</TableCell>
+                    <TableCell>{lead.owner_phone || lead.company_phone}</TableCell>
                     <TableCell>{getLeadStatus(lead)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
