@@ -37,10 +37,20 @@ const notesFormSchema = z.object({
 type NotesFormValues = z.infer<typeof notesFormSchema>;
 
 // This function parses the combined notes field from the backend
-const parseCombinedNotes = (combinedNotes: string | undefined) => {
-    if (!combinedNotes) {
+const parseCombinedNotes = (call: Call | undefined | null) => {
+    if (!call) {
         return { summary: '', notes: '' };
     }
+    
+    const combinedNotes = call.notes || '';
+    const summaryFromCall = call.summary || '';
+
+    // If a separate summary exists, prioritize it.
+    if (summaryFromCall) {
+        return { summary: summaryFromCall, notes: combinedNotes };
+    }
+
+    // Otherwise, parse the combined field
     const summaryMarker = 'SUMMARY: ';
     const notesMarker = '\n---\nNOTES: ';
     const summaryIndex = combinedNotes.indexOf(summaryMarker);
@@ -52,7 +62,6 @@ const parseCombinedNotes = (combinedNotes: string | undefined) => {
         return { summary, notes };
     }
 
-    // If it doesn't match the combined format, assume it's all notes
     return { summary: '', notes: combinedNotes };
 };
 
@@ -73,10 +82,10 @@ export default function PostCallSheet({ call }: { call: Call }) {
 
   useEffect(() => {
     if (call) {
-      const { summary, notes } = parseCombinedNotes(call.notes);
+      const { summary, notes } = parseCombinedNotes(call);
       form.reset({
           notes: notes || '',
-          summary: summary || call.summary || '', // Prioritize parsed summary
+          summary: summary || '',
       });
     }
   }, [call, form]);
@@ -113,8 +122,6 @@ export default function PostCallSheet({ call }: { call: Call }) {
   const onSubmit = async (data: NotesFormValues) => {
     setIsSaving(true);
     if (updateNotesAndSummary) {
-        // Here, we send the separate notes and summary fields.
-        // The backend will combine them.
         await updateNotesAndSummary(call.id, data.notes || '', data.summary);
     }
     setIsSaving(false);
