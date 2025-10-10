@@ -231,12 +231,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     if (!call.leadId || !call.agentId || !phoneNumber) {
         console.warn("Cannot log call to backend: Missing one of required fields: lead_id, agent_id, phone_number.", call);
-        if (call.leadId || call.agentId) { // Only show toast if it seems like it was intended to be logged
-            toast({
-                title: 'Logging Skipped',
-                description: 'Could not save to server because critical data was missing.',
-                variant: 'default',
-            });
+        toast({
+            title: 'Logging Skipped',
+            description: 'Could not save to server because critical data was missing (e.g., no lead associated). Notes are saved locally.',
+            variant: 'default',
+        });
+        // Still update locally
+        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call } });
+        if (call.status !== 'voicemail-dropped') {
+            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: call.id } });
         }
         return null;
     }
@@ -251,11 +254,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             lead_id: call.leadId,
             agent_id: agentIdNumber,
             phone_number: phoneNumber,
-            notes: call.notes ?? null,
-            summary: call.summary ?? null,
+            notes: call.notes,
+            summary: call.summary,
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
-            action_taken: call.action_taken || 'call',
+            action_taken: call.action_taken,
             started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
         };
 
@@ -317,7 +320,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, finalStatus: CallStatus = 'completed') => {
+  const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, initialStatus: CallStatus = 'completed') => {
     const callInState = activeCallRef.current;
     if (!callInState) {
         console.warn('handleCallDisconnect called but no active call in state.');
@@ -327,7 +330,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
-    if (finalStatus !== 'failed' && finalStatus !== 'busy' && finalStatus !== 'canceled') {
+    if (initialStatus !== 'failed' && initialStatus !== 'busy' && initialStatus !== 'canceled') {
         dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
     }
     
@@ -340,12 +343,17 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     let transcript = null;
-    if (finalStatus === 'completed' || finalStatus === 'canceled') {
+    if (initialStatus === 'completed' || initialStatus === 'canceled') {
         transcript = await fetchTranscript(callInState.id);
     }
     
     const endTime = Date.now();
     const duration = Math.round((endTime - callInState.startTime) / 1000);
+
+    let finalStatus = initialStatus;
+    if (finalStatus === 'completed' && duration <= 30) {
+        finalStatus = 'canceled';
+    }
 
     const finalCallState: Call = {
       ...callInState,
@@ -363,9 +371,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
         }
     } else {
-        // Even if saving fails, update history locally
+        // Even if saving fails (e.g. no leadId), update history locally
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
-        if (finalStatus !== 'voicemail-dropped') {
+        if (finalStatus !== 'voicemail-dropped' && callInState.leadId) { // Only open if it was intended to be saved
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
         }
     }
@@ -493,7 +501,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             agent_id: state.currentAgent.id,
             dialer_type: dialer_type,
         };
-        if (dialer_type === 'auto') {
+        if (dialer_type === 'auto' && leadId) {
             payload.lead_id = leadId;
         }
 
