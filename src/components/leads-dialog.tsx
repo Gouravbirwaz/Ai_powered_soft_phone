@@ -175,7 +175,7 @@ export default function LeadsDialog({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Company</TableHead>
+                <TableHead>Company / Lead ID</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
@@ -189,11 +189,12 @@ export default function LeadsDialog({
                     <TableCell>
                       <div className="font-medium">{lead.company}</div>
                       <div className="text-sm text-muted-foreground">
-                        {lead.industry}
+                        {lead.lead_id}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {lead.owner_first_name} {lead.owner_last_name}
+                      <div>{lead.owner_first_name} {lead.owner_last_name}</div>
+                      <div className="text-sm text-muted-foreground">{lead.owner_email}</div>
                     </TableCell>
                     <TableCell>{lead.phone || lead.company_phone}</TableCell>
                     <TableCell>{getLeadStatus(lead)}</TableCell>
@@ -268,5 +269,3 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
-
-    
