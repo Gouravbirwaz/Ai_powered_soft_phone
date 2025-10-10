@@ -328,7 +328,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       status: 'ringing-incoming',
       startTime: Date.now(),
       duration: 0,
-      agentId: currentAgentRef.current?.id,
+      agentId: currentAgentRef.current!.id,
       followUpRequired: false,
       callAttemptNumber: 1,
     };
@@ -483,10 +483,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const fetchLeads = useCallback(async (): Promise<Lead[]> => {
     try {
-      const response = await fetch('/api/leads');
+      const response = await fetch('/api/v1/leads');
       if (!response.ok) {
         throw new Error(`Failed to fetch leads. Status: ${response.status}`);
-      }
+      } 
       const data = await response.json();
       return (data.leads || []) as Lead[];
     } catch (error: any) {
@@ -578,7 +578,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useCall = () => {
+export const useCall = () => {.tsx
   const context = useContext(CallContext);
   if (context === undefined) {
     throw new Error('useCall must be used within a CallProvider');

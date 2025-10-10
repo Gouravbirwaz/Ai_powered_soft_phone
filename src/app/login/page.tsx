@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function LoginPage() {
-  const { loginAsAgent, state, fetchAgents } = useCall();
+  const { loginAsAgent, state, fetchAgents, initializeTwilio } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null); // Store agentId
   const [isLoading, setIsLoading] = useState(true);

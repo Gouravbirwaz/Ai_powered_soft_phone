@@ -56,6 +56,11 @@ export interface Lead {
   state?: string;
   companyPhone?: string;
   companyLinkedin?: string;
+  owner_email?: string;
+  owner_first_name?: string;
+  owner_last_name?: string;
+  phone?: string; // Add this to handle multiple phone fields
+  company_phone?: string;
 }
 
 export interface Agent {
@@ -65,5 +70,3 @@ export interface Agent {
     phone: string;
     status: string;
 }
-
-    
