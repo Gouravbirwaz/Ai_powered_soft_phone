@@ -40,33 +40,20 @@ export interface Call {
 
 export interface Lead {
   lead_id: string;
-  company_id?: string;
-  search_keyword?: string; // Storing as string, can be parsed if needed
   company: string;
   website?: string;
   industry?: string;
-  product_category?: string;
-  business_type?: string;
   employees?: string;
   revenue?: string;
   year_founded?: string;
+  product_category?: string;
+  business_type?: string;
   bbb_rating?: string;
   street?: string;
   city?: string;
   state?: string;
-  country?: string;
   company_phone?: string;
   company_linkedin?: string;
-  owner_first_name?: string;
-  owner_last_name?: string;
-  owner_title?: string;
-  owner_linkedin?: string;
-  owner_phone_number?: string;
-  owner_email?: string;
-  phone?: string;
-  source?: string;
-  status?: string;
-  is_edited?: string;
 }
 
 export interface Agent {

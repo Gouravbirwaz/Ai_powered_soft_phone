@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -39,9 +40,8 @@ export default function LeadsDialog({
   leads: Lead[];
   onRefreshLeads: () => void;
 }) {
-  const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
+  const { startOutgoingCall, state, openVoicemailDialogForLead } = useCall();
   const [currentPage, setCurrentPage] = useState(1);
-  const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const { toast } = useToast();
 
@@ -52,7 +52,6 @@ export default function LeadsDialog({
   useEffect(() => {
     if(open) {
       setCurrentPage(1);
-      setActionFeedback({});
     }
   }, [open, leads]);
 
@@ -64,29 +63,16 @@ export default function LeadsDialog({
     return leads.slice(startIndex, endIndex);
   }, [leads, currentPage]);
 
-  const showActionFeedback = (leadId: string, action: 'email' | 'voicemail') => {
-      setActionFeedback(prev => ({
-          ...prev,
-          [leadId]: { ...prev[leadId], [action]: 'success' }
-      }));
-      setTimeout(() => {
-          setActionFeedback(prev => ({
-              ...prev,
-              [leadId]: { ...prev[leadId], [action]: 'idle' }
-          }));
-      }, 3000);
-  }
-
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number;
+    const phoneNumber = lead.company_phone;
     
-    if (phoneNumber && /^\+?\d+$/.test(phoneNumber)) {
+    if (phoneNumber && /^\+?\d+$/.test(phoneNumber.replace(/[\s()-]/g, ''))) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
     } else {
         toast({ 
             title: "Invalid or Missing Phone Number", 
-            description: "A valid 'owner_phone_number' is required to make a call.", 
+            description: "A valid 'company_phone' is required to make a call.", 
             variant: "destructive" 
         });
     }
@@ -95,43 +81,16 @@ export default function LeadsDialog({
   const handleVoicemail = (lead: Lead) => {
     if (openVoicemailDialogForLead) {
       openVoicemailDialogForLead(lead);
-      showActionFeedback(lead.lead_id, 'voicemail');
       onOpenChange(false);
     }
   };
 
-  const handleEmail = async (lead: Lead) => {
-    if (sendMissedCallEmail) {
-      const success = await sendMissedCallEmail(lead);
-      if (success) {
-        showActionFeedback(lead.lead_id, 'email');
-      }
-    }
-  };
-  
   const handleRefresh = () => {
     onRefreshLeads();
   }
   
   const isActionable = () => {
     return !state.activeCall;
-  }
-
-  const ActionButton = ({ lead, action, icon: Icon, label, onClick, disabled }: { lead: Lead, action: 'email' | 'voicemail', icon: React.ElementType, label: string, onClick: () => void, disabled: boolean }) => {
-    const feedback = actionFeedback[lead.lead_id]?.[action];
-    
-    return (
-        <Button
-            variant="outline"
-            size="sm"
-            onClick={onClick}
-            disabled={disabled || feedback === 'success'}
-            className={cn("whitespace-nowrap", feedback === 'success' && 'bg-green-100 dark:bg-green-900 border-green-500')}
-        >
-            {feedback === 'success' ? <Check className="mr-2 h-4 w-4 text-green-500" /> : <Icon className="mr-2 h-4 w-4" />}
-            {label}
-        </Button>
-    )
   }
 
   return (
@@ -148,7 +107,6 @@ export default function LeadsDialog({
             <TableHeader>
               <TableRow>
                 <TableHead>Company</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -161,45 +119,38 @@ export default function LeadsDialog({
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
                       <div className="font-medium">{lead.company}</div>
-                      <div className="text-sm text-muted-foreground">{lead.owner_first_name} {lead.owner_last_name}</div>
+                      <div className="text-sm text-muted-foreground">{lead.website}</div>
                     </TableCell>
-                    <TableCell>{lead.owner_email}</TableCell>
-                    <TableCell>{lead.owner_phone_number}</TableCell>
+                    <TableCell>{lead.company_phone}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleCall(lead)}
-                          disabled={!leadIsActionable}
+                          disabled={!leadIsActionable || !lead.company_phone}
                           className="whitespace-nowrap"
                         >
                           <Phone className="mr-2 h-4 w-4" />
                           Call
                         </Button>
-                        <ActionButton
-                          lead={lead}
-                          action="voicemail"
-                          icon={Voicemail}
-                          label="Voicemail"
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleVoicemail(lead)}
-                          disabled={!leadIsActionable || !lead.owner_phone_number}
-                        />
-                        <ActionButton
-                          lead={lead}
-                          action="email"
-                          icon={Mail}
-                          label="Email"
-                          onClick={() => handleEmail(lead)}
-                          disabled={!leadIsActionable || !lead.owner_email}
-                        />
+                          disabled={!leadIsActionable || !lead.company_phone}
+                          className="whitespace-nowrap"
+                        >
+                          <Voicemail className="mr-2 h-4 w-4" />
+                          Voicemail
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
                 )})
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center">
+                  <TableCell colSpan={3} className="h-24 text-center">
                     No leads found.
                   </TableCell>
                 </TableRow>

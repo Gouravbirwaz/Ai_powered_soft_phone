@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -15,6 +16,7 @@ import {
   Loader2,
   X,
   RefreshCw,
+  Users,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -111,17 +113,7 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 };
 
 
-const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLeads: () => void; }) => {
-    const { state } = useCall();
-
-    const handleUploadClick = () => {
-        if (state.activeCall) {
-            toast({ title: 'Finish current call first', variant: 'destructive' });
-            return;
-        }
-        onUploadLeads();
-    };
-
+const ChoiceView = ({ onDial, onViewLeads }: { onDial: () => void; onViewLeads: () => void; }) => {
   return (
       <div className="p-4">
           <Card>
@@ -135,9 +127,9 @@ const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLea
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleUploadClick} disabled={!!state.activeCall}>
-                              <Upload className="mr-2" />
-                              Leads
+                          <Button variant="secondary" onClick={onViewLeads}>
+                              <Users className="mr-2" />
+                              View Leads
                           </Button>
                       </div>
                   </div>
@@ -148,13 +140,14 @@ const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLea
 };
 
 
-const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) => void; onUploadLeads: () => void; }) => {
+const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string) => void; onNewLeads: (leads: Lead[]) => void; }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
   const { toast } = useToast();
   const [showLeadsDialog, setShowLeadsDialog] = useState(false);
   const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
-  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const persistedLeads = localStorage.getItem('uploadedLeads');
     if (persistedLeads) {
@@ -164,9 +157,20 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
             console.error("Failed to parse persisted leads", e);
         }
     }
+    
+    const handleNewLeadsEvent = (event: Event) => {
+        const customEvent = event as CustomEvent;
+        setFetchedLeads(customEvent.detail);
+        setShowLeadsDialog(true); 
+    };
+
+    window.addEventListener('leadsUpdated', handleNewLeadsEvent);
+    return () => {
+        window.removeEventListener('leadsUpdated', handleNewLeadsEvent);
+    };
   }, []);
 
-  const handleOpenLeads = () => {
+  const handleViewLeads = () => {
     if (state.activeCall) {
         toast({ title: 'Finish current call first', variant: 'destructive' });
         return;
@@ -174,17 +178,17 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
     if (fetchedLeads.length > 0) {
         setShowLeadsDialog(true);
     } else {
-        onUploadLeads();
+        triggerFileUpload();
     }
   }
 
-  const handleRefreshLeads = () => {
-    onUploadLeads();
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
   }
-  
-  const handleNewLeads = (newLeads: Lead[]) => {
-    setFetchedLeads(newLeads);
-    setShowLeadsDialog(true);
+
+  const handleRefreshLeads = () => {
+    setShowLeadsDialog(false);
+    triggerFileUpload();
   }
 
   if (state.twilioDeviceStatus === 'error') {
@@ -212,7 +216,7 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
           exit={{ opacity: 0, x: 50 }}
           transition={{ duration: 0.2 }}
         >
-          <ChoiceView onDial={() => setView('dialpad')} onUploadLeads={handleOpenLeads} />
+          <ChoiceView onDial={() => setView('dialpad')} onViewLeads={handleViewLeads} />
         </motion.div>
       ) : (
         <motion.div
@@ -231,6 +235,13 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
         onOpenChange={setShowLeadsDialog}
         leads={fetchedLeads}
         onRefreshLeads={handleRefreshLeads}
+      />
+    <input
+        type="file"
+        ref={fileInputRef}
+        onChange={onNewLeads}
+        className="hidden"
+        accept=".csv,.tsv,.txt"
       />
     </>
   );
@@ -356,7 +367,7 @@ const ActiveCallView = () => {
                 className="w-full rounded-full h-14"
                 onClick={handleHangup}
                 >
-                {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-5" />}
+                {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-s5" />}
                 {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
                 </Button>
             </>
@@ -378,8 +389,6 @@ export default function Softphone() {
   const { activeCall, softphoneOpen, twilioDeviceStatus } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dialerKey, setDialerKey] = useState(0);
   
   const handleCall = (number: string) => {
     startOutgoingCall(number);
@@ -405,33 +414,31 @@ export default function Softphone() {
       const lines = text.trim().split(/\r\n|\n/);
       if (lines.length < 2) return [];
 
-      // Auto-detect delimiter (comma or tab) from the first line
       const delimiter = lines[0].includes('\t') ? '\t' : ',';
-      const headers = lines[0].split(delimiter).map(h => h.trim());
+      
+      const cleanHeader = (header: string) => header.trim().replace(/"/g, '');
+      const headers = lines[0].split(delimiter).map(cleanHeader);
 
       const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
         const values = line.split(delimiter);
         const leadData: { [key: string]: any } = {};
 
         headers.forEach((header, index) => {
-          let value = (values[index] || '').trim();
-
-          // Specifically handle phone numbers in scientific notation
-          if (header === 'owner_phone_number' || header === 'company_phone' || header === 'phone') {
+          let value = (values[index] || '').trim().replace(/"/g, '');
+          
+          if (header === 'company_phone' || header === 'owner_phone_number' || header === 'phone') {
               if (/e/i.test(value)) {
                   const num = parseFloat(value);
                   if (!isNaN(num)) {
                       value = String(BigInt(Math.round(num)));
                   }
               }
-              // Remove non-digit characters except for a leading '+'
               value = value.replace(/[^\d+]/g, '');
           }
           
           leadData[header] = value;
         });
 
-        // Ensure lead_id is present
         if (!leadData['lead_id']) {
           leadData['lead_id'] = `gen_${Date.now()}_${rowIndex}`;
         }
@@ -439,7 +446,7 @@ export default function Softphone() {
         return leadData as Lead;
       });
 
-      return leads.filter(lead => lead.company || lead.owner_first_name);
+      return leads.filter(lead => lead.company);
 
     } catch (e) {
       console.error("Failed to parse CSV", e);
@@ -459,9 +466,7 @@ export default function Softphone() {
                 const parsedLeads = parseCSV(text);
                 if (parsedLeads.length > 0) {
                   localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
-                  // Use a CustomEvent to notify the DialerContainer
                   window.dispatchEvent(new CustomEvent('leadsUpdated', { detail: parsedLeads }));
-                  setDialerKey(prev => prev + 1); // Force re-render of DialerContainer
                   toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
                 } else {
                   toast({ title: 'Parsing Error', description: 'No valid leads found in the file. Please check the file content and format.', variant: 'destructive' });
@@ -479,14 +484,12 @@ export default function Softphone() {
         }
         reader.readAsText(file);
       }
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      
+      const target = event.target;
+      if (target) {
+        target.value = '';
       }
   };
-
-  const triggerFileUpload = () => {
-    fileInputRef.current?.click();
-  }
 
 
   return (
@@ -537,7 +540,7 @@ export default function Softphone() {
                         <ActiveCallView />
                       </motion.div>
                     ) : (
-                       <DialerContainer key={dialerKey} onCall={handleCall} onUploadLeads={triggerFileUpload} />
+                       <DialerContainer onCall={handleCall} onNewLeads={handleFileChange} />
                     )}
                   </AnimatePresence>
                 </CardContent>
@@ -545,13 +548,6 @@ export default function Softphone() {
           </PopoverContent>
         </Popover>
       </motion.div>
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        className="hidden"
-        accept=".csv,.tsv,.txt"
-      />
     </div>
   );
 }
