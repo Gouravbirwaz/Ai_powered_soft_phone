@@ -138,7 +138,7 @@ const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLea
                           </Button>
                           <Button variant="secondary" onClick={handleUploadClick} disabled={!!state.activeCall}>
                               <Upload className="mr-2" />
-                              Upload Leads
+                              Leads
                           </Button>
                       </div>
                   </div>
@@ -165,6 +165,18 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
     };
 
     window.addEventListener('leadsUpdated', handleLeadsUpdated);
+
+    // Load persisted leads on mount
+    const persistedLeads = localStorage.getItem('uploadedLeads');
+    if (persistedLeads) {
+        try {
+            setFetchedLeads(JSON.parse(persistedLeads));
+        } catch (e) {
+            console.error("Failed to parse persisted leads", e);
+        }
+    }
+
+
     return () => {
         window.removeEventListener('leadsUpdated', handleLeadsUpdated);
     };
@@ -175,11 +187,16 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
         toast({ title: 'Finish current call first', variant: 'destructive' });
         return;
     }
-    onUploadLeads();
+    // If we have leads, show them. Otherwise, trigger upload.
+    if (fetchedLeads.length > 0) {
+        setShowLeadsDialog(true);
+    } else {
+        onUploadLeads();
+    }
   }
 
   const handleRefreshLeads = () => {
-    setShowLeadsDialog(false);
+    // This function is now just for triggering a new upload from the dialog
     onUploadLeads();
   }
 
@@ -397,69 +414,54 @@ export default function Softphone() {
 
   const parseCSV = (text: string): Lead[] => {
     try {
-      const lines = text.trim().split(/\r\n|\n/);
-      if (lines.length < 2) return [];
-  
-      const delimiter = /[\t,]/.exec(lines[0])?.[0] || ',';
-      const headers = lines[0].split(delimiter).map(h => h.trim());
-      
-      const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
-        const values = line.split(delimiter);
-        const rowData: { [key: string]: any } = {};
-  
-        headers.forEach((header, i) => {
-            let value = values[i] ? values[i].trim() : '';
-
-            // Sanitize value from quotes
-            if (value.startsWith('"') && value.endsWith('"')) {
-                value = value.substring(1, value.length - 1);
-            }
-
-            // Handle scientific notation for phone numbers
-            if (header.toLowerCase().includes('phone') && value.includes('E+')) {
-                try {
-                    rowData[header] = BigInt(value).toString();
-                } catch {
-                    rowData[header] = value;
-                }
-            } else {
+        const lines = text.trim().split(/\r\n|\n/);
+        if (lines.length < 2) return [];
+    
+        const delimiter = /[\t,]/.exec(lines[0])?.[0] || ',';
+        const headers = lines[0].split(delimiter).map(h => h.trim());
+        
+        const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
+            const values = line.split(delimiter);
+            const rowData: { [key: string]: any } = {};
+    
+            headers.forEach((header, i) => {
+                const value = values[i] ? values[i].trim() : '';
                 rowData[header] = value;
-            }
+            });
+            
+            // Reconstruct the Lead object based on the flat structure
+            const lead: Lead = {
+                lead_id: rowData['lead_id'] || `gen_${Date.now()}_${rowIndex}`,
+                company_id: rowData['company_id'],
+                search_keyword: rowData['search_keyword'],
+                company: rowData['company'],
+                website: rowData['website'],
+                industry: rowData['industry'],
+                product_category: rowData['product_category'],
+                business_type: rowData['business_type'],
+                employees: rowData['employees'],
+                revenue: rowData['revenue'],
+                year_founded: rowData['year_founded'],
+                bbb_rating: rowData['bbb_rating'],
+                street: rowData['street'],
+                city: rowData['city'],
+                state: rowData['state'],
+                country: rowData['country'],
+                company_phone: rowData['company_phone'],
+                company_linkedin: rowData['company_linkedin'],
+                owner_first_name: rowData['owner_first_name'],
+                owner_last_name: rowData['owner_last_name'],
+                owner_title: rowData['owner_title'],
+                owner_linkedin: rowData['owner_linkedin'],
+                owner_phone_number: rowData['owner_phone_number'] ? String(BigInt(Math.round(parseFloat(rowData['owner_phone_number'])))) : '',
+                owner_email: rowData['owner_email'],
+                phone: rowData['phone'],
+                source: rowData['source'],
+                status: rowData['status'],
+                is_edited: rowData['is_edited'],
+            };
+            return lead;
         });
-
-        // Use the exact headers from the CSV for mapping
-        const lead: Lead = {
-          lead_id: rowData['lead_id'] || `gen_${Date.now()}_${rowIndex}`,
-          company_id: rowData['company_id'],
-          search_keyword: rowData['search_keyword'],
-          company: rowData['company'],
-          website: rowData['website'],
-          industry: rowData['industry'],
-          product_category: rowData['product_category'],
-          business_type: rowData['business_type'],
-          employees: rowData['employees'],
-          revenue: rowData['revenue'],
-          year_founded: rowData['year_founded'],
-          bbb_rating: rowData['bbb_rating'],
-          street: rowData['street'],
-          city: rowData['city'],
-          state: rowData['state'],
-          country: rowData['country'],
-          company_phone: rowData['company_phone'],
-          company_linkedin: rowData['company_linkedin'],
-          owner_first_name: rowData['owner_first_name'],
-          owner_last_name: rowData['owner_last_name'],
-          owner_title: rowData['owner_title'],
-          owner_linkedin: rowData['owner_linkedin'],
-          owner_phone_number: rowData['owner_phone_number'],
-          owner_email: rowData['owner_email'],
-          phone: rowData['phone'],
-          source: rowData['source'],
-          status: rowData['status'],
-          is_edited: rowData['is_edited'],
-        };
-        return lead;
-      });
 
       return leads.filter(lead => lead.company || lead.owner_first_name);
     } catch (e) {

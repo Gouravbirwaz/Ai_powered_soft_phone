@@ -123,7 +123,6 @@ export default function LeadsDialog({
   };
   
   const handleRefresh = () => {
-    onOpenChange(false);
     onRefreshLeads();
   }
 
