@@ -8,6 +8,7 @@ import IncomingCallDialog from '@/components/incoming-call-dialog';
 import PostCallSheet from '@/components/post-call-sheet';
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import VoicemailDialog from './voicemail-dialog';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { state } = useCall();
@@ -23,6 +24,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <Toaster />
       {state.showIncomingCall && state.activeCall && <IncomingCallDialog call={state.activeCall} />}
       {postCall && <PostCallSheet call={postCall} />}
+      <VoicemailDialog />
+
     </>
   );
 }

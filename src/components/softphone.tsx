@@ -8,11 +8,10 @@ import {
   PhoneOff,
   Mic,
   MicOff,
-  Voicemail,
   Clock,
   CircleDotDashed,
   Move,
-  List,
+  Upload,
   AlertCircle,
   Loader2,
   X,
@@ -32,7 +31,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import type { CallStatus, Lead } from '@/lib/types';
 import LeadsDialog from './leads-dialog';
-import VoicemailDialog from './voicemail-dialog';
 
 
 const DialpadButton = ({
@@ -114,26 +112,87 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 
 
 const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
-    const { state, fetchLeads } = useCall();
+    const { state } = useCall();
     const { toast } = useToast();
-    const [isFetching, setIsFetching] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     const [showLeadsDialog, setShowLeadsDialog] = useState(false);
     const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const parseCSV = (text: string): Lead[] => {
+      const rows = text.split('\n').filter(row => row.trim() !== '');
+      if (rows.length < 2) return [];
+
+      const headers = rows[0].split(',').map(h => h.trim());
+      const leadData = rows.slice(1).map(row => {
+        const values = row.split(',').map(v => v.trim());
+        const leadObject: { [key: string]: any } = {};
+        headers.forEach((header, index) => {
+          leadObject[header] = values[index];
+        });
+        return leadObject as Lead;
+      });
+      return leadData;
+    }
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        setIsProcessing(true);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          try {
+            const parsedLeads = parseCSV(text);
+            localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
+            setFetchedLeads(parsedLeads);
+            setShowLeadsDialog(true);
+            toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+          } catch (error) {
+            toast({ title: 'Upload Failed', description: 'Could not parse the CSV file.', variant: 'destructive' });
+          } finally {
+            setIsProcessing(false);
+          }
+        };
+        reader.readAsText(file);
+      }
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
     
-    const handleFetchLeads = async () => {
+    // Fisher-Yates shuffle algorithm
+    const shuffleArray = (array: any[]) => {
+        let currentIndex = array.length, randomIndex;
+        while (currentIndex !== 0) {
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex--;
+            [array[currentIndex], array[randomIndex]] = [
+                array[randomIndex], array[currentIndex]];
+        }
+        return array;
+    }
+
+    const handleUploadLeads = () => {
         if (state.activeCall) {
             toast({ title: 'Finish current call first', variant: 'destructive' });
             return;
         }
-        setIsFetching(true);
-        const leads = await fetchLeads();
-        if(leads && leads.length > 0) {
-            setFetchedLeads(leads);
-            setShowLeadsDialog(true);
+
+        const storedLeads = localStorage.getItem('uploadedLeads');
+        if (storedLeads) {
+            try {
+                const leads = JSON.parse(storedLeads);
+                setFetchedLeads(shuffleArray(leads));
+                setShowLeadsDialog(true);
+            } catch {
+                localStorage.removeItem('uploadedLeads');
+                fileInputRef.current?.click();
+            }
         } else {
-            toast({ title: 'No leads available', description: 'Could not fetch any leads at this time.', variant: 'destructive' });
+            fileInputRef.current?.click();
         }
-        setIsFetching(false);
     }
 
 
@@ -151,15 +210,22 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleFetchLeads} disabled={isFetching || !!state.activeCall}>
-                              {isFetching ? <Loader2 className="mr-2 animate-spin"/> : <List className="mr-2" />}
-                              Fetch Leads
+                          <Button variant="secondary" onClick={handleUploadLeads} disabled={isProcessing || !!state.activeCall}>
+                              {isProcessing ? <Loader2 className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
+                              Upload Leads
                           </Button>
                       </div>
                   </div>
               </CardContent>
           </Card>
       </div>
+       <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept=".csv"
+      />
       <LeadsDialog 
         open={showLeadsDialog}
         onOpenChange={setShowLeadsDialog}
@@ -221,7 +287,6 @@ const ActiveCallView = () => {
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [showVoicemailDialog, setShowVoicemailDialog] = useState(false);
   const twilioCall = getActiveTwilioCall();
 
   useEffect(() => {
@@ -255,7 +320,6 @@ const ActiveCallView = () => {
   const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
   const isFetchingTranscript = activeCall.status === 'fetching-transcript';
-  const canSendVoicemail = isConnecting || isCallActive;
 
   const handleHangup = () => {
     endActiveCall('canceled');
@@ -268,12 +332,6 @@ const ActiveCallView = () => {
     }
   }
 
-  const handleVoicemailClick = () => {
-    if (canSendVoicemail) {
-      setShowVoicemailDialog(true);
-    }
-  }
-  
   const statusTextMap: { [key in CallStatus]?: string } = {
     'ringing-outgoing': 'Ringing...',
     'in-progress': formatDuration(duration),
@@ -305,7 +363,7 @@ const ActiveCallView = () => {
       case 'canceled':
         return { text, icon: <AlertCircle className="h-4 w-4 text-destructive" />, color: 'text-destructive' };
       case 'voicemail-dropped':
-        return { text, icon: <Voicemail className="h-4 w-4 text-blue-500" />, color: 'text-blue-500' };
+        return { text: 'Voicemail Sent', icon: <PhoneOff className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
       default:
         return { text: 'Call Ended', icon: <PhoneOff className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' };
     }
@@ -315,7 +373,7 @@ const ActiveCallView = () => {
   
   return (
     <>
-      <div className="flex flex-col items-center justify-between p-4 h-full min-h-[500px]">
+      <div className="flex flex-col items-center justify-between p-4 h-full min-h-[400px]">
         <div className="text-center mt-8">
           <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
           <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
@@ -326,7 +384,7 @@ const ActiveCallView = () => {
         
         {!isFetchingTranscript ? (
             <>
-                <div className="grid grid-cols-3 gap-4 my-8">
+                <div className="grid grid-cols-2 gap-4 my-8">
                     <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
                         {isMuted ? <MicOff /> : <Mic />}
                         <span className="text-xs mt-1">Mute</span>
@@ -334,10 +392,6 @@ const ActiveCallView = () => {
                     <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
                         <Grid3x3 />
                         <span className="text-xs mt-1">Keypad</span>
-                    </Button>
-                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleVoicemailClick} disabled={!canSendVoicemail}>
-                        <Voicemail />
-                        <span className="text-xs mt-1">Voicemail</span>
                     </Button>
                 </div>
 
@@ -358,7 +412,6 @@ const ActiveCallView = () => {
         )}
 
       </div>
-      <VoicemailDialog open={showVoicemailDialog} onOpenChange={setShowVoicemailDialog} call={activeCall}/>
     </>
   );
 };
@@ -452,3 +505,5 @@ export default function Softphone() {
     </div>
   );
 }
+
+    

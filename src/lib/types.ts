@@ -12,9 +12,12 @@ export type CallStatus =
   | 'canceled'
   | 'voicemail-dropping'
   | 'voicemail-dropped'
-  | 'fetching-transcript';
+  | 'fetching-transcript'
+  | 'emailed';
 
 export type CallDirection = 'incoming' | 'outgoing';
+
+export type ActionTaken = 'call' | 'voicemail' | 'email';
 
 export interface Call {
   id: string;
@@ -32,6 +35,7 @@ export interface Call {
   leadId?: string;
   followUpRequired?: boolean;
   callAttemptNumber?: number;
+  action_taken?: ActionTaken;
 }
 
 export interface Lead {
@@ -58,7 +62,6 @@ export interface Lead {
     owner_email: string;
     owner_first_name: string;
     owner_last_name: string;
-    owner_linkedin: string;
     owner_phone_number: string;
     owner_title: string;
     phone: string;

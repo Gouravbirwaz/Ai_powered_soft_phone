@@ -17,14 +17,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
-import { ArrowDown, ArrowUp, Edit, PhoneIncoming, PhoneOutgoing } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit, Mail, PhoneCall, PhoneIncoming, PhoneOutgoing, Voicemail, Check } from 'lucide-react';
 import { useCall } from '@/contexts/call-context';
-import type { Call, CallDirection, CallStatus } from '@/lib/types';
-import { formatDuration } from '@/lib/utils';
-import { format, formatRelative, isValid } from 'date-fns';
+import type { Call, CallStatus, ActionTaken, Lead } from '@/lib/types';
+import { formatDuration, cn } from '@/lib/utils';
+import { format, isValid, formatRelative } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
+import { useToast } from '@/hooks/use-toast';
+
+type ActionStatus = 'idle' | 'success';
 
 const StatusBadge = ({ status }: { status: CallStatus }) => {
   const variant: { [key in CallStatus]?: 'default' | 'secondary' | 'destructive' | 'outline' } = {
@@ -34,6 +39,7 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
     busy: 'secondary',
     failed: 'destructive',
     canceled: 'destructive',
+    emailed: 'outline',
   };
 
   const text: { [key in CallStatus]?: string } = {
@@ -42,6 +48,7 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
     'in-progress': 'In Progress',
     'voicemail-dropping': 'Voicemail Left',
     'voicemail-dropped': 'Voicemail Left',
+    'emailed': 'Emailed',
   }
 
   return (
@@ -51,17 +58,42 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
   );
 };
 
+const CALLS_PER_PAGE = 10;
+
 export default function CallHistoryTable() {
-  const { state, dispatch, fetchCallHistory } = useCall();
+  const { state, dispatch, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
+  const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [directionFilter, setDirectionFilter] = useState<CallDirection | 'all'>('all');
+  const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [allLeads, setAllLeads] = useState<Lead[]>([]);
+  const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (state.currentAgent) {
-      fetchCallHistory(state.currentAgent.id);
+    // Update current time every minute to keep relative times fresh
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    const loadLeads = () => {
+      const storedLeads = localStorage.getItem('uploadedLeads');
+      if (storedLeads) {
+        try {
+            const leads = JSON.parse(storedLeads);
+            setAllLeads(leads);
+        } catch (error) {
+            console.error("Failed to parse leads from local storage", error);
+        }
+      }
     }
-  }, [state.currentAgent, fetchCallHistory]);
+    loadLeads();
+    return () => clearInterval(timer);
+  }, []);
+  
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, directionFilter, searchQuery]);
 
 
   const handleSort = (key: keyof Call) => {
@@ -73,14 +105,69 @@ export default function CallHistoryTable() {
   };
   
   const handleEditNotes = (callId: string) => {
-    dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
+    if (dispatch) {
+      dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
+    }
   }
 
-  const filteredAndSortedCalls = useMemo(() => {
-    if (!state.currentAgent) return [];
+  const showActionFeedback = (callId: string, action: 'email' | 'voicemail') => {
+    setActionFeedback(prev => ({
+      ...prev,
+      [callId]: { ...prev[callId], [action]: 'success' }
+    }));
+    setTimeout(() => {
+      setActionFeedback(prev => ({
+        ...prev,
+        [callId]: { ...prev[callId], [action]: 'idle' }
+      }));
+    }, 3000); // Reset after 3 seconds
+  }
+  
+  const getLeadForCall = (call: Call): Lead | undefined => {
+    if (!call.leadId) return undefined;
+    return allLeads.find(lead => lead.lead_id === call.leadId);
+  }
+
+  const handleVoicemail = (call: Call) => {
+    const lead = getLeadForCall(call);
+    if (lead && openVoicemailDialogForLead) {
+      openVoicemailDialogForLead(lead);
+      showActionFeedback(call.id, 'voicemail');
+    } else {
+      toast({ title: "Cannot Send Voicemail", description: "Lead information for this call could not be found.", variant: 'destructive' });
+    }
+  }
+
+  const handleEmail = async (call: Call) => {
+    const lead = getLeadForCall(call);
+    if (lead && sendMissedCallEmail) {
+       if (!lead.owner_email) {
+            toast({ title: "Cannot Send Email", description: "This lead does not have an email address.", variant: 'destructive' });
+            return;
+        }
+      const success = await sendMissedCallEmail(lead);
+      if (success) {
+        showActionFeedback(call.id, 'email');
+      }
+    } else {
+      toast({ title: "Cannot Send Email", description: "Lead information for this call could not be found.", variant: 'destructive' });
+    }
+  }
+
+
+  const { paginatedCalls, totalPages } = useMemo(() => {
+    if (!state.currentAgent) return { paginatedCalls: [], totalPages: 0 };
     
-    // Use state.callHistory which should be pre-filtered for the current agent
     let filtered = state.callHistory;
+
+    if (searchQuery) {
+        filtered = filtered.filter(call => {
+            const searchTerm = searchQuery.toLowerCase();
+            const from = call.from?.toLowerCase() || '';
+            const to = call.to?.toLowerCase() || '';
+            return from.includes(searchTerm) || to.includes(searchTerm);
+        });
+    }
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter((call) => call.status === statusFilter);
@@ -102,13 +189,17 @@ export default function CallHistoryTable() {
       });
     }
 
-    return filtered;
-  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig]);
+    const calculatedTotalPages = Math.ceil(filtered.length / CALLS_PER_PAGE);
+    const startIndex = (currentPage - 1) * CALLS_PER_PAGE;
+    const paginated = filtered.slice(startIndex, startIndex + CALLS_PER_PAGE);
+
+    return { paginatedCalls: paginated, totalPages: calculatedTotalPages };
+  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig, currentPage, searchQuery]);
 
   const allStatuses = useMemo(() => {
     if (!state.currentAgent) return ['all'];
-    return ['all', ...Array.from(new Set(state.callHistory.map(c => c.status)))];
-  }, [state.callHistory, state.currentAgent]);
+    return ['all', ...Array.from(new Set(state.allCallHistory.map(c => c.status)))];
+  }, [state.allCallHistory, state.currentAgent]);
 
 
   const SortableHeader = ({ tkey, label }: { tkey: keyof Call; label: string }) => (
@@ -120,29 +211,72 @@ export default function CallHistoryTable() {
     </TableHead>
   );
 
+  const getIconForAction = (action?: ActionTaken, direction?: 'incoming' | 'outgoing') => {
+    switch (action) {
+      case 'email':
+        return <Mail className="h-5 w-5 text-yellow-500" />;
+      case 'voicemail':
+        return <Voicemail className="h-5 w-5 text-purple-500" />;
+      case 'call':
+        if (direction === 'incoming') {
+          return <PhoneIncoming className="h-5 w-5 text-blue-500" />;
+        }
+        return <PhoneOutgoing className="h-5 w-5 text-green-500" />;
+      default:
+        return <PhoneCall className="h-5 w-5 text-gray-500" />;
+    }
+  }
+
+  const ActionButton = ({ call, action, icon: Icon, onClick }: { call: Call, action: 'email' | 'voicemail', icon: React.ElementType, onClick: () => void }) => {
+    const feedback = actionFeedback[call.id]?.[action];
+    const isSuccess = feedback === 'success';
+
+    return (
+        <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClick}
+            disabled={isSuccess}
+            className={cn(isSuccess && "text-green-500 hover:text-green-600")}
+        >
+            {isSuccess ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+        </Button>
+    )
+  }
+  
+  const timeZone = 'America/New_York';
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-2">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            {allStatuses.map((status, index) => (
-              <SelectItem key={`${status}-${index}`} value={status} className="capitalize">{status}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as CallDirection | 'all')}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by direction" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Directions</SelectItem>
-            <SelectItem value="incoming">Incoming</SelectItem>
-            <SelectItem value="outgoing">Outgoing</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input
+          placeholder="Search by phone number..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full sm:w-[250px]"
+        />
+        <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              {allStatuses.map((status, index) => (
+                <SelectItem key={`${status}-${index}`} value={status} className="capitalize">{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as 'all' | 'incoming' | 'outgoing')}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by direction" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Directions</SelectItem>
+              <SelectItem value="incoming">Incoming</SelectItem>
+              <SelectItem value="outgoing">Outgoing</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="rounded-md border">
         <Table>
@@ -152,34 +286,30 @@ export default function CallHistoryTable() {
               <TableHead>Contact</TableHead>
               <SortableHeader tkey="status" label="Status" />
               <SortableHeader tkey="duration" label="Duration" />
-              <SortableHeader tkey="startTime" label="Timestamp" />
+              <SortableHeader tkey="startTime" label="Timestamp (US Eastern)" />
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAndSortedCalls.length > 0 ? (
-              filteredAndSortedCalls.map((call) => {
+            {paginatedCalls.length > 0 ? (
+              paginatedCalls.map((call) => {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
-                const contactNumber = call.direction === 'incoming' ? call.from : call.to;
-
+                const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
+                
                 return (
                   <TableRow key={call.id}>
                     <TableCell>
-                      {call.direction === 'incoming' ? (
-                        <PhoneIncoming className="h-5 w-5 text-blue-500" />
-                      ) : (
-                        <PhoneOutgoing className="h-5 w-5 text-green-500" />
-                      )}
+                      {getIconForAction(call.action_taken, call.direction)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                          <AvatarFallback>{contactNumber?.charAt(0) || '?'}</AvatarFallback>
+                          <AvatarFallback>{contactIdentifier?.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{contactNumber}</div>
+                          <div className="font-medium">{contactIdentifier}</div>
                           {call.notes && <p className="text-sm text-muted-foreground truncate max-w-xs">{call.notes}</p>}
                         </div>
                       </div>
@@ -191,18 +321,34 @@ export default function CallHistoryTable() {
                     <TableCell>
                       {isDateValid ? (
                         <div className="flex flex-col">
-                          <span className='font-medium'>{formatRelative(callDate, new Date())}</span>
-                          <span className='text-sm text-muted-foreground'>{format(callDate, 'p')}</span>
+                          <span className='font-medium'>{formatRelative(callDate, currentTime)}</span>
+                          <span className='text-sm text-muted-foreground'>
+                            {formatInTimeZone(callDate, timeZone, 'MMM d, p')} ET
+                          </span>
                         </div>
                       ) : (
                         <div className="text-muted-foreground">Invalid date</div>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)}>
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Notes</span>
-                      </Button>
+                       <div className="flex items-center justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed'}>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit Notes</span>
+                        </Button>
+                        <ActionButton
+                          call={call}
+                          action="voicemail"
+                          icon={Voicemail}
+                          onClick={() => handleVoicemail(call)}
+                        />
+                        <ActionButton
+                          call={call}
+                          action="email"
+                          icon={Mail}
+                          onClick={() => handleEmail(call)}
+                        />
+                       </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -210,13 +356,36 @@ export default function CallHistoryTable() {
             ) : (
               <TableRow key="no-calls-row">
                 <TableCell colSpan={6} className="h-24 text-center">
-                  No calls found for this agent.
+                  No calls found.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+       <div className="flex items-center justify-end space-x-2 pt-4">
+        <span className="text-sm text-muted-foreground">
+          Page {currentPage} of {totalPages > 0 ? totalPages : 1}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages || totalPages === 0}
+        >
+          Next
+        </Button>
+      </div>
     </div>
   );
 }
+
+    
