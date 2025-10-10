@@ -46,7 +46,7 @@ export default function VoicemailDialog() {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!voicemailLeadTarget || !script) {
       toast({
         title: 'Error',
@@ -55,22 +55,16 @@ export default function VoicemailDialog() {
       });
       return;
     }
-    setIsSending(true);
+
     const phoneNumber = voicemailLeadTarget.companyPhone;
     if (!phoneNumber) {
         toast({ title: 'No Phone Number', description: 'This lead does not have a phone number.', variant: 'destructive' });
-        setIsSending(false);
         return;
     }
-
-    // Pass the exact script from the textarea to the context function
-    const success = await sendVoicemail(voicemailLeadTarget, script);
-    if (success) {
-      // Toast is handled in context
-      handleClose();
-    }
-    // Error toast is handled inside the context's sendVoicemail function
-    setIsSending(false);
+    
+    // Optimistically close dialog and let the context handle the background task
+    sendVoicemail(voicemailLeadTarget, script);
+    handleClose();
   };
 
   if (!voicemailLeadTarget) return null;
