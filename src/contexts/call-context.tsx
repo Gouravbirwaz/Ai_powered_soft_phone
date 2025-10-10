@@ -525,10 +525,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     const agent = currentAgentRef.current;
-    if (!agent || state.twilioDeviceStatus !== 'ready' || !state.audioPermissionsGranted) {
+    if (!agent) {
         toast({
             title: 'Softphone Not Ready',
-            description: 'The softphone is not connected or permissions are missing. Please wait or check browser settings.',
+            description: 'No agent is logged in.',
             variant: 'destructive'
         });
         return;
@@ -582,7 +582,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         endActiveCall('failed');
     }
-  }, [state.twilioDeviceStatus, state.audioPermissionsGranted, toast, endActiveCall]);
+  }, [toast, endActiveCall]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
