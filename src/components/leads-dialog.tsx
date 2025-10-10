@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -51,7 +50,6 @@ export default function LeadsDialog({
   }, [initialLeads]);
   
   useEffect(() => {
-    // Reset to first page when dialog is opened or leads change
     if(open) {
       setCurrentPage(1);
       setActionFeedback({});
@@ -76,20 +74,19 @@ export default function LeadsDialog({
               ...prev,
               [leadId]: { ...prev[leadId], [action]: 'idle' }
           }));
-      }, 3000); // Reset after 3 seconds
+      }, 3000);
   }
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.owner_phone_number;
     
-    // Validate that the phone number is a string containing digits
-    if (phoneNumber && /\d/.test(phoneNumber)) {
+    if (phoneNumber && /^\+?\d+$/.test(phoneNumber)) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
     } else {
         toast({ 
             title: "Invalid or Missing Phone Number", 
-            description: "The 'owner_phone_number' for this lead is not valid. Cannot initiate call.", 
+            description: "A valid 'owner_phone_number' is required to make a call.", 
             variant: "destructive" 
         });
     }
@@ -247,4 +244,3 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
-    
