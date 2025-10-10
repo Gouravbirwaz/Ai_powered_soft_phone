@@ -45,7 +45,7 @@ export default function LeadsDialog({
   onRefreshLeads: () => void;
 }) {
   const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
-  const { allCallHistory, activeCall } = state;
+  const { activeCall } = state;
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
@@ -125,41 +125,6 @@ export default function LeadsDialog({
   const handleRefresh = () => {
     onRefreshLeads();
   }
-
-  const getLeadStatus = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number;
-    if (activeCall?.to === phoneNumber) {
-      return (
-        <div className="flex flex-col items-start justify-center">
-            <Badge className="bg-green-500">In Call</Badge>
-        </div>
-      )
-    }
-    
-    const leadInteractions = allCallHistory
-        .filter(c => c.leadId === lead.lead_id || c.to === phoneNumber || c.from === phoneNumber)
-        .sort((a,b) => (b.startTime || 0) - (a.startTime || 0));
-
-    const lastInteraction = leadInteractions[0];
-      
-    if (lastInteraction) {
-        return (
-            <div className="flex flex-col items-start justify-center">
-                <Badge variant="secondary">Contacted</Badge>
-                <p className="text-xs text-muted-foreground mt-1">
-                    {lastInteraction.startTime ? formatRelative(new Date(lastInteraction.startTime), currentTime) : ''}
-                </p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex flex-col items-start justify-center">
-            <Badge variant="default" className="bg-blue-500 hover:bg-blue-600">Available</Badge>
-            <p className="text-xs text-muted-foreground mt-1">&nbsp;</p>
-        </div>
-    );
-  };
   
   const isActionable = () => {
     return !state.activeCall;
@@ -196,9 +161,8 @@ export default function LeadsDialog({
             <TableHeader>
               <TableRow>
                 <TableHead>Company</TableHead>
-                <TableHead>Contact</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -210,16 +174,9 @@ export default function LeadsDialog({
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
                       <div className="font-medium">{lead.company}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {lead.lead_id}
-                      </div>
                     </TableCell>
-                    <TableCell>
-                      <div>{lead.owner_first_name} {lead.owner_last_name}</div>
-                      <div className="text-sm text-muted-foreground">{lead.owner_email}</div>
-                    </TableCell>
+                    <TableCell>{lead.owner_email}</TableCell>
                     <TableCell>{lead.owner_phone_number || lead.company_phone}</TableCell>
-                    <TableCell>{getLeadStatus(lead)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
                         <Button
@@ -254,7 +211,7 @@ export default function LeadsDialog({
                 )})
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
+                  <TableCell colSpan={4} className="h-24 text-center">
                     No leads found.
                   </TableCell>
                 </TableRow>
@@ -299,5 +256,4 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
-
     
