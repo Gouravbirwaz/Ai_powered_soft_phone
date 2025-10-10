@@ -21,12 +21,15 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
-import { ArrowDown, ArrowUp, Edit, Mail, PhoneCall, PhoneIncoming, PhoneOutgoing, Voicemail } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit, Mail, PhoneCall, PhoneIncoming, PhoneOutgoing, Voicemail, Check } from 'lucide-react';
 import { useCall } from '@/contexts/call-context';
-import type { Call, CallStatus, ActionTaken } from '@/lib/types';
-import { formatDuration } from '@/lib/utils';
+import type { Call, CallStatus, ActionTaken, Lead } from '@/lib/types';
+import { formatDuration, cn } from '@/lib/utils';
 import { format, isValid, formatRelative } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
+import { useToast } from '@/hooks/use-toast';
+
+type ActionStatus = 'idle' | 'success';
 
 const StatusBadge = ({ status }: { status: CallStatus }) => {
   const variant: { [key in CallStatus]?: 'default' | 'secondary' | 'destructive' | 'outline' } = {
@@ -58,19 +61,27 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
 const CALLS_PER_PAGE = 10;
 
 export default function CallHistoryTable() {
-  const { state, dispatch } = useCall();
+  const { state, dispatch, openVoicemailDialogForLead, sendMissedCallEmail, fetchLeads } = useCall();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
+  const [allLeads, setAllLeads] = useState<Lead[]>([]);
+  const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
+  const { toast } = useToast();
 
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    const loadLeads = async () => {
+      const leads = await fetchLeads();
+      setAllLeads(leads);
+    }
+    loadLeads();
     return () => clearInterval(timer);
-  }, []);
+  }, [fetchLeads]);
   
   // Reset page when filters change
   useEffect(() => {
@@ -91,6 +102,47 @@ export default function CallHistoryTable() {
       dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId } });
     }
   }
+
+  const showActionFeedback = (callId: string, action: 'email' | 'voicemail') => {
+    setActionFeedback(prev => ({
+      ...prev,
+      [callId]: { ...prev[callId], [action]: 'success' }
+    }));
+    setTimeout(() => {
+      setActionFeedback(prev => ({
+        ...prev,
+        [callId]: { ...prev[callId], [action]: 'idle' }
+      }));
+    }, 3000); // Reset after 3 seconds
+  }
+  
+  const getLeadForCall = (call: Call): Lead | undefined => {
+    if (!call.leadId) return undefined;
+    return allLeads.find(lead => lead.lead_id === call.leadId);
+  }
+
+  const handleVoicemail = (call: Call) => {
+    const lead = getLeadForCall(call);
+    if (lead && openVoicemailDialogForLead) {
+      openVoicemailDialogForLead(lead);
+      showActionFeedback(call.id, 'voicemail');
+    } else {
+      toast({ title: "Cannot Send Voicemail", description: "Lead information for this call could not be found.", variant: 'destructive' });
+    }
+  }
+
+  const handleEmail = async (call: Call) => {
+    const lead = getLeadForCall(call);
+    if (lead && sendMissedCallEmail) {
+      const success = await sendMissedCallEmail(lead);
+      if (success) {
+        showActionFeedback(call.id, 'email');
+      }
+    } else {
+      toast({ title: "Cannot Send Email", description: "Lead information for this call could not be found.", variant: 'destructive' });
+    }
+  }
+
 
   const { paginatedCalls, totalPages } = useMemo(() => {
     if (!state.currentAgent) return { paginatedCalls: [], totalPages: 0 };
@@ -163,6 +215,23 @@ export default function CallHistoryTable() {
         return <PhoneCall className="h-5 w-5 text-gray-500" />;
     }
   }
+
+  const ActionButton = ({ call, action, icon: Icon, onClick, disabled }: { call: Call, action: 'email' | 'voicemail', icon: React.ElementType, onClick: () => void, disabled: boolean }) => {
+    const feedback = actionFeedback[call.id]?.[action];
+    const isSuccess = feedback === 'success';
+
+    return (
+        <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClick}
+            disabled={disabled || isSuccess}
+            className={cn(isSuccess && "text-green-500 hover:text-green-600")}
+        >
+            {isSuccess ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+        </Button>
+    )
+  }
   
   const timeZone = 'America/New_York';
 
@@ -216,6 +285,8 @@ export default function CallHistoryTable() {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
                 const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
+                const leadInfo = getLeadForCall(call);
+                const canFollowUp = call.status !== 'completed' && call.status !== 'in-progress' && !!leadInfo;
 
                 return (
                   <TableRow key={call.id}>
@@ -251,10 +322,26 @@ export default function CallHistoryTable() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed' || !call.notes}>
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Notes</span>
-                      </Button>
+                       <div className="flex items-center justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed'}>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit Notes</span>
+                        </Button>
+                        <ActionButton
+                          call={call}
+                          action="voicemail"
+                          icon={Voicemail}
+                          onClick={() => handleVoicemail(call)}
+                          disabled={!canFollowUp}
+                        />
+                        <ActionButton
+                          call={call}
+                          action="email"
+                          icon={Mail}
+                          onClick={() => handleEmail(call)}
+                          disabled={!canFollowUp || !leadInfo?.owner_email}
+                        />
+                       </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -293,6 +380,8 @@ export default function CallHistoryTable() {
     </div>
   );
 }
+
+    
 
     
 
