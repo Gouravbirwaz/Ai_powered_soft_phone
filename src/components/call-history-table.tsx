@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
@@ -58,6 +59,7 @@ const CALLS_PER_PAGE = 10;
 
 export default function CallHistoryTable() {
   const { state, dispatch } = useCall();
+  const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
@@ -73,7 +75,7 @@ export default function CallHistoryTable() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, directionFilter]);
+  }, [statusFilter, directionFilter, searchQuery]);
 
 
   const handleSort = (key: keyof Call) => {
@@ -94,6 +96,15 @@ export default function CallHistoryTable() {
     if (!state.currentAgent) return { paginatedCalls: [], totalPages: 0 };
     
     let filtered = state.callHistory;
+
+    if (searchQuery) {
+        filtered = filtered.filter(call => {
+            const searchTerm = searchQuery.toLowerCase();
+            const from = call.from?.toLowerCase() || '';
+            const to = call.to?.toLowerCase() || '';
+            return from.includes(searchTerm) || to.includes(searchTerm);
+        });
+    }
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter((call) => call.status === statusFilter);
@@ -120,7 +131,7 @@ export default function CallHistoryTable() {
     const paginated = filtered.slice(startIndex, startIndex + CALLS_PER_PAGE);
 
     return { paginatedCalls: paginated, totalPages: calculatedTotalPages };
-  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig, currentPage]);
+  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig, currentPage, searchQuery]);
 
   const allStatuses = useMemo(() => {
     if (!state.currentAgent) return ['all'];
@@ -157,27 +168,35 @@ export default function CallHistoryTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-2">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            {allStatuses.map((status, index) => (
-              <SelectItem key={`${status}-${index}`} value={status} className="capitalize">{status}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as 'all' | 'incoming' | 'outgoing')}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by direction" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Directions</SelectItem>
-            <SelectItem value="incoming">Incoming</SelectItem>
-            <SelectItem value="outgoing">Outgoing</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input
+          placeholder="Search by phone number..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full sm:w-[250px]"
+        />
+        <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              {allStatuses.map((status, index) => (
+                <SelectItem key={`${status}-${index}`} value={status} className="capitalize">{status}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={directionFilter} onValueChange={(v) => setDirectionFilter(v as 'all' | 'incoming' | 'outgoing')}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Filter by direction" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Directions</SelectItem>
+              <SelectItem value="incoming">Incoming</SelectItem>
+              <SelectItem value="outgoing">Outgoing</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="rounded-md border">
         <Table>
@@ -274,5 +293,7 @@ export default function CallHistoryTable() {
     </div>
   );
 }
+
+    
 
     
