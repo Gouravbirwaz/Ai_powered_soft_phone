@@ -32,8 +32,12 @@ export default function VoicemailDialog() {
   const { voicemailLeadTarget } = state;
 
   useEffect(() => {
-    // Reset script if the target changes
-    setScript(DEFAULT_VOICEMAIL_SCRIPT.replace('Hello,', `Hello ${voicemailLeadTarget?.company || ''},`));
+    // Reset script if the target changes, including the lead's name.
+    if (voicemailLeadTarget) {
+      setScript(DEFAULT_VOICEMAIL_SCRIPT.replace('Hello,', `Hello ${voicemailLeadTarget?.company || ''},`));
+    } else {
+      setScript(DEFAULT_VOICEMAIL_SCRIPT);
+    }
   }, [voicemailLeadTarget]);
 
   const handleClose = () => {
@@ -59,12 +63,10 @@ export default function VoicemailDialog() {
         return;
     }
 
+    // Pass the exact script from the textarea to the context function
     const success = await sendVoicemail(voicemailLeadTarget, script);
     if (success) {
-      toast({
-        title: 'Voicemail Sent & Logged',
-        description: `Voicemail to ${phoneNumber} has been sent and logged.`,
-      });
+      // Toast is handled in context
       handleClose();
     }
     // Error toast is handled inside the context's sendVoicemail function
