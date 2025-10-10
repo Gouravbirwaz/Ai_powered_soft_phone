@@ -167,7 +167,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     
     // Determine direction based on whether the agent's phone matches the log's number
     // This is an assumption; might need refinement if agent has multiple numbers or logic is different
-    const direction: CallDirection = agent && log.phone_number === agent.phone ? 'outgoing' : 'incoming';
+    const direction: CallDirection = log.direction || (agent && log.phone_number === agent.phone ? 'outgoing' : 'incoming');
 
     // Set from/to based on direction
     const from = direction === 'incoming' ? log.phone_number : (agent?.phone || 'Unknown');
@@ -341,7 +341,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
  const handleCallDisconnect = useCallback((twilioCall: TwilioCall | null, initialStatus: CallStatus = 'completed') => {
     // Deep copy the active call to prevent race conditions with state updates
-    const callToEnd = JSON.parse(JSON.stringify(activeCallRef.current));
+    const callToEnd = activeCallRef.current ? JSON.parse(JSON.stringify(activeCallRef.current)) : null;
 
     // Immediately clear the active call UI
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
@@ -363,10 +363,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             console.error('handleCallDisconnect: captured call has invalid startTime.', callToEnd);
             return;
         }
-
+        
+        // Use the call SID from the disconnected TwilioCall object if available, otherwise use the one from our state
+        const callSid = twilioCall?.parameters.CallSid || callToEnd.id;
+        
         let transcript: string | null = null;
-        if ((initialStatus === 'completed' || initialStatus === 'canceled') && twilioCall) {
-            transcript = await fetchTranscript(twilioCall.parameters.CallSid);
+        if ((initialStatus === 'completed' || initialStatus === 'canceled') && callSid.startsWith('CA')) {
+             transcript = await fetchTranscript(callSid);
         }
 
         const endTime = Date.now();
@@ -379,6 +382,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const finalCallState: Call = {
             ...callToEnd,
+            id: callSid, // Ensure we have the final CallSid
             status: finalStatus,
             endTime,
             duration,
@@ -426,16 +430,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     activeTwilioCallRef.current = twilioCall;
 
     // Check if this incoming call is the agent's leg of an outgoing call
-    const isOutgoingLeg = state.activeCall?.status === 'ringing-outgoing';
+    const isOutgoingLeg = activeCallRef.current?.status === 'ringing-outgoing';
 
-    if (isOutgoingLeg && state.activeCall) {
+    if (isOutgoingLeg && activeCallRef.current) {
         console.log('Agent leg connected for outgoing call.');
         const permanentCall: Call = {
-            ...state.activeCall,
+            ...activeCallRef.current,
             id: twilioCall.parameters.CallSid,
             status: 'in-progress'
         };
-        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: state.activeCall.id, finalCall: permanentCall } });
+        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId: activeCallRef.current.id, finalCall: permanentCall } });
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
     } else {
         console.log('True incoming call from', twilioCall.parameters.From);
@@ -464,7 +468,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
     twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
 
-  }, [handleCallDisconnect, state.activeCall]);
+  }, [handleCallDisconnect]);
 
   const initializeTwilio = useCallback(async () => {
     const agent = currentAgentRef.current;
@@ -475,9 +479,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
     
     try {
+      // Request microphone permissions first
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
+
       const response = await fetch(`/api/twilio/token?identity=${agent.id}`);
       if (!response.ok) {
-        throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
+        throw new Error(`Failed to get a token. Status: ${response.status}.`);
       }
       const { token } = await response.json();
 
@@ -493,11 +501,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       device.on('ready', () => {
         console.log('Twilio Device is ready.');
         dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
-        dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
       });
 
       device.on('error', (error) => {
-        console.error('Twilio Device Error:', error);
+        console.error('Twilio Device Error:', error.message, error.cause);
         dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
         toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
         cleanupTwilio();
@@ -510,10 +517,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error: any) {
       console.error('Error initializing Twilio:', error);
+      const errorMessage = error.name === 'NotAllowedError' 
+        ? 'Microphone permissions denied. Please enable them in your browser settings.'
+        : error.message || 'Could not get a token from the server.';
+      
       dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+      dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: false } });
       toast({ 
         title: 'Initialization Failed', 
-        description: error.message || 'Could not get a token from the server.', 
+        description: errorMessage, 
         variant: 'destructive' 
       });
     }
