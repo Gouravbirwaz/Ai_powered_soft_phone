@@ -249,7 +249,7 @@ const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string) => v
 
 
 const ActiveCallView = () => {
-  const { state, endActiveCall, getActiveTwilioCall, closeSoftphone } = useCall();
+  const { state, endActiveCall, getActiveTwilioCall } = useCall();
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -285,7 +285,6 @@ const ActiveCallView = () => {
   
   const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
-  const isFetchingTranscript = activeCall.status === 'fetching-transcript';
 
   const handleHangup = () => {
     endActiveCall('canceled');
@@ -308,7 +307,7 @@ const ActiveCallView = () => {
     'failed': 'Call Failed',
     'canceled': 'Canceled',
     'voicemail-dropped': 'Voicemail Sent',
-    'fetching-transcript': 'Getting transcript...',
+    'fetching-transcript': 'Finalizing...',
   }
 
   const getStatusInfo = () => {
@@ -341,42 +340,33 @@ const ActiveCallView = () => {
     <>
       <div className="flex flex-col items-center justify-between p-4 h-full min-h-[400px]">
         <div className="text-center mt-8">
-          <p className="text-2xl font-semibold">{activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from}</p>
+          <p className="text-2xl font-semibold">{activeCall.contactName || (activeCall.direction === 'outgoing' ? activeCall.to : activeCall.from)}</p>
           <div className={cn("flex items-center justify-center gap-2 mt-2 font-mono", statusInfo.color)}>
             {statusInfo.icon}
             <span>{statusInfo.text}</span>
           </div>
         </div>
         
-        {!isFetchingTranscript ? (
-            <>
-                <div className="grid grid-cols-2 gap-4 my-8">
-                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
-                        {isMuted ? <MicOff /> : <Mic />}
-                        <span className="text-xs mt-1">Mute</span>
-                    </Button>
-                    <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
-                        <Grid3x3 />
-                        <span className="text-xs mt-1">Keypad</span>
-                    </Button>
-                </div>
+        <div className="grid grid-cols-2 gap-4 my-8">
+            <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
+                {isMuted ? <MicOff /> : <Mic />}
+                <span className="text-xs mt-1">Mute</span>
+            </Button>
+            <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
+                <Grid3x3 />
+                <span className="text-xs mt-1">Keypad</span>
+            </Button>
+        </div>
 
-                <Button
-                size="lg"
-                variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
-                className="w-full rounded-full h-14"
-                onClick={handleHangup}
-                >
-                {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-s5" />}
-                {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
-                </Button>
-            </>
-        ) : (
-            <div className='flex-1 flex items-center justify-center'>
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-        )}
-
+        <Button
+        size="lg"
+        variant={(isConnecting || isCallActive) ? 'destructive' : 'secondary'}
+        className="w-full rounded-full h-14"
+        onClick={handleHangup}
+        >
+        {(isConnecting || isCallActive) ? <PhoneOff className="mr-2 h-5 w-5" /> : <X className="mr-2 h-5 w-s5" />}
+        {(isConnecting || isCallActive) ? 'End Call' : 'Close'}
+        </Button>
       </div>
     </>
   );
@@ -391,7 +381,7 @@ export default function Softphone() {
   const constraintsRef = useRef(null);
   
   const handleCall = (number: string) => {
-    startOutgoingCall(number);
+    startOutgoingCall(number, number);
   };
   
   const handleToggle = async (open: boolean) => {
@@ -416,7 +406,13 @@ export default function Softphone() {
 
       const delimiter = lines[0].includes('\t') ? '\t' : ',';
       
-      const cleanHeader = (header: string) => header.trim().replace(/"/g, '');
+      const cleanHeader = (header: string) => {
+        let clean = header.trim().replace(/"/g, '');
+        // Convert to camelCase
+        clean = clean.replace(/[^a-zA-Z0-9]+(.)/g, (m, chr) => chr.toUpperCase());
+        return clean;
+      };
+
       const headers = lines[0].split(delimiter).map(cleanHeader);
 
       const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
@@ -426,7 +422,7 @@ export default function Softphone() {
         headers.forEach((header, index) => {
           let value = (values[index] || '').trim().replace(/"/g, '');
           
-          if (header === 'company_phone' || header === 'owner_phone_number' || header === 'phone') {
+          if (header === 'companyPhone') {
               if (/e/i.test(value)) {
                   const num = parseFloat(value);
                   if (!isNaN(num)) {
