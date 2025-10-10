@@ -68,25 +68,12 @@ export default function CallHistoryTable() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Call, direction: 'asc' | 'desc' } | null>({ key: 'startTime', direction: 'desc' });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
-  const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
   const { toast } = useToast();
 
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    const loadLeads = () => {
-      const storedLeads = localStorage.getItem('uploadedLeads');
-      if (storedLeads) {
-        try {
-            const leads = JSON.parse(storedLeads);
-            setAllLeads(leads);
-        } catch (error) {
-            console.error("Failed to parse leads from local storage", error);
-        }
-      }
-    }
-    loadLeads();
     return () => clearInterval(timer);
   }, []);
   
@@ -123,30 +110,36 @@ export default function CallHistoryTable() {
     }, 3000); // Reset after 3 seconds
   }
   
-  const getLeadForCall = (call: Call): Lead | undefined => {
-    if (!call.leadId) return undefined;
-    return allLeads.find(lead => lead.lead_id === call.leadId);
+  const constructLeadForAction = (call: Call): Lead | null => {
+    if (!call.contactName || !call.to) {
+        return null;
+    }
+    return {
+        lead_id: call.leadId || `call-${call.id}`,
+        company: call.contactName,
+        companyPhone: call.to,
+    };
   }
 
   const handleVoicemail = (call: Call) => {
-    const lead = getLeadForCall(call);
-    if (lead && openVoicemailDialogForLead) {
-      openVoicemailDialogForLead(lead);
+    const leadForAction = constructLeadForAction(call);
+    if (leadForAction && openVoicemailDialogForLead) {
+      openVoicemailDialogForLead(leadForAction);
       showActionFeedback(call.id, 'voicemail');
     } else {
-      toast({ title: "Cannot Send Voicemail", description: "Lead information for this call could not be found.", variant: 'destructive' });
+      toast({ title: "Cannot Send Voicemail", description: "Contact name or phone number for this call could not be found.", variant: 'destructive' });
     }
   }
 
   const handleEmail = async (call: Call) => {
-    const lead = getLeadForCall(call);
-    if (lead && sendMissedCallEmail) {
-      const success = await sendMissedCallEmail(lead);
+    const leadForAction = constructLeadForAction(call);
+    if (leadForAction && sendMissedCallEmail) {
+      const success = await sendMissedCallEmail(leadForAction);
       if (success) {
         showActionFeedback(call.id, 'email');
       }
     } else {
-      toast({ title: "Cannot Send Email", description: "Lead information for this call could not be found.", variant: 'destructive' });
+      toast({ title: "Cannot Send Email", description: "Contact name or phone number for this call could not be found.", variant: 'destructive' });
     }
   }
 

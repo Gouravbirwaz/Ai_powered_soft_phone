@@ -486,7 +486,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.currentAgent, state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
 
-  const startOutgoingCall = useCallback(async (to: string, contactName: string, leadId?: string) => {
+  const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     if (!state.currentAgent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
         toast({
             title: 'Softphone Not Ready',
@@ -700,7 +700,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       id: `email-${Date.now()}`,
       direction: 'outgoing',
       from: agent.email,
-      to: 'unknown@example.com', // No email in this lead type
+      to: lead.companyPhone || 'N/A', // Store phone as recipient for consistency
       startTime: Date.now(),
       duration: 0,
       status: 'emailed',
@@ -766,3 +766,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
