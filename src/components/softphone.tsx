@@ -118,6 +118,18 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
     const [showLeadsDialog, setShowLeadsDialog] = useState(false);
     const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
     
+    // Fisher-Yates shuffle algorithm
+    const shuffleArray = (array: any[]) => {
+        let currentIndex = array.length, randomIndex;
+        while (currentIndex !== 0) {
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex--;
+            [array[currentIndex], array[randomIndex]] = [
+                array[randomIndex], array[currentIndex]];
+        }
+        return array;
+    }
+
     const handleFetchLeads = async () => {
         if (state.activeCall) {
             toast({ title: 'Finish current call first', variant: 'destructive' });
@@ -126,7 +138,7 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
         setIsFetching(true);
         const leads = await fetchLeads();
         if(leads && leads.length > 0) {
-            setFetchedLeads(leads);
+            setFetchedLeads(shuffleArray(leads));
             setShowLeadsDialog(true);
         } else {
             toast({ title: 'No leads available', description: 'Could not fetch any leads at this time.', variant: 'destructive' });

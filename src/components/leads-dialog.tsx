@@ -21,12 +21,15 @@ import { Button } from '@/components/ui/button';
 import { useCall } from '@/contexts/call-context';
 import type { Lead } from '@/lib/types';
 import { Badge } from './ui/badge';
-import { Mail, Phone, Voicemail } from 'lucide-react';
+import { Check, Mail, Phone, Voicemail } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { formatRelative } from 'date-fns';
 import { useEffect, useState, useMemo } from 'react';
+import { cn } from '@/lib/utils';
 
 const LEADS_PER_PAGE = 5;
+
+type ActionStatus = 'idle' | 'success';
 
 export default function LeadsDialog({
   open,
@@ -41,6 +44,7 @@ export default function LeadsDialog({
   const { allCallHistory, activeCall } = state;
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentPage, setCurrentPage] = useState(1);
+  const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
 
   useEffect(() => {
     // Update current time every minute to keep relative times fresh
@@ -51,6 +55,8 @@ export default function LeadsDialog({
   useEffect(() => {
     // Reset to first page when dialog is opened or leads change
     setCurrentPage(1);
+    // Also reset action feedback
+    setActionFeedback({});
   }, [open, leads]);
 
   const totalPages = Math.ceil(leads.length / LEADS_PER_PAGE);
@@ -60,6 +66,19 @@ export default function LeadsDialog({
     const endIndex = startIndex + LEADS_PER_PAGE;
     return leads.slice(startIndex, endIndex);
   }, [leads, currentPage]);
+
+  const showActionFeedback = (leadId: string, action: 'email' | 'voicemail') => {
+      setActionFeedback(prev => ({
+          ...prev,
+          [leadId]: { ...prev[leadId], [action]: 'success' }
+      }));
+      setTimeout(() => {
+          setActionFeedback(prev => ({
+              ...prev,
+              [leadId]: { ...prev[leadId], [action]: 'idle' }
+          }));
+      }, 3000); // Reset after 3 seconds
+  }
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
@@ -72,14 +91,17 @@ export default function LeadsDialog({
   const handleVoicemail = (lead: Lead) => {
     if (openVoicemailDialogForLead) {
       openVoicemailDialogForLead(lead);
+      showActionFeedback(lead.lead_id, 'voicemail');
       onOpenChange(false);
     }
   };
 
-  const handleEmail = (lead: Lead) => {
+  const handleEmail = async (lead: Lead) => {
     if (sendMissedCallEmail) {
-      sendMissedCallEmail(lead);
-      // We no longer open the mailto link, just trigger the backend API
+      const success = await sendMissedCallEmail(lead);
+      if (success) {
+        showActionFeedback(lead.lead_id, 'email');
+      }
     }
   };
 
@@ -121,6 +143,23 @@ export default function LeadsDialog({
   const isActionable = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
     return !!phoneNumber && !activeCall;
+  }
+
+  const ActionButton = ({ lead, action, icon: Icon, label, onClick, disabled }: { lead: Lead, action: 'email' | 'voicemail', icon: React.ElementType, label: string, onClick: () => void, disabled: boolean }) => {
+    const feedback = actionFeedback[lead.lead_id]?.[action];
+    
+    return (
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={onClick}
+            disabled={disabled || feedback === 'success'}
+            className={cn(feedback === 'success' && 'bg-green-100 dark:bg-green-900 border-green-500')}
+        >
+            {feedback === 'success' ? <Check className="mr-2 h-4 w-4 text-green-500" /> : <Icon className="mr-2 h-4 w-4" />}
+            {label}
+        </Button>
+    )
   }
 
   return (
@@ -168,24 +207,22 @@ export default function LeadsDialog({
                                 <Phone className="mr-2 h-4 w-4" />
                                 Call
                             </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
+                            <ActionButton
+                                lead={lead}
+                                action="voicemail"
+                                icon={Voicemail}
+                                label="Voicemail"
                                 onClick={() => handleVoicemail(lead)}
                                 disabled={!isActionable(lead)}
-                            >
-                                <Voicemail className="mr-2 h-4 w-4" />
-                                Voicemail
-                            </Button>
-                             <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!lead.owner_email}
+                            />
+                             <ActionButton
+                                lead={lead}
+                                action="email"
+                                icon={Mail}
+                                label="Email"
                                 onClick={() => handleEmail(lead)}
-                            >
-                                <Mail className="mr-2 h-4 w-4" />
-                                Email
-                            </Button>
+                                disabled={!lead.owner_email}
+                            />
                           </div>
                         </TableCell>
                     </TableRow>
