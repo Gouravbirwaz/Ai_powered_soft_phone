@@ -639,60 +639,56 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead } });
   }, []);
 
-  const sendVoicemail = useCallback((lead: Lead, script: string) => {
-    const agent = currentAgentRef.current;
+  const sendVoicemail = useCallback(async (lead: Lead, script: string): Promise<boolean> => {
     const phoneNumber = lead.companyPhone;
 
-    if (!agent || !phoneNumber) {
+    if (!phoneNumber) {
       toast({
         title: 'Error',
-        description: 'Agent or lead phone number is missing.',
+        description: 'Lead phone number is missing.',
         variant: 'destructive',
       });
-      return;
+      return false;
     }
 
-    const { id: toastId, update: updateToast } = toast({
-      title: 'Sending Voicemail...',
-      description: `Sending to ${phoneNumber}`,
-    });
+    try {
+      const response = await fetch('/api/twilio/send_voicemail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneNumber, script }),
+      });
 
-    (async () => {
-      try {
-        const response = await fetch('/api/twilio/send_voicemail', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: phoneNumber, script }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.message || `Failed to send voicemail. Status: ${response.status}`);
-        }
-
-        const resultData = await response.json();
-
-        if (resultData.call_log) {
-          const finalLog = mapCallLog({
-            ...resultData.call_log,
-            action_taken: 'voicemail',
-          });
-          dispatch({ type: 'ADD_TO_HISTORY', payload: { call: finalLog } });
-        }
-
-        updateToast({
-          title: 'Voicemail Sent',
-          description: `Voicemail to ${phoneNumber} was sent successfully.`,
-        });
-      } catch (error: any) {
-        console.error('Error sending voicemail:', error);
-        updateToast({
-          title: 'Voicemail Failed',
-          description: error.message,
-          variant: 'destructive',
-        });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || `Failed to send voicemail. Status: ${response.status}`);
       }
-    })();
+
+      const resultData = await response.json();
+
+      if (resultData.call_log) {
+        const finalLog = mapCallLog({
+          ...resultData.call_log,
+          action_taken: 'voicemail',
+          contact_name: lead.company,
+        });
+        dispatch({ type: 'ADD_TO_HISTORY', payload: { call: finalLog } });
+      }
+      
+      toast({
+        title: 'Voicemail Sent',
+        description: `Voicemail to ${phoneNumber} was sent successfully.`,
+      });
+      return true;
+
+    } catch (error: any) {
+      console.error('Error sending voicemail:', error);
+      toast({
+        title: 'Voicemail Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+      return false;
+    }
   }, [toast, mapCallLog]);
   
   const sendMissedCallEmail = useCallback(async (lead: Lead) => {
@@ -757,5 +753,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    

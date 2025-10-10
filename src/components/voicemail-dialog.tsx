@@ -34,7 +34,8 @@ export default function VoicemailDialog() {
   useEffect(() => {
     // Reset script if the target changes, including the lead's name.
     if (voicemailLeadTarget) {
-      setScript(DEFAULT_VOICEMAIL_SCRIPT.replace('Hello,', `Hello ${voicemailLeadTarget?.company || ''},`));
+      const modifiedScript = DEFAULT_VOICEMAIL_SCRIPT.replace('Hello,', `Hello ${voicemailLeadTarget?.company || ''},`);
+      setScript(modifiedScript);
     } else {
       setScript(DEFAULT_VOICEMAIL_SCRIPT);
     }
@@ -46,7 +47,7 @@ export default function VoicemailDialog() {
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!voicemailLeadTarget || !script) {
       toast({
         title: 'Error',
@@ -62,9 +63,13 @@ export default function VoicemailDialog() {
         return;
     }
     
-    // Optimistically close dialog and let the context handle the background task
-    sendVoicemail(voicemailLeadTarget, script);
-    handleClose();
+    setIsSending(true);
+    const success = await sendVoicemail(voicemailLeadTarget, script);
+    setIsSending(false);
+
+    if (success) {
+      handleClose();
+    }
   };
 
   if (!voicemailLeadTarget) return null;

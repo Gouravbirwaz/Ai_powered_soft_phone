@@ -112,14 +112,15 @@ export default function CallHistoryTable() {
   
   const constructLeadForAction = (call: Call): Lead | null => {
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
-    
+    const name = call.contactName || phoneNumber;
+
     if (!phoneNumber) {
-      return null;
+        return null;
     }
 
     return {
         lead_id: call.leadId || `call-${call.id}`,
-        company: call.contactName || phoneNumber,
+        company: name,
         companyPhone: phoneNumber,
     };
   }
@@ -289,6 +290,7 @@ export default function CallHistoryTable() {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
                 const contactIdentifier = call.direction === 'incoming' ? call.from : call.to;
+                const displayName = call.contactName || contactIdentifier;
                 
                 return (
                   <TableRow key={call.id}>
@@ -299,11 +301,11 @@ export default function CallHistoryTable() {
                       <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={call.avatarUrl} alt="Contact" data-ai-hint="person face" />
-                          <AvatarFallback>{(call.contactName || contactIdentifier)?.charAt(0) || '?'}</AvatarFallback>
+                          <AvatarFallback>{displayName?.charAt(0) || '?'}</AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{call.contactName || contactIdentifier}</div>
-                          <p className="text-sm text-muted-foreground">{call.direction === 'outgoing' ? call.to : call.from}</p>
+                          <div className="font-medium">{displayName}</div>
+                          <p className="text-sm text-muted-foreground">{contactIdentifier}</p>
                         </div>
                       </div>
                     </TableCell>
