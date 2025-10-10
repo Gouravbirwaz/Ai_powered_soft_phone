@@ -513,7 +513,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         if (!backendResponse.ok) {
             const error = await backendResponse.json();
-            throw new Error(error.error || error.description || 'Backend failed to initiate call.');
+            throw new Error(error.description || error.error || 'Backend failed to initiate call.');
         }
 
         const { conference, customer_call_sid, lead_id: returnedLeadId } = await backendResponse.json();
@@ -649,7 +649,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const agent = currentAgentRef.current;
-    const phoneNumber = lead.owner_phone_number || lead.phone || lead.company_phone;
+    const phoneNumber = lead.owner_phone_number || lead.company_phone;
 
     if (!agent || !phoneNumber) {
         toast({ title: 'Error', description: 'Agent or lead phone number is missing.', variant: 'destructive' });
@@ -784,3 +784,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
