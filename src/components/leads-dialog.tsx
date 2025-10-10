@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { useCall } from '@/contexts/call-context';
 import type { Lead } from '@/lib/types';
 import { Badge } from './ui/badge';
-import { Check, Mail, Phone, Voicemail } from 'lucide-react';
+import { Check, Mail, Phone, Voicemail, RefreshCw } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { formatRelative } from 'date-fns';
 import { useEffect, useState, useMemo } from 'react';
@@ -35,10 +35,12 @@ export default function LeadsDialog({
   open,
   onOpenChange,
   leads,
+  onRefreshLeads,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   leads: Lead[];
+  onRefreshLeads: () => void;
 }) {
   const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
   const { allCallHistory, activeCall } = state;
@@ -104,6 +106,11 @@ export default function LeadsDialog({
       }
     }
   };
+  
+  const handleRefresh = () => {
+    onOpenChange(false);
+    onRefreshLeads();
+  }
 
   const getLeadStatus = (lead: Lead) => {
     const phoneNumber = lead.phone || lead.company_phone;
@@ -240,8 +247,16 @@ export default function LeadsDialog({
             </TableBody>
           </Table>
         </div>
-        <DialogFooter className="pt-4 border-t">
-          <div className="flex w-full items-center justify-end space-x-2">
+        <DialogFooter className="pt-4 border-t flex justify-between w-full">
+          <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Upload New CSV
+            </Button>
+          <div className="flex items-center justify-end space-x-2">
             <span className="text-sm text-muted-foreground">
               Page {currentPage} of {totalPages > 0 ? totalPages : 1}
             </span>

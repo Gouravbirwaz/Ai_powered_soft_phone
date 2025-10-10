@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Loader2,
   X,
+  RefreshCw,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -111,93 +112,19 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 };
 
 
-const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
+const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLeads: () => void; }) => {
     const { state } = useCall();
-    const { toast } = useToast();
     const [isProcessing, setIsProcessing] = useState(false);
-    const [showLeadsDialog, setShowLeadsDialog] = useState(false);
-    const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const parseCSV = (text: string): Lead[] => {
-      const rows = text.split('\n').filter(row => row.trim() !== '');
-      if (rows.length < 2) return [];
-
-      const headers = rows[0].split(',').map(h => h.trim());
-      const leadData = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim());
-        const leadObject: { [key: string]: any } = {};
-        headers.forEach((header, index) => {
-          leadObject[header] = values[index];
-        });
-        return leadObject as Lead;
-      });
-      return leadData;
-    }
-
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        setIsProcessing(true);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const text = e.target?.result as string;
-          try {
-            const parsedLeads = parseCSV(text);
-            localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
-            setFetchedLeads(parsedLeads);
-            setShowLeadsDialog(true);
-            toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
-          } catch (error) {
-            toast({ title: 'Upload Failed', description: 'Could not parse the CSV file.', variant: 'destructive' });
-          } finally {
-            setIsProcessing(false);
-          }
-        };
-        reader.readAsText(file);
-      }
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    };
-    
-    // Fisher-Yates shuffle algorithm
-    const shuffleArray = (array: any[]) => {
-        let currentIndex = array.length, randomIndex;
-        while (currentIndex !== 0) {
-            randomIndex = Math.floor(Math.random() * currentIndex);
-            currentIndex--;
-            [array[currentIndex], array[randomIndex]] = [
-                array[randomIndex], array[currentIndex]];
-        }
-        return array;
-    }
-
-    const handleUploadLeads = () => {
+    const handleUploadClick = () => {
         if (state.activeCall) {
             toast({ title: 'Finish current call first', variant: 'destructive' });
             return;
         }
-
-        const storedLeads = localStorage.getItem('uploadedLeads');
-        if (storedLeads) {
-            try {
-                const leads = JSON.parse(storedLeads);
-                setFetchedLeads(shuffleArray(leads));
-                setShowLeadsDialog(true);
-            } catch {
-                localStorage.removeItem('uploadedLeads');
-                fileInputRef.current?.click();
-            }
-        } else {
-            fileInputRef.current?.click();
-        }
-    }
-
+        onUploadLeads();
+    };
 
   return (
-      <>
       <div className="p-4">
           <Card>
               <CardContent className="p-4">
@@ -210,7 +137,7 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleUploadLeads} disabled={isProcessing || !!state.activeCall}>
+                          <Button variant="secondary" onClick={handleUploadClick} disabled={isProcessing || !!state.activeCall}>
                               {isProcessing ? <Loader2 className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
                               Upload Leads
                           </Button>
@@ -219,26 +146,78 @@ const ChoiceView = ({ onDial }: { onDial: () => void; }) => {
               </CardContent>
           </Card>
       </div>
-       <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        className="hidden"
-        accept=".csv"
-      />
-      <LeadsDialog 
-        open={showLeadsDialog}
-        onOpenChange={setShowLeadsDialog}
-        leads={fetchedLeads}
-      />
-      </>
   );
 };
 
 
-const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
+const DialerContainer = ({ onCall, onUploadLeads, onRefreshLeads }: { onCall: (number: string) => void; onUploadLeads: () => void; onRefreshLeads: () => void; }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
+  const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showLeadsDialog, setShowLeadsDialog] = useState(false);
+  const [fetchedLeads, setFetchedLeads] = useState<Lead[]>([]);
+  
+  const handleOpenLeads = () => {
+    if (state.activeCall) {
+        toast({ title: 'Finish current call first', variant: 'destructive' });
+        return;
+    }
+
+    const storedLeads = localStorage.getItem('uploadedLeads');
+    if (storedLeads) {
+        try {
+            const leads = JSON.parse(storedLeads);
+            // Fisher-Yates shuffle algorithm
+            const shuffleArray = (array: any[]) => {
+                let currentIndex = array.length, randomIndex;
+                while (currentIndex !== 0) {
+                    randomIndex = Math.floor(Math.random() * currentIndex);
+                    currentIndex--;
+                    [array[currentIndex], array[randomIndex]] = [
+                        array[randomIndex], array[currentIndex]];
+                }
+                return array;
+            }
+            setFetchedLeads(shuffleArray(leads));
+            setShowLeadsDialog(true);
+        } catch {
+            localStorage.removeItem('uploadedLeads');
+            onUploadLeads();
+        }
+    } else {
+        onUploadLeads();
+    }
+  }
+  
+  useEffect(() => {
+    // This effect listens for the custom event to reopen the dialog
+    const handleLeadsUpdated = () => {
+        const storedLeads = localStorage.getItem('uploadedLeads');
+        if (storedLeads) {
+            try {
+                const leads = JSON.parse(storedLeads);
+                 const shuffleArray = (array: any[]) => {
+                    let currentIndex = array.length, randomIndex;
+                    while (currentIndex !== 0) {
+                        randomIndex = Math.floor(Math.random() * currentIndex);
+                        currentIndex--;
+                        [array[currentIndex], array[randomIndex]] = [
+                            array[randomIndex], array[currentIndex]];
+                    }
+                    return array;
+                }
+                setFetchedLeads(shuffleArray(leads));
+                setShowLeadsDialog(true); // Re-open the dialog
+            } catch(e) { console.error(e) }
+        }
+    };
+
+    window.addEventListener('leadsUpdated', handleLeadsUpdated);
+    return () => {
+        window.removeEventListener('leadsUpdated', handleLeadsUpdated);
+    };
+  }, []);
 
   if (state.twilioDeviceStatus === 'error') {
       return (
@@ -255,6 +234,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
   }
 
   return (
+    <>
     <AnimatePresence mode="wait">
       {view === 'choice' ? (
         <motion.div
@@ -264,7 +244,7 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
           exit={{ opacity: 0, x: 50 }}
           transition={{ duration: 0.2 }}
         >
-          <ChoiceView onDial={() => setView('dialpad')} />
+          <ChoiceView onDial={() => setView('dialpad')} onUploadLeads={handleOpenLeads} />
         </motion.div>
       ) : (
         <motion.div
@@ -278,6 +258,13 @@ const DialerContainer = ({ onCall }: { onCall: (number: string) => void }) => {
         </motion.div>
       )}
     </AnimatePresence>
+    <LeadsDialog 
+        open={showLeadsDialog}
+        onOpenChange={setShowLeadsDialog}
+        leads={fetchedLeads}
+        onRefreshLeads={onRefreshLeads}
+      />
+    </>
   );
 };
 
@@ -420,9 +407,11 @@ const ActiveCallView = () => {
 export default function Softphone() {
   const { state, dispatch, startOutgoingCall, initializeTwilio } = useCall();
   const { toast } = useToast();
-  const { activeCall, softphoneOpen, audioPermissionsGranted, twilioDeviceStatus } = state;
+  const { activeCall, softphoneOpen, twilioDeviceStatus } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const handleCall = (number: string) => {
     startOutgoingCall(number);
@@ -430,11 +419,8 @@ export default function Softphone() {
   
   const handleToggle = async (open: boolean) => {
     if (open && twilioDeviceStatus === 'uninitialized') {
-        // If we are opening and the device is not set up, try to init.
-        // In the disabled state, this will just show a toast.
         initializeTwilio();
     }
-    
     dispatch({ type: 'TOGGLE_SOFTPHONE' });
   }
 
@@ -445,6 +431,57 @@ export default function Softphone() {
   };
   
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
+
+  const parseCSV = (text: string): Lead[] => {
+      const rows = text.split('\n').filter(row => row.trim() !== '');
+      if (rows.length < 2) return [];
+
+      const headers = rows[0].split(',').map(h => h.trim());
+      const leadData = rows.slice(1).map(row => {
+        const values = row.split(',').map(v => v.trim());
+        const leadObject: { [key: string]: any } = {};
+        headers.forEach((header, index) => {
+          leadObject[header] = values[index];
+        });
+        return leadObject as Lead;
+      });
+      return leadData;
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        setIsProcessing(true);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          try {
+            const parsedLeads = parseCSV(text);
+            localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
+            
+            // Dispatch a custom event to notify other components
+            window.dispatchEvent(new CustomEvent('leadsUpdated'));
+
+            toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+
+          } catch (error) {
+            toast({ title: 'Upload Failed', description: 'Could not parse the CSV file.', variant: 'destructive' });
+          } finally {
+            setIsProcessing(false);
+          }
+        };
+        reader.readAsText(file);
+      }
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  }
+
 
   return (
     <div ref={constraintsRef} className="fixed inset-0 pointer-events-none">
@@ -494,7 +531,7 @@ export default function Softphone() {
                         <ActiveCallView />
                       </motion.div>
                     ) : (
-                       <DialerContainer onCall={handleCall} />
+                       <DialerContainer onCall={handleCall} onUploadLeads={triggerFileUpload} onRefreshLeads={triggerFileUpload} />
                     )}
                   </AnimatePresence>
                 </CardContent>
@@ -502,6 +539,13 @@ export default function Softphone() {
           </PopoverContent>
         </Popover>
       </motion.div>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+        accept=".csv"
+      />
     </div>
   );
 }

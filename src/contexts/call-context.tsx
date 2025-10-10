@@ -230,11 +230,21 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
     const agentId = call.agentId || currentAgentRef.current?.id;
     
+    if (!agentId) {
+        console.error("Cannot create or update call log on backend: Agent ID is missing.", call);
+        toast({
+            title: 'Logging Error',
+            description: 'Cannot save call details: agent information is missing.',
+            variant: 'destructive',
+        });
+        return null;
+    }
+
     try {
         const body: { [key: string]: any } = {
             call_log_id: call.id.startsWith('temp-') ? undefined : call.id,
             lead_id: call.leadId,
-            agent_id: agentId ? parseInt(agentId, 10) : undefined,
+            agent_id: parseInt(agentId, 10),
             phone_number: phoneNumber,
             notes: call.notes,
             summary: call.summary,
@@ -267,8 +277,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         console.log('Call log created/updated successfully:', responseData.call_log);
         
         const returnedLog = responseData.call_log;
-        // The backend does not store action_taken, so we must manually add it back
-        // to the object that the frontend will use.
         if (returnedLog) {
             returnedLog.action_taken = call.action_taken;
         }
@@ -666,7 +674,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { call_log } = await response.json();
         
-        // Ensure the action_taken is set for the UI
         const finalLog = { ...mapCallLog(call_log), action_taken: 'voicemail' as ActionTaken };
         
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalLog } });
@@ -775,5 +782,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
