@@ -154,7 +154,7 @@ export default function LeadsDialog({
             size="sm"
             onClick={onClick}
             disabled={disabled || feedback === 'success'}
-            className={cn(feedback === 'success' && 'bg-green-100 dark:bg-green-900 border-green-500')}
+            className={cn("whitespace-nowrap", feedback === 'success' && 'bg-green-100 dark:bg-green-900 border-green-500')}
         >
             {feedback === 'success' ? <Check className="mr-2 h-4 w-4 text-green-500" /> : <Icon className="mr-2 h-4 w-4" />}
             {label}
@@ -171,75 +171,76 @@ export default function LeadsDialog({
             Select a lead from the list to initiate an action.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 relative py-2 min-h-[400px]">
-            <ScrollArea className="absolute inset-0">
-            <Table>
-                <TableHeader>
-                <TableRow>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-                </TableHeader>
-                <TableBody>
-                {paginatedLeads.length > 0 ? (
-                    paginatedLeads.map((lead) => (
-                    <TableRow key={lead.lead_id} className="h-16">
-                        <TableCell>
-                            <div className="font-medium">{lead.company}</div>
-                            <div className="text-sm text-muted-foreground">{lead.industry}</div>
-                        </TableCell>
-                        <TableCell>{lead.owner_first_name} {lead.owner_last_name}</TableCell>
-                        <TableCell>{lead.phone || lead.company_phone}</TableCell>
-                        <TableCell>
-                            {getLeadStatus(lead)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className='flex gap-2 justify-end'>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleCall(lead)}
-                                disabled={!isActionable(lead)}
-                            >
-                                <Phone className="mr-2 h-4 w-4" />
-                                Call
-                            </Button>
-                            <ActionButton
-                                lead={lead}
-                                action="voicemail"
-                                icon={Voicemail}
-                                label="Voicemail"
-                                onClick={() => handleVoicemail(lead)}
-                                disabled={!isActionable(lead)}
-                            />
-                             <ActionButton
-                                lead={lead}
-                                action="email"
-                                icon={Mail}
-                                label="Email"
-                                onClick={() => handleEmail(lead)}
-                                disabled={!lead.owner_email}
-                            />
-                          </div>
-                        </TableCell>
-                    </TableRow>
-                    ))
-                ) : (
-                    <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                        No leads found.
+        <div className="flex-1 overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Company</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedLeads.length > 0 ? (
+                paginatedLeads.map((lead) => (
+                  <TableRow key={lead.lead_id} className="h-16">
+                    <TableCell>
+                      <div className="font-medium">{lead.company}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {lead.industry}
+                      </div>
                     </TableCell>
-                    </TableRow>
-                )}
-                </TableBody>
-            </Table>
-            </ScrollArea>
+                    <TableCell>
+                      {lead.owner_first_name} {lead.owner_last_name}
+                    </TableCell>
+                    <TableCell>{lead.phone || lead.company_phone}</TableCell>
+                    <TableCell>{getLeadStatus(lead)}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCall(lead)}
+                          disabled={!isActionable(lead)}
+                          className="whitespace-nowrap"
+                        >
+                          <Phone className="mr-2 h-4 w-4" />
+                          Call
+                        </Button>
+                        <ActionButton
+                          lead={lead}
+                          action="voicemail"
+                          icon={Voicemail}
+                          label="Voicemail"
+                          onClick={() => handleVoicemail(lead)}
+                          disabled={!isActionable(lead)}
+                        />
+                        <ActionButton
+                          lead={lead}
+                          action="email"
+                          icon={Mail}
+                          label="Email"
+                          onClick={() => handleEmail(lead)}
+                          disabled={!lead.owner_email}
+                        />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    No leads found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
-        <DialogFooter>
-          <div className="flex items-center justify-end space-x-2">
+        <DialogFooter className="pt-4 border-t">
+          <div className="flex w-full items-center justify-end space-x-2">
             <span className="text-sm text-muted-foreground">
               Page {currentPage} of {totalPages > 0 ? totalPages : 1}
             </span>
@@ -254,7 +255,9 @@ export default function LeadsDialog({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              onClick={() =>
+                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+              }
               disabled={currentPage === totalPages || totalPages === 0}
             >
               Next
