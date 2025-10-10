@@ -92,12 +92,16 @@ export default function LeadsDialog({
   }
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
-    if (phoneNumber && /^\d+$/.test(phoneNumber.replace(/[\s()-]+/g, ''))) {
+    const phoneNumber = lead.owner_phone_number;
+    
+    // Use a regex to validate if it's a plausible phone number and not a URL or email
+    const phoneRegex = /^[+\d\s()-]+$/;
+
+    if (phoneNumber && phoneRegex.test(phoneNumber)) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
     } else {
-        toast({ title: "Invalid Phone Number", description: "Cannot initiate call without a valid phone number.", variant: "destructive" });
+        toast({ title: "Invalid or Missing Phone Number", description: "The 'owner_phone_number' for this lead is not a valid phone number. Cannot initiate call.", variant: "destructive" });
     }
   };
 
@@ -124,7 +128,7 @@ export default function LeadsDialog({
   }
 
   const getLeadStatus = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
+    const phoneNumber = lead.owner_phone_number;
     if (activeCall?.to === phoneNumber) {
       return (
         <div className="flex flex-col items-start justify-center">
@@ -144,7 +148,7 @@ export default function LeadsDialog({
             <div className="flex flex-col items-start justify-center">
                 <Badge variant="secondary">Contacted</Badge>
                 <p className="text-xs text-muted-foreground mt-1">
-                    {formatRelative(new Date(lastInteraction.startTime), currentTime)}
+                    {lastInteraction.startTime ? formatRelative(new Date(lastInteraction.startTime), currentTime) : ''}
                 </p>
             </div>
         );
@@ -158,7 +162,7 @@ export default function LeadsDialog({
     );
   };
   
-  const isActionable = (lead: Lead) => {
+  const isActionable = () => {
     return !state.activeCall;
   }
 
@@ -202,7 +206,7 @@ export default function LeadsDialog({
             <TableBody>
               {paginatedLeads.length > 0 ? (
                 paginatedLeads.map((lead) => {
-                  const leadIsActionable = isActionable(lead);
+                  const leadIsActionable = isActionable();
                   return (
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
