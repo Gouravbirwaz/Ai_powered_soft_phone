@@ -823,9 +823,3 @@ export const useCall = () => {
     sendMissedCallEmail: (lead: Lead) => Promise<boolean>;
   };
 };
-
-
-    
-
-    
-
