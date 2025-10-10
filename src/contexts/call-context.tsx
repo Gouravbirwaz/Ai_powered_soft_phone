@@ -234,7 +234,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         if (call.leadId || call.agentId) { // Only show toast if it seems like it was intended to be logged
             toast({
                 title: 'Logging Skipped',
-                description: 'Could not save call to server because critical data was missing.',
+                description: 'Could not save to server because critical data was missing.',
                 variant: 'default',
             });
         }
@@ -833,5 +833,7 @@ export const useCall = () => {
   };
 };
 
+
+    
 
     
