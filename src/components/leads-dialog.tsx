@@ -83,7 +83,7 @@ export default function LeadsDialog({
   }
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.owner?.phone || lead.company?.phone;
+    const phoneNumber = lead.company.phone;
     if (phoneNumber) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
@@ -113,7 +113,7 @@ export default function LeadsDialog({
   }
 
   const getLeadStatus = (lead: Lead) => {
-    const phoneNumber = lead.owner?.phone || lead.company?.phone;
+    const phoneNumber = lead.company.phone;
     if (activeCall?.to === phoneNumber) {
       return (
         <div className="flex flex-col items-start justify-center">
@@ -148,7 +148,7 @@ export default function LeadsDialog({
   };
   
   const isActionable = (lead: Lead) => {
-    const phoneNumber = lead.owner?.phone || lead.company?.phone;
+    const phoneNumber = lead.company.phone;
     return !!phoneNumber && !activeCall;
   }
 
@@ -182,7 +182,7 @@ export default function LeadsDialog({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Company / Lead ID</TableHead>
+                <TableHead>Company</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
@@ -194,16 +194,16 @@ export default function LeadsDialog({
                 paginatedLeads.map((lead) => (
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
-                      <div className="font-medium">{lead.company?.name}</div>
+                      <div className="font-medium">{lead.company.name}</div>
                       <div className="text-sm text-muted-foreground">
                         {lead.lead_id}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>{lead.owner?.first_name} {lead.owner?.last_name}</div>
-                      <div className="text-sm text-muted-foreground">{lead.owner?.email}</div>
+                      <div>{lead.owner?.first_name || 'N/A'} {lead.owner?.last_name}</div>
+                      <div className="text-sm text-muted-foreground">{lead.owner?.email || lead.company.website}</div>
                     </TableCell>
-                    <TableCell>{lead.owner?.phone || lead.company?.phone}</TableCell>
+                    <TableCell>{lead.company.phone}</TableCell>
                     <TableCell>{getLeadStatus(lead)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">

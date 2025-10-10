@@ -46,43 +46,43 @@ export interface Address {
 }
 
 export interface Company {
-  name: string;
-  website: string;
-  industry: string;
-  product_category: string;
-  business_type: string;
-  employees: number;
-  revenue: number;
-  year_founded: number;
-  bbb_rating: string;
-  address: Address;
-  phone: string;
-  linkedin: string;
+    name: string;
+    website: string;
+    industry: string;
+    product_category: string;
+    business_type: string;
+    employees: number;
+    revenue: number;
+    year_founded: number;
+    bbb_rating: string;
+    phone: string;
+    linkedin: string;
+    address: Address;
 }
 
 export interface Owner {
-  first_name: string;
-  last_name: string;
-  title: string;
-  linkedin: string;
-  phone: string;
-  email: string;
+    first_name: string;
+    last_name: string;
+    title: string;
+    linkedin: string;
+    phone: string;
+    email: string;
 }
 
 export interface LeadInfo {
-  phone: string;
-  source: string;
-  status: string;
-  is_edited: boolean;
+    phone: string;
+    source: string;
+    status: string;
+    is_edited: boolean;
 }
 
 export interface Lead {
   lead_id: string;
-  company_id: string;
-  search_keywords: string[];
+  company_id?: string;
+  search_keywords?: string[];
   company: Company;
   owner: Owner;
-  lead: LeadInfo;
+  lead?: LeadInfo;
 }
 
 
@@ -93,5 +93,3 @@ export interface Agent {
     phone: string;
     status: string;
 }
-
-    

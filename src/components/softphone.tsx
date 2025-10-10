@@ -436,67 +436,60 @@ export default function Softphone() {
     try {
         const lines = text.trim().split('\n');
         if (lines.length < 2) return [];
+        
+        // Special character cleanup for header
+        const headerLine = lines[0].trim().replace(/\r/g, '');
+        const headers = headerLine.split(',').map(h => h.trim());
 
-        const headers = lines[0].split(',').map(h => h.trim());
-        const leads: Lead[] = [];
-
-        for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim());
-            if (values.length !== headers.length) continue;
-
-            const entry: any = {};
-            headers.forEach((header, index) => {
-                entry[header] = values[index];
+        const leads: Lead[] = lines.slice(1).map((line, index) => {
+            const values = line.split(',');
+            const rowData: {[key: string]: string} = {};
+            headers.forEach((header, i) => {
+                rowData[header] = values[i] ? values[i].trim() : '';
             });
 
-            // Reconstruct the nested object
             const lead: Lead = {
-                lead_id: entry.lead_id,
-                company_id: entry.company_id,
-                search_keywords: entry.search_keywords?.split(';') || [],
+                lead_id: `lead_${Date.now()}_${index}`,
                 company: {
-                    name: entry.company_name,
-                    website: entry.company_website,
-                    industry: entry.company_industry,
-                    product_category: entry.company_product_category,
-                    business_type: entry.company_business_type,
-                    employees: parseInt(entry.company_employees, 10),
-                    revenue: parseInt(entry.company_revenue, 10),
-                    year_founded: parseInt(entry.company_year_founded, 10),
-                    bbb_rating: entry.company_bbb_rating,
-                    phone: entry.company_phone,
-                    linkedin: entry.company_linkedin,
+                    name: rowData.company || '',
+                    website: rowData.website || '',
+                    industry: rowData.industry || '',
+                    product_category: rowData.productCategory || '',
+                    business_type: rowData.businessType || '',
+                    employees: parseInt(rowData.employees, 10) || 0,
+                    revenue: 0, // Revenue parsing is complex (e.g., $33.0M)
+                    year_founded: parseInt(rowData.yearFounded, 10) || 0,
+                    bbb_rating: rowData.bbbRating || '',
+                    phone: rowData.companyPhone || '',
+                    linkedin: rowData.companyLinkedin || '',
                     address: {
-                        street: entry.company_address_street,
-                        city: entry.company_address_city,
-                        state: entry.company_address_state,
-                        country: entry.company_address_country,
+                        street: rowData.street || '',
+                        city: rowData.city || '',
+                        state: rowData.state || '',
+                        country: 'USA', // Defaulting country
                     },
                 },
+                // Owner data is not in the new CSV, so we create a placeholder
                 owner: {
-                    first_name: entry.owner_first_name,
-                    last_name: entry.owner_last_name,
-                    title: entry.owner_title,
-                    linkedin: entry.owner_linkedin,
-                    phone: entry.owner_phone,
-                    email: entry.owner_email,
-                },
-                lead: {
-                    phone: entry.lead_phone,
-                    source: entry.lead_source,
-                    status: entry.lead_status,
-                    is_edited: entry.lead_is_edited === 'true',
-                },
+                    first_name: rowData.company || 'N/A',
+                    last_name: '',
+                    title: '',
+                    linkedin: '',
+                    phone: rowData.companyPhone || '',
+                    email: '',
+                }
             };
-            leads.push(lead);
-        }
-        return leads;
+            return lead;
+        });
+
+        return leads.filter(lead => lead.company.phone); // Only include leads with a phone number
+
     } catch (e) {
         console.error("Failed to parse CSV", e);
         toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
         return [];
     }
-};
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -605,5 +598,3 @@ export default function Softphone() {
     </div>
   );
 }
-
-    
