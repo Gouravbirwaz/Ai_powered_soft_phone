@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -29,11 +30,32 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Wand2 } from 'lucide-react';
 
 const notesFormSchema = z.object({
-  notes: z.string().min(1, 'Notes cannot be empty.'),
+  notes: z.string().optional(),
   summary: z.string().optional(),
 });
 
 type NotesFormValues = z.infer<typeof notesFormSchema>;
+
+// This function parses the combined notes field from the backend
+const parseCombinedNotes = (combinedNotes: string | undefined) => {
+    if (!combinedNotes) {
+        return { summary: '', notes: '' };
+    }
+    const summaryMarker = 'SUMMARY: ';
+    const notesMarker = '\n---\nNOTES: ';
+    const summaryIndex = combinedNotes.indexOf(summaryMarker);
+    const notesIndex = combinedNotes.indexOf(notesMarker);
+
+    if (summaryIndex === 0 && notesIndex > 0) {
+        const summary = combinedNotes.substring(summaryMarker.length, notesIndex);
+        const notes = combinedNotes.substring(notesIndex + notesMarker.length);
+        return { summary, notes };
+    }
+
+    // If it doesn't match the combined format, assume it's all notes
+    return { summary: '', notes: combinedNotes };
+};
+
 
 export default function PostCallSheet({ call }: { call: Call }) {
   const { dispatch, updateNotesAndSummary } = useCall();
@@ -44,16 +66,19 @@ export default function PostCallSheet({ call }: { call: Call }) {
   const form = useForm<NotesFormValues>({
     resolver: zodResolver(notesFormSchema),
     defaultValues: {
-      notes: call.notes || '',
-      summary: call.summary || '',
+      notes: '',
+      summary: '',
     },
   });
 
   useEffect(() => {
-    form.reset({
-        notes: call.notes || '',
-        summary: call.summary || '',
-    })
+    if (call) {
+      const { summary, notes } = parseCombinedNotes(call.notes);
+      form.reset({
+          notes: notes || '',
+          summary: summary || call.summary || '', // Prioritize parsed summary
+      });
+    }
   }, [call, form]);
 
   const handleOpenChange = (open: boolean) => {
@@ -88,7 +113,9 @@ export default function PostCallSheet({ call }: { call: Call }) {
   const onSubmit = async (data: NotesFormValues) => {
     setIsSaving(true);
     if (updateNotesAndSummary) {
-        await updateNotesAndSummary(call.id, data.notes, data.summary);
+        // Here, we send the separate notes and summary fields.
+        // The backend will combine them.
+        await updateNotesAndSummary(call.id, data.notes || '', data.summary);
     }
     setIsSaving(false);
     if (dispatch) {
@@ -108,7 +135,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
               <SheetTitle>Post-Call Notes</SheetTitle>
               <SheetDescription>
                 Add notes and generate a summary for your call with{' '}
-                {call.direction === 'incoming' ? call.from : call.to}.
+                {call.contactName || call.to || call.from}.
               </SheetDescription>
             </SheetHeader>
             <div className="py-6 space-y-4 flex-1 overflow-y-auto">
@@ -149,7 +176,7 @@ export default function PostCallSheet({ call }: { call: Call }) {
                       <Textarea
                         placeholder="AI-generated summary will appear here."
                         className="min-h-[120px] bg-muted/50"
-                        readOnly={isSummarizing || isSaving}
+                        readOnly={isSummarizing}
                         {...field}
                       />
                     </FormControl>
