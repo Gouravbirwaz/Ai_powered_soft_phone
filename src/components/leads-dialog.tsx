@@ -61,7 +61,7 @@ export default function LeadsDialog({
   }, [leads, currentPage]);
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.company_phone;
+    const phoneNumber = lead.companyPhone;
     
     if (phoneNumber && /^\+?\d+$/.test(phoneNumber.replace(/[\s()-]/g, ''))) {
       startOutgoingCall(phoneNumber, lead.lead_id);
@@ -69,7 +69,7 @@ export default function LeadsDialog({
     } else {
         toast({ 
             title: "Invalid or Missing Phone Number", 
-            description: "A valid 'company_phone' is required to make a call.", 
+            description: "A valid 'companyPhone' is required to make a call.", 
             variant: "destructive" 
         });
     }
@@ -112,14 +112,14 @@ export default function LeadsDialog({
                       <div className="font-medium">{lead.company}</div>
                       <div className="text-sm text-muted-foreground">{lead.website}</div>
                     </TableCell>
-                    <TableCell>{lead.company_phone}</TableCell>
+                    <TableCell>{lead.companyPhone}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleCall(lead)}
-                          disabled={!!state.activeCall || !lead.company_phone}
+                          disabled={!!state.activeCall || !lead.companyPhone}
                           className="whitespace-nowrap"
                         >
                           <Phone className="mr-2 h-4 w-4" />
@@ -129,7 +129,7 @@ export default function LeadsDialog({
                           variant="outline"
                           size="sm"
                           onClick={() => handleVoicemail(lead)}
-                          disabled={!!state.activeCall || !lead.company_phone}
+                           disabled={!!state.activeCall || !lead.companyPhone}
                           className="whitespace-nowrap"
                         >
                           <Voicemail className="mr-2 h-4 w-4" />

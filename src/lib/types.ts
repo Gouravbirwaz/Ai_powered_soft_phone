@@ -46,15 +46,15 @@ export interface Lead {
   industry?: string;
   employees?: string;
   revenue?: string;
-  year_founded?: string;
-  product_category?: string;
-  business_type?: string;
-  bbb_rating?: string;
+  yearFounded?: string;
+  productCategory?: string;
+  businessType?: string;
+  bbbRating?: string;
   street?: string;
   city?: string;
   state?: string;
-  company_phone?: string;
-  company_linkedin?: string;
+  companyPhone?: string;
+  companyLinkedin?: string;
 }
 
 export interface Agent {

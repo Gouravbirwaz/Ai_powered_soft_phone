@@ -649,7 +649,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const agent = currentAgentRef.current;
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
+    const phoneNumber = lead.companyPhone;
 
     if (!agent || !phoneNumber) {
         toast({ title: 'Error', description: 'Agent or lead phone number is missing.', variant: 'destructive' });
@@ -690,13 +690,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const logEmailInteraction = useCallback(async (lead: Lead) => {
     const agent = currentAgentRef.current;
-    if (!agent || !lead.owner_email) return null;
+    if (!agent) return null;
 
     const interactionLog: Partial<Call> = {
       id: `email-${Date.now()}`,
       direction: 'outgoing',
       from: agent.email,
-      to: lead.owner_email,
+      to: 'unknown@example.com', // No email in this lead type
       startTime: Date.now(),
       duration: 0,
       status: 'emailed',
@@ -710,7 +710,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
       toast({
         title: 'Email Logged',
-        description: `Email to ${lead.owner_email} has been logged.`,
+        description: `Email interaction for ${lead.company} has been logged.`,
       });
     }
     return savedLog;
@@ -718,38 +718,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const sendMissedCallEmail = useCallback(async (lead: Lead) => {
     const agent = currentAgentRef.current;
-    if (!agent || !lead.owner_email) {
-      toast({ title: 'Cannot Send Email', description: 'Agent or lead email is missing.', variant: 'destructive' });
+    if (!agent) {
+      toast({ title: 'Cannot Send Email', description: 'Agent is not logged in.', variant: 'destructive' });
       return false;
     }
+    
+    toast({ title: 'Email Feature', description: 'This lead does not have an email. Logging interaction only.', variant: 'default' });
+    await logEmailInteraction(lead);
+    return true;
 
-    try {
-        const response = await fetch('/api/send_email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                recipient_email: lead.owner_email,
-                recipient_name: `${lead.owner_first_name || ''} ${lead.owner_last_name || ''}`.trim(),
-                agent_name: agent.name,
-                agent_email: agent.email,
-                agent_phone: agent.phone,
-            }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Backend failed to send email');
-        }
-
-        await logEmailInteraction(lead);
-        toast({ title: 'Email Sent', description: `Follow-up email sent to ${lead.owner_email}.` });
-        return true;
-
-    } catch (error: any) {
-        console.error('Error sending email:', error);
-        toast({ title: 'Email Failed', description: error.message, variant: 'destructive' });
-        return false;
-    }
   }, [logEmailInteraction, toast]);
 
   return (
@@ -784,5 +761,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
