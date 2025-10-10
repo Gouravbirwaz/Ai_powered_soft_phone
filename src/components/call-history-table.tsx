@@ -111,13 +111,16 @@ export default function CallHistoryTable() {
   }
   
   const constructLeadForAction = (call: Call): Lead | null => {
-    if (!call.contactName || !call.to) {
-        return null;
+    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
+    
+    if (!phoneNumber) {
+      return null;
     }
+
     return {
         lead_id: call.leadId || `call-${call.id}`,
-        company: call.contactName,
-        companyPhone: call.to,
+        company: call.contactName || phoneNumber,
+        companyPhone: phoneNumber,
     };
   }
 
