@@ -47,7 +47,7 @@ export default function VoicemailDialog() {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!voicemailLeadTarget || !script) {
       toast({
         title: 'Error',
@@ -63,13 +63,11 @@ export default function VoicemailDialog() {
         return;
     }
     
-    setIsSending(true);
-    const success = await sendVoicemail(voicemailLeadTarget, script);
-    setIsSending(false);
-
-    if (success) {
-      handleClose();
-    }
+    // Don't await here - let it run in the background
+    sendVoicemail(voicemailLeadTarget, script);
+    
+    // Close the dialog immediately
+    handleClose();
   };
 
   if (!voicemailLeadTarget) return null;
