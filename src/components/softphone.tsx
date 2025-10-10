@@ -114,7 +114,6 @@ const DialpadView = ({ onCall, onBack }: { onCall: (number: string) => void; onB
 
 const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLeads: () => void; }) => {
     const { state } = useCall();
-    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleUploadClick = () => {
         if (state.activeCall) {
@@ -137,8 +136,8 @@ const ChoiceView = ({ onDial, onUploadLeads }: { onDial: () => void; onUploadLea
                               <Phone className="mr-2" />
                               Dial Number
                           </Button>
-                          <Button variant="secondary" onClick={handleUploadClick} disabled={isProcessing || !!state.activeCall}>
-                              {isProcessing ? <Loader2 className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
+                          <Button variant="secondary" onClick={handleUploadClick} disabled={!!state.activeCall}>
+                              <Upload className="mr-2" />
                               Upload Leads
                           </Button>
                       </div>
@@ -161,18 +160,7 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
     const handleLeadsUpdated = (event: Event) => {
         const customEvent = event as CustomEvent;
         const newLeads = customEvent.detail;
-
-        const shuffleArray = (array: any[]) => {
-            let currentIndex = array.length, randomIndex;
-            while (currentIndex !== 0) {
-                randomIndex = Math.floor(Math.random() * currentIndex);
-                currentIndex--;
-                [array[currentIndex], array[randomIndex]] = [
-                    array[randomIndex], array[currentIndex]];
-            }
-            return array;
-        }
-        setFetchedLeads(shuffleArray(newLeads));
+        setFetchedLeads(newLeads);
         setShowLeadsDialog(true);
     };
 
@@ -187,7 +175,6 @@ const DialerContainer = ({ onCall, onUploadLeads }: { onCall: (number: string) =
         toast({ title: 'Finish current call first', variant: 'destructive' });
         return;
     }
-    // Directly trigger upload instead of checking local storage first
     onUploadLeads();
   }
 
@@ -388,7 +375,6 @@ export default function Softphone() {
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   
   const handleCall = (number: string) => {
     startOutgoingCall(number);
@@ -413,39 +399,37 @@ export default function Softphone() {
     try {
       const lines = text.trim().split(/\r\n|\n/);
       if (lines.length < 2) return [];
-
-      // Improved header parsing to handle different delimiters
-      const headerLine = lines[0].trim();
-      const delimiter = /[\t,]/.exec(headerLine)?.[0] || ',';
-      const headers = headerLine.split(delimiter).map(h => h.trim());
+  
+      const delimiter = /[\t,]/.exec(lines[0])?.[0] || ',';
+      const headers = lines[0].split(delimiter).map(h => h.trim());
       
-      const leads: Lead[] = lines.slice(1).map((line) => {
+      const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
         const values = line.split(delimiter);
         const rowData: { [key: string]: any } = {};
-
+  
         headers.forEach((header, i) => {
-          let value = values[i] ? values[i].trim() : '';
-          
-          // Sanitize value from quotes
-          if (value.startsWith('"') && value.endsWith('"')) {
-            value = value.substring(1, value.length - 1);
-          }
-          
-          // Handle scientific notation for phone numbers
-          if (header.toLowerCase().includes('phone') && value.includes('E+')) {
-              try {
-                rowData[header] = BigInt(value).toString();
-              } catch {
+            let value = values[i] ? values[i].trim() : '';
+
+            // Sanitize value from quotes
+            if (value.startsWith('"') && value.endsWith('"')) {
+                value = value.substring(1, value.length - 1);
+            }
+
+            // Handle scientific notation for phone numbers
+            if (header.toLowerCase().includes('phone') && value.includes('E+')) {
+                try {
+                    rowData[header] = BigInt(value).toString();
+                } catch {
+                    rowData[header] = value;
+                }
+            } else {
                 rowData[header] = value;
-              }
-          } else {
-            rowData[header] = value;
-          }
+            }
         });
 
         // Use the exact headers from the CSV for mapping
         const lead: Lead = {
-          lead_id: rowData['lead_id'] || `gen_${Date.now()}_${Math.random()}`,
+          lead_id: rowData['lead_id'] || `gen_${Date.now()}_${rowIndex}`,
           company_id: rowData['company_id'],
           search_keyword: rowData['search_keyword'],
           company: rowData['company'],
@@ -477,7 +461,7 @@ export default function Softphone() {
         return lead;
       });
 
-      return leads.filter(lead => lead.company_phone || lead.owner_phone_number || lead.phone);
+      return leads.filter(lead => lead.company || lead.owner_first_name);
     } catch (e) {
       console.error("Failed to parse CSV", e);
       toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
@@ -488,7 +472,6 @@ export default function Softphone() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
-        setIsProcessing(true);
         const reader = new FileReader();
         reader.onload = (e) => {
           const text = e.target?.result as string;
@@ -496,21 +479,16 @@ export default function Softphone() {
             const parsedLeads = parseCSV(text);
             if (parsedLeads.length > 0) {
               localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
-              
-              // Dispatch event to notify that new leads are ready
               window.dispatchEvent(new CustomEvent('leadsUpdated', { detail: parsedLeads }));
-
               toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
             } else if (text) {
-               toast({ title: 'Parsing Error', description: 'No valid leads with phone numbers found in the file.', variant: 'destructive' });
+               toast({ title: 'Parsing Error', description: 'No valid leads found in the file.', variant: 'destructive' });
             } else {
                toast({ title: 'Upload Failed', description: 'The file is empty.', variant: 'destructive' });
             }
 
           } catch (error) {
             toast({ title: 'Upload Failed', description: 'Could not process the file.', variant: 'destructive' });
-          } finally {
-            setIsProcessing(false);
           }
         };
         reader.readAsText(file);

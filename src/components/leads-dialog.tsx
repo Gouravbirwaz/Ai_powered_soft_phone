@@ -26,6 +26,8 @@ import { ScrollArea } from './ui/scroll-area';
 import { formatRelative } from 'date-fns';
 import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+
 
 const LEADS_PER_PAGE = 5;
 
@@ -48,6 +50,8 @@ export default function LeadsDialog({
   const [currentPage, setCurrentPage] = useState(1);
   const [actionFeedback, setActionFeedback] = useState<Record<string, { email?: ActionStatus, voicemail?: ActionStatus }>>({});
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const { toast } = useToast();
+
 
   useEffect(() => {
     setLeads(initialLeads);
@@ -89,9 +93,11 @@ export default function LeadsDialog({
 
   const handleCall = (lead: Lead) => {
     const phoneNumber = lead.owner_phone_number || lead.company_phone;
-    if (phoneNumber) {
+    if (phoneNumber && /^\d+$/.test(phoneNumber.replace(/[\s()-]+/g, ''))) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
+    } else {
+        toast({ title: "Invalid Phone Number", description: "Cannot initiate call without a valid phone number.", variant: "destructive" });
     }
   };
 
@@ -153,8 +159,7 @@ export default function LeadsDialog({
   };
   
   const isActionable = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone_number || lead.company_phone;
-    return !!phoneNumber && !state.activeCall;
+    return !state.activeCall;
   }
 
   const ActionButton = ({ lead, action, icon: Icon, label, onClick, disabled }: { lead: Lead, action: 'email' | 'voicemail', icon: React.ElementType, label: string, onClick: () => void, disabled: boolean }) => {
@@ -291,5 +296,3 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
-
-    
