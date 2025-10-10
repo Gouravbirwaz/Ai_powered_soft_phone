@@ -83,7 +83,7 @@ export default function LeadsDialog({
   }
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone || lead.company_phone;
+    const phoneNumber = lead.owner.phone || lead.company.phone;
     if (phoneNumber) {
       startOutgoingCall(phoneNumber, lead.lead_id);
       onOpenChange(false);
@@ -113,7 +113,7 @@ export default function LeadsDialog({
   }
 
   const getLeadStatus = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone || lead.company_phone;
+    const phoneNumber = lead.owner.phone || lead.company.phone;
     if (activeCall?.to === phoneNumber) {
       return (
         <div className="flex flex-col items-start justify-center">
@@ -148,7 +148,7 @@ export default function LeadsDialog({
   };
   
   const isActionable = (lead: Lead) => {
-    const phoneNumber = lead.owner_phone || lead.company_phone;
+    const phoneNumber = lead.owner.phone || lead.company.phone;
     return !!phoneNumber && !activeCall;
   }
 
@@ -194,16 +194,16 @@ export default function LeadsDialog({
                 paginatedLeads.map((lead) => (
                   <TableRow key={lead.lead_id} className="h-16">
                     <TableCell>
-                      <div className="font-medium">{lead.company}</div>
+                      <div className="font-medium">{lead.company.name}</div>
                       <div className="text-sm text-muted-foreground">
                         {lead.lead_id}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>{lead.owner_first_name} {lead.owner_last_name}</div>
-                      <div className="text-sm text-muted-foreground">{lead.owner_email}</div>
+                      <div>{lead.owner.first_name} {lead.owner.last_name}</div>
+                      <div className="text-sm text-muted-foreground">{lead.owner.email}</div>
                     </TableCell>
-                    <TableCell>{lead.owner_phone || lead.company_phone}</TableCell>
+                    <TableCell>{lead.owner.phone || lead.company.phone}</TableCell>
                     <TableCell>{getLeadStatus(lead)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
@@ -231,7 +231,7 @@ export default function LeadsDialog({
                           icon={Mail}
                           label="Email"
                           onClick={() => handleEmail(lead)}
-                          disabled={!lead.owner_email}
+                          disabled={!lead.owner.email}
                         />
                       </div>
                     </TableCell>

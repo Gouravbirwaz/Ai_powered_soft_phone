@@ -182,7 +182,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       action_taken: log.action_taken || 'call',
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
-    };
+    } as Call;
   }, []);
 
   const fetchCallHistory = useCallback(async (agentId: string) => {
@@ -649,7 +649,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const agent = currentAgentRef.current;
-    const phoneNumber = lead.phone || lead.company_phone;
+    const phoneNumber = lead.owner.phone || lead.company.phone;
 
     if (!agent || !phoneNumber) {
         toast({ title: 'Error', description: 'Agent or lead phone number is missing.', variant: 'destructive' });
@@ -695,7 +695,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       id: `email-${Date.now()}`,
       direction: 'outgoing',
       from: agent.email,
-      to: lead.owner_email,
+      to: lead.owner.email,
       startTime: Date.now(),
       duration: 0,
       status: 'emailed',
@@ -709,14 +709,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
       toast({
         title: 'Email Logged',
-        description: `Email to ${lead.owner_email} has been logged.`,
+        description: `Email to ${lead.owner.email} has been logged.`,
       });
     }
   }, [createOrUpdateCallOnBackend, toast]);
   
   const sendMissedCallEmail = useCallback(async (lead: Lead) => {
     const agent = currentAgentRef.current;
-    if (!agent || !lead.owner_email) {
+    if (!agent || !lead.owner.email) {
       toast({ title: 'Cannot Send Email', description: 'Agent or lead email is missing.', variant: 'destructive' });
       return false;
     }
@@ -726,8 +726,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                recipient_email: lead.owner_email,
-                recipient_name: `${lead.owner_first_name} ${lead.owner_last_name}`,
+                recipient_email: lead.owner.email,
+                recipient_name: `${lead.owner.first_name} ${lead.owner.last_name}`,
                 agent_name: agent.name,
                 agent_email: agent.email,
                 agent_phone: agent.phone,
@@ -740,7 +740,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         await logEmailInteraction(lead);
-        toast({ title: 'Email Sent', description: `Follow-up email sent to ${lead.owner_email}.` });
+        toast({ title: 'Email Sent', description: `Follow-up email sent to ${lead.owner.email}.` });
         return true;
 
     } catch (error: any) {

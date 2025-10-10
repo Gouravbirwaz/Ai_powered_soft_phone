@@ -432,20 +432,14 @@ export default function Softphone() {
   
   const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
 
-  const parseCSV = (text: string): Lead[] => {
-      const rows = text.split('\n').filter(row => row.trim() !== '');
-      if (rows.length < 2) return [];
-
-      const headers = rows[0].split(',').map(h => h.trim());
-      const leadData = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim());
-        const leadObject: { [key: string]: any } = {};
-        headers.forEach((header, index) => {
-          leadObject[header] = values[index];
-        });
-        return leadObject as Lead;
-      });
-      return leadData;
+  const parseLeads = (text: string): Lead[] => {
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error("Failed to parse JSON", e);
+        toast({ title: 'Upload Failed', description: 'File does not contain valid JSON.', variant: 'destructive' });
+        return [];
+      }
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -456,16 +450,22 @@ export default function Softphone() {
         reader.onload = (e) => {
           const text = e.target?.result as string;
           try {
-            const parsedLeads = parseCSV(text);
-            localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
-            
-            // Dispatch a custom event to notify other components
-            window.dispatchEvent(new CustomEvent('leadsUpdated'));
+            const parsedLeads = parseLeads(text);
+            if (parsedLeads.length > 0) {
+              localStorage.setItem('uploadedLeads', JSON.stringify(parsedLeads));
+              
+              // Dispatch a custom event to notify other components
+              window.dispatchEvent(new CustomEvent('leadsUpdated'));
 
-            toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+              toast({ title: 'Leads Uploaded', description: `${parsedLeads.length} leads have been successfully loaded.` });
+            } else if (text) { // If text exists but parsing failed, parseLeads shows a toast
+               // The `parseLeads` function now handles the error toast
+            } else {
+               toast({ title: 'Upload Failed', description: 'The file is empty.', variant: 'destructive' });
+            }
 
           } catch (error) {
-            toast({ title: 'Upload Failed', description: 'Could not parse the CSV file.', variant: 'destructive' });
+            toast({ title: 'Upload Failed', description: 'Could not process the file.', variant: 'destructive' });
           } finally {
             setIsProcessing(false);
           }
@@ -544,7 +544,7 @@ export default function Softphone() {
         ref={fileInputRef}
         onChange={handleFileChange}
         className="hidden"
-        accept=".csv"
+        accept=".csv,.json"
       />
     </div>
   );

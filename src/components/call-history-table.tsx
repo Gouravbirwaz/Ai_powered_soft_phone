@@ -141,7 +141,7 @@ export default function CallHistoryTable() {
   const handleEmail = async (call: Call) => {
     const lead = getLeadForCall(call);
     if (lead && sendMissedCallEmail) {
-       if (!lead.owner_email) {
+       if (!lead.owner.email) {
             toast({ title: "Cannot Send Email", description: "This lead does not have an email address.", variant: 'destructive' });
             return;
         }
