@@ -76,8 +76,10 @@ export default function CallHistoryTable() {
     // Update current time every minute to keep relative times fresh
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     const loadLeads = async () => {
-      const leads = await fetchLeads();
-      setAllLeads(leads);
+      if (fetchLeads) {
+        const leads = await fetchLeads();
+        setAllLeads(leads);
+      }
     }
     loadLeads();
     return () => clearInterval(timer);
@@ -134,6 +136,10 @@ export default function CallHistoryTable() {
   const handleEmail = async (call: Call) => {
     const lead = getLeadForCall(call);
     if (lead && sendMissedCallEmail) {
+       if (!lead.owner_email) {
+            toast({ title: "Cannot Send Email", description: "This lead does not have an email address.", variant: 'destructive' });
+            return;
+        }
       const success = await sendMissedCallEmail(lead);
       if (success) {
         showActionFeedback(call.id, 'email');
@@ -285,9 +291,7 @@ export default function CallHistoryTable() {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
                 const contactIdentifier = call.action_taken === 'email' ? call.to : (call.direction === 'incoming' ? call.from : call.to);
-                const leadInfo = getLeadForCall(call);
-                const canFollowUp = call.status !== 'completed' && call.status !== 'in-progress' && !!leadInfo;
-
+                
                 return (
                   <TableRow key={call.id}>
                     <TableCell>
@@ -332,14 +336,14 @@ export default function CallHistoryTable() {
                           action="voicemail"
                           icon={Voicemail}
                           onClick={() => handleVoicemail(call)}
-                          disabled={!canFollowUp}
+                          disabled={actionFeedback[call.id]?.voicemail === 'success'}
                         />
                         <ActionButton
                           call={call}
                           action="email"
                           icon={Mail}
                           onClick={() => handleEmail(call)}
-                          disabled={!canFollowUp || !leadInfo?.owner_email}
+                          disabled={actionFeedback[call.id]?.email === 'success'}
                         />
                        </div>
                     </TableCell>
