@@ -286,14 +286,14 @@ export default function CallHistoryTable() {
           </TableHeader>
           <TableBody>
             {paginatedCalls.length > 0 ? (
-              paginatedCalls.map((call) => {
+              paginatedCalls.map((call, index) => {
                 const callDate = call.startTime ? new Date(call.startTime) : null;
                 const isDateValid = callDate && isValid(callDate);
                 const contactIdentifier = call.direction === 'incoming' ? call.from : call.to;
                 const displayName = call.contactName || contactIdentifier;
                 
                 return (
-                  <TableRow key={call.id}>
+                  <TableRow key={`${call.id}-${index}`}>
                     <TableCell>
                       {getIconForAction(call.action_taken, call.direction)}
                     </TableCell>
@@ -327,7 +327,7 @@ export default function CallHistoryTable() {
                     </TableCell>
                     <TableCell className="text-right">
                        <div className="flex items-center justify-end">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditNotes(call.id)} disabled={call.status === 'emailed'}>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditNotes(String(call.id))} disabled={call.status === 'emailed'}>
                             <Edit className="h-4 w-4" />
                             <span className="sr-only">Edit Notes</span>
                         </Button>
@@ -349,7 +349,7 @@ export default function CallHistoryTable() {
                 )
               })
             ) : (
-              <TableRow key="no-calls-row">
+              <TableRow>
                 <TableCell colSpan={6} className="h-24 text-center">
                   No calls found.
                 </TableCell>

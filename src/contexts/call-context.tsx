@@ -240,7 +240,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast, mapCallLog]);
 
 
- const createOrUpdateCallOnBackend = useCallback(async (call: Call) => {
+ const createOrUpdateCallOnBackend = useCallback(async (call: Call | null) => {
     if (!call) {
         console.error("Cannot create or update call log on backend: call data is null.");
         return null;
@@ -358,7 +358,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     let transcript = null;
-    if ((initialStatus === 'completed' || initialStatus === 'canceled') && twilioCall) {
+    if ((initialStatus === 'completed' || initialStatus === 'canceled') && callInState.id && !callInState.id.startsWith('temp-')) {
         transcript = await fetchTranscript(callInState.id);
     }
     
@@ -422,7 +422,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     console.log('Incoming call from', twilioCall.parameters.From);
     activeTwilioCallRef.current = twilioCall;
     
-    const isFromBackend = twilioCall.parameters.To?.startsWith('room:');
+    const isFromBackend = twilioCall.parameters.To?.startsWith('client:');
 
     const callData: Call = {
       id: twilioCall.parameters.CallSid,
@@ -441,11 +441,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     };
     
     if (isFromBackend) {
-        // This is the agent leg of an outgoing call initiated by the backend
-        // We update the existing activeCall in the state
-        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { id: twilioCall.parameters.CallSid } } });
+        dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { id: twilioCall.parameters.CallSid, status: 'ringing-outgoing' } } });
     } else {
-        // This is a true incoming call
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
         dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
         dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
@@ -456,6 +453,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
     twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
     twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
+    twilioCall.on('accept', (call) => {
+      dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
+    })
 
   }, [handleCallDisconnect]);
 
@@ -468,7 +468,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
     
     try {
-        // Request microphone permissions before anything else
         await navigator.mediaDevices.getUserMedia({ audio: true });
         dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
         
@@ -541,7 +540,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             from: agent.phone,
             to: to,
             direction: 'outgoing',
-            status: 'ringing-outgoing',
+            status: 'queued',
             startTime: Date.now(),
             duration: 0,
             agentId: agent.id,
@@ -800,3 +799,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
