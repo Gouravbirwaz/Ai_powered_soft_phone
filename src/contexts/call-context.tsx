@@ -388,7 +388,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const duration = Math.round((endTime - callInState.startTime) / 1000);
 
     let finalStatus = initialStatus;
-    if (finalStatus === 'completed' && duration <= 2) {
+    if (finalStatus === 'completed' && duration < 20) {
         finalStatus = 'canceled';
     }
 
@@ -536,10 +536,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     const agent = currentAgentRef.current;
-    if (!agent || !twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
+    if (!agent) {
       toast({
         title: 'Softphone Not Ready',
-        description: 'Please wait for the softphone to connect before making a call.',
+        description: 'No agent logged in.',
         variant: 'destructive',
       });
       return;
@@ -588,7 +588,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
       dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
       
-      const twilioCall = await twilioDeviceRef.current.connect({
+      const twilioCall = await twilioDeviceRef.current!.connect({
         params: { To: `room:${conference}` },
       });
       
@@ -824,3 +824,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
