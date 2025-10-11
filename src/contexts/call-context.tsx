@@ -13,6 +13,7 @@ import React, {
 } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
+import { formatUSPhoneNumber } from '@/lib/utils';
 
 type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 
@@ -360,12 +361,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, initialStatus: CallStatus = 'completed') => {
     const callInState = activeCallRef.current;
     if (!callInState) {
-        console.warn('handleCallDisconnect called but no active call in state.');
-        activeTwilioCallRef.current = null; // Ensure this is also cleared
-        return; // Stop execution if no active call
+        return;
     }
     
-    // Clear the active call from the ref immediately to prevent race conditions
     activeCallRef.current = null;
     activeTwilioCallRef.current = null;
 
@@ -428,7 +426,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     if (twilioCall) {
       twilioCall.disconnect();
     } else {
-      // This handles cases where the call exists in our state but not in Twilio's ref (e.g., failed to connect)
       const call = activeCallRef.current;
       if (call) {
         handleCallDisconnect(null, status);
@@ -549,12 +546,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   
     try {
-      // Step 1: Tell backend to call the customer
+      const formattedNumber = formatUSPhoneNumber(to);
       const backendResponse = await fetch('/api/twilio/make_call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: to,
+          to: formattedNumber,
           agent_id: agent.id,
           dialer_type: 'manual',
           lead_id: leadId,
@@ -575,7 +572,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const callData: Call = {
         id: customer_call_sid || `conf-${conference}`,
         from: agent.phone,
-        to: to,
+        to: formattedNumber,
         direction: 'outgoing',
         status: 'queued', 
         startTime: Date.now(),
@@ -591,14 +588,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
       dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
       
-      // Step 2: Connect the agent's softphone to the conference
       const twilioCall = await twilioDeviceRef.current.connect({
         params: { To: `room:${conference}` },
       });
       
       activeTwilioCallRef.current = twilioCall;
 
-      // Attach event listeners to the new Twilio call object
       twilioCall.on('accept', () => {
           console.log("Call accepted by agent's device.");
           dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
@@ -714,11 +709,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
+        const formattedNumber = formatUSPhoneNumber(phoneNumber);
         const response = await fetch('/api/twilio/send_voicemail', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                phone: phoneNumber,
+                phone: formattedNumber,
                 script: script,
             }),
         });
@@ -733,7 +729,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         const finalLog = { ...mapCallLog(call_log), action_taken: 'voicemail' as ActionTaken, contactName: lead.company };
         
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalLog } });
-        toast({ title: 'Voicemail Sent', description: `Voicemail to ${phoneNumber} was sent successfully.` });
+        toast({ title: 'Voicemail Sent', description: `Voicemail to ${formattedNumber} was sent successfully.` });
         return true;
 
     } catch (error: any) {
