@@ -702,6 +702,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         const { call_log } = await response.json();
         
+        if (!call_log) {
+          console.error('sendVoicemail: Backend did not return a call_log object.');
+          toast({ title: 'Logging Error', description: 'Voicemail sent, but failed to get log details from backend.', variant: 'destructive' });
+          return false;
+        }
+
         const finalLog = { ...mapCallLog(call_log), action_taken: 'voicemail' as ActionTaken, contactName: lead.company };
         
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalLog } });
