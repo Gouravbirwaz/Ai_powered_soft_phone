@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   // The backend endpoint for getting a token, using the server-side BASE_URL
   // The backend expects the identity to be the client_id, which is derived from the agent_id
-  const tokenEndpoint = `${process.env.BASE_URL}/api/twilio/token?identity=agent_${identity}_client_id`;
+  const tokenEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/twilio/token?identity=agent_${identity}_client_id`;
 
   try {
     const response = await fetch(tokenEndpoint, {
