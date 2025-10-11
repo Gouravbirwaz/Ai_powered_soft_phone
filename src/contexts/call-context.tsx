@@ -691,41 +691,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-<<<<<<< HEAD
-  }, [state.allCallHistory, state.currentAgent, createOrUpdateCallOnBackend, toast, fetchCallHistory, fetchAllCallHistory]);
-  
-  const sendVoicemail = useCallback(async (to: string, script: string, callId: string) => {
-    dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'voicemail-dropping' } } });
-    try {
-        const response = await fetch('/api/twilio/send_voicemail', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: to, script }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to send voicemail from backend.');
-        }
-
-        await response.json();
-        // Manually trigger disconnect logic for voicemail
-        handleCallDisconnect(null, 'voicemail-dropped');
-        return true;
-    } catch (error: any) {
-        console.error('Error sending voicemail:', error);
-        toast({
-            title: 'Voicemail Failed',
-            description: error.message || 'Could not send the voicemail.',
-            variant: 'destructive',
-        });
-        // If it fails, revert to a standard failed call status
-        handleCallDisconnect(null, 'failed');
-        return false;
-    }
-}, [handleCallDisconnect, toast]);
-=======
   }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
->>>>>>> ceb56ca2ba2a068bc97f54959e863fbf90bf12d9
 
   const logout = useCallback(() => {
     cleanupTwilio();
