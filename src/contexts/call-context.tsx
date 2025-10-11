@@ -164,9 +164,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.currentAgent]);
 
   const mapCallLog = useCallback((log: any): Call => {
-    let summary = '';
+    let summary = log.summary || '';
     let notes = log.notes || '';
     
+    // This logic is now handled by the backend, but we'll keep it for display purposes
     const summaryMarker = 'SUMMARY: ';
     const notesMarker = '\n---\nNOTES: ';
     const summaryIndex = notes.indexOf(summaryMarker);
@@ -178,10 +179,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     return {
-      id: String(log.id || log.call_log_id),
+      id: String(log.call_log_id || log.id),
       direction: log.direction,
-      from: log.from,
-      to: log.to,
+      from: log.from || (log.direction === 'incoming' ? log.phone_number : currentAgentRef.current?.phone),
+      to: log.to || (log.direction === 'outgoing' ? log.phone_number : currentAgentRef.current?.phone),
       startTime: new Date(log.started_at).getTime(),
       endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
       duration: log.duration || 0,
@@ -189,9 +190,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       notes,
       summary,
       agentId: log.agent_id,
-      leadId: log.lead_id,
+      leadId: log.lead_id, // This may be empty/null from the backend
       action_taken: log.action_taken || 'call',
-      contactName: log.contactName,
+      contactName: log.contact_name,
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
     };
@@ -205,22 +206,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch agent call history. Status: ${response.status}`);
       }
       const data = await response.json();
-      const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
-        id: String(log.call_log_id),
-        direction: log.direction,
-        from: log.direction === 'incoming' ? log.phone_number : currentAgentRef.current?.phone || 'Unknown',
-        to: log.direction === 'outgoing' ? log.phone_number : currentAgentRef.current?.phone || 'Unknown',
-        startTime: new Date(log.started_at).getTime(),
-        endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
-        duration: log.duration || 0,
-        status: log.status || 'completed',
-        notes: log.notes,
-        summary: log.summary,
-        agentId: log.agent_id,
-        leadId: log.lead_id,
-        action_taken: log.action_taken || 'call',
-        contactName: log.contact_name,
-      }));
+      const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
     } catch (error: any) {
       console.error("Fetch agent call history error:", error);
@@ -230,7 +216,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         description: error.message || 'Could not fetch call history.'
       });
     }
-  }, [toast]);
+  }, [toast, mapCallLog]);
 
   const fetchAllCallHistory = useCallback(async () => {
     try {
@@ -240,22 +226,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch all call history. Status: ${response.status}`);
       }
       const data = await response.json();
-       const formattedCalls: Call[] = (data.call_logs || []).map((log: any) => ({
-        id: String(log.call_log_id),
-        direction: log.direction,
-        from: log.from,
-        to: log.to,
-        startTime: new Date(log.started_at).getTime(),
-        endTime: log.ended_at ? new Date(log.ended_at).getTime() : undefined,
-        duration: log.duration || 0,
-        status: log.status || 'completed',
-        notes: log.notes,
-        summary: log.summary,
-        agentId: log.agent_id,
-        leadId: log.lead_id,
-        action_taken: log.action_taken || 'call',
-        contactName: log.contact_name,
-      }));
+       const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: formattedCalls });
     } catch (error: any) {
       console.error("Fetch all call history error:", error);
@@ -265,7 +236,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         description: error.message || 'Could not fetch full call history.'
       });
     }
-  }, [toast]);
+  }, [toast, mapCallLog]);
 
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call | null) => {
@@ -276,25 +247,25 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
     const agentId = call.agentId || currentAgentRef.current?.id;
     
-    let combinedNotes = call.notes || '';
-    if (call.summary) {
-        combinedNotes = `SUMMARY: ${call.summary}\n---\nNOTES: ${call.notes || ''}`;
+    if (!agentId || !phoneNumber) {
+        console.error("Cannot create call log: agentId or phoneNumber is missing.", { agentId, phoneNumber });
+        return null;
     }
-
+    
     try {
         const body: { [key: string]: any } = {
-            id: call.id.startsWith('temp-') ? undefined : call.id,
-            lead_id: call.leadId,
             agent_id: agentId ? parseInt(String(agentId), 10) : undefined,
             phone_number: phoneNumber,
-            notes: combinedNotes,
-            direction: call.direction,
+            notes: call.notes,
+            summary: call.summary,
+            started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
-            action_taken: call.action_taken, // Pass action_taken to backend
             status: call.status,
-            started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
-            contact_name: call.contactName,
+            action_taken: call.action_taken,
+            follow_up_required: call.followUpRequired,
+            call_attempt_number: call.callAttemptNumber,
+            // No lead_id is sent, as per backend logic
         };
         
         const response = await fetch('/api/twilio/call_logs', {
@@ -316,9 +287,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const responseData = await response.json();
-        console.log('Call log created/updated successfully:', responseData.call_log);
         
         const returnedLog = responseData.call_log;
+        if (!returnedLog) {
+            console.error("Backend did not return a call_log object");
+            return null;
+        }
         
         return mapCallLog(returnedLog);
 
@@ -364,6 +338,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
     
+    // Prevent multiple disconnect handlers for the same call
     activeCallRef.current = null;
     activeTwilioCallRef.current = null;
 
@@ -411,6 +386,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
         }
     } else {
+        // Even if saving failed, update the history locally to reflect the change
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
         if (finalStatus !== 'voicemail-dropped' && finalStatus !== 'emailed') {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
@@ -553,7 +529,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         body: JSON.stringify({
           to: formattedNumber,
           agent_id: agent.id,
-          dialer_type: 'manual',
+          dialer_type: 'manual', // or auto, depending on context
           lead_id: leadId,
         }),
       });
@@ -574,7 +550,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         from: agent.phone,
         to: formattedNumber,
         direction: 'outgoing',
-        status: 'queued', 
+        status: 'ringing-outgoing', // Changed from 'queued'
         startTime: Date.now(),
         duration: 0,
         agentId: agent.id,
@@ -622,8 +598,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const twilioCall = activeTwilioCallRef.current;
     if (twilioCall && state.activeCall) {
       twilioCall.accept();
-      dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
-      dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
+      // 'accept' listener handles state update
     }
   }, [state.activeCall]);
 
@@ -631,6 +606,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const twilioCall = activeTwilioCallRef.current;
     if (twilioCall) {
       twilioCall.reject();
+      // 'reject' listener handles state update
     }
   }, []);
   
@@ -824,5 +800,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
