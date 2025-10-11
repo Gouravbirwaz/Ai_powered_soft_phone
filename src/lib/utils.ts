@@ -22,17 +22,23 @@ export function formatDuration(seconds: number): string {
 
 /**
  * Formats a US phone number to E.164 format.
- * @param phoneNumber The phone number to format.
+ * It now handles various formats including comma-separated numbers.
+ * @param phoneNumber The phone number string to format.
  * @returns The formatted phone number (e.g., +1XXXXXXXXXX).
  */
 export function formatUSPhoneNumber(phoneNumber: string): string {
   if (!phoneNumber) {
     return '';
   }
-  // Remove all non-digit characters
-  let digits = phoneNumber.replace(/\D/g, '');
+  
+  // If there are multiple numbers, take the first one.
+  const potentialNumbers = phoneNumber.split(',');
+  const firstPotentialNumber = potentialNumbers[0];
 
-  // If the number already has the country code '1' and is 11 digits long
+  // Remove all non-digit characters from the selected number
+  let digits = firstPotentialNumber.replace(/\D/g, '');
+
+  // If the number is 11 digits long and starts with '1' (e.g., 18002536500)
   if (digits.length === 11 && digits.startsWith('1')) {
     return `+${digits}`;
   }
@@ -42,19 +48,18 @@ export function formatUSPhoneNumber(phoneNumber: string): string {
     return `+1${digits}`;
   }
   
-  // If it's already in E.164, return as is
-  if (phoneNumber.startsWith('+1') && digits.length === 11) {
-    return phoneNumber;
+  // If it's already in E.164 format, return as is
+  if (firstPotentialNumber.startsWith('+1') && digits.length === 11) {
+    return `+1${digits}`;
   }
 
-  // Otherwise, return the original (or cleaned) number, as it might be an international number or invalid
-  // If the original had a '+', keep it.
-  if (phoneNumber.startsWith('+') && !phoneNumber.startsWith('+1')) {
-    return `+${digits}`;
+  // Fallback for numbers that don't fit the US pattern but might be valid internationally
+  if (firstPotentialNumber.startsWith('+')) {
+      return `+${digits}`;
   }
-
-  // Fallback for numbers that don't fit the US pattern
-  return phoneNumber;
+  
+  // If no other condition is met, it's likely an invalid or un-formattable number
+  return firstPotentialNumber; // Return the cleaned first number as a best effort
 }
 
 
