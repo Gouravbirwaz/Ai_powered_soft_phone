@@ -16,6 +16,7 @@ import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
 import { formatUSPhoneNumber } from '@/lib/utils';
 
 type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
+type LoginRole = 'agent' | 'admin';
 
 interface CallState {
   callHistory: Call[];
@@ -207,8 +208,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: formattedCalls });
-      dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
-
+      // For agent view, we still filter. For admin, this is the full list.
+      if (currentAgentRef.current?.role !== 'admin') {
+         dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls.filter(c => String(c.agentId) === String(currentAgentRef.current?.id)) });
+      } else {
+         dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
+      }
+      return formattedCalls;
     } catch (error: any) {
       console.error("Fetch all call history error:", error);
       toast({
@@ -216,6 +222,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         title: 'API Error',
         description: error.message || 'Could not fetch full call history.'
       });
+      return [];
     }
   }, [toast, mapCallLog]);
 
@@ -234,12 +241,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     try {
+        const combinedNotes = call.summary ? `SUMMARY: ${call.summary}\n---\nNOTES: ${call.notes || ''}` : call.notes || '';
+
         const body: { [key: string]: any } = {
             call_log_id: call.id.startsWith('temp-') ? undefined : call.id,
             agent_id: agentId ? parseInt(String(agentId), 10) : undefined,
             phone_number: phoneNumber,
-            notes: call.notes,
-            summary: call.summary,
+            notes: combinedNotes,
+            summary: call.summary, // Send summary separately as well
             started_at: (call.startTime && !isNaN(call.startTime)) ? new Date(call.startTime).toISOString() : new Date().toISOString(),
             ended_at: call.endTime ? new Date(call.endTime).toISOString() : null,
             duration: call.duration,
@@ -345,8 +354,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const duration = Math.round((endTime - callInState.startTime) / 1000);
 
     let finalStatus = initialStatus;
-    if (finalStatus === 'completed' && duration < 20) {
-        finalStatus = 'canceled';
+    if (finalStatus === 'completed' && duration < 5 && callInState.direction === 'outgoing') {
+        finalStatus = 'failed'; // Or 'canceled' if preferred
     }
 
     const finalCallState: Call = {
@@ -375,9 +384,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     activeTwilioCallRef.current = null;
-    setTimeout(() => {
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-    }, 5000);
 
   }, [createOrUpdateCallOnBackend]);
 
@@ -470,8 +476,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         device.on('error', (error) => {
             console.error('Twilio Device Error:', error);
+            // Don't show toast for this specific, common error
+            if (error.code !== 31000) {
+              toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
+            }
             dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-            toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
             cleanupTwilio();
         });
 
@@ -544,7 +553,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
       
       const twilioCall = await twilioDeviceRef.current!.connect({
-        params: { To: formattedNumber },
+        params: { To: formattedNumber, From: agent.phone },
       });
       
       activeTwilioCallRef.current = twilioCall;
@@ -615,11 +624,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
   
-  const loginAsAgent = useCallback((agent: Agent) => {
-    currentAgentRef.current = agent;
-    dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    initializeTwilio(); 
-    fetchAllCallHistory();
+  const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
+    const agentWithRole = { ...agent, role };
+    currentAgentRef.current = agentWithRole;
+    dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
+    
+    const historyPromise = fetchAllCallHistory();
+    
+    if (role === 'agent') {
+      const twilioPromise = initializeTwilio();
+      await Promise.all([historyPromise, twilioPromise]);
+    } else {
+      await historyPromise;
+    }
   }, [fetchAllCallHistory, initializeTwilio]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
@@ -771,6 +788,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       state,
       dispatch,
       fetchAgents,
+      fetchAllCallHistory,
       loginAsAgent,
       logout,
       initializeTwilio,

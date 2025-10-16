@@ -70,6 +70,7 @@ export interface Agent {
     email: string;
     phone: string;
     status: string;
+    role?: 'agent' | 'admin';
 }
 
     
