@@ -702,15 +702,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
-    // This is the only place we should set currentAgentRef directly and dispatch
-    currentAgentRef.current = agentWithRole;
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
-    
-    // Now that agent is set, fetch data and initialize twilio
-    await fetchAllCallHistory();
-    await initializeTwilio();
-
-  }, [fetchAllCallHistory, initializeTwilio]);
+  }, []);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -856,6 +849,18 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return false;
     }
   }, [createOrUpdateCallOnBackend, toast]);
+
+  useEffect(() => {
+    if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
+      initializeTwilio();
+    }
+  }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio]);
+
+  useEffect(() => {
+    if(state.currentAgent) {
+        fetchAllCallHistory();
+    }
+  }, [state.currentAgent, fetchAllCallHistory]);
 
   return (
     <CallContext.Provider value={{

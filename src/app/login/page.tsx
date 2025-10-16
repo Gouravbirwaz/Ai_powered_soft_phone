@@ -133,7 +133,7 @@ function AdminLoginTab() {
 
   const handleLogin = async (agent: Agent) => {
     setIsLoggingIn(agent.id);
-    await loginAsAgent({ ...agent, role: 'admin' }, 'admin');
+    await loginAsAgent(agent, 'admin');
   };
   
   return (
