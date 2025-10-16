@@ -205,16 +205,6 @@ const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string, cont
       )
   }
 
-  if (state.twilioDeviceStatus === 'initializing') {
-    return (
-        <div className="p-4 flex flex-col items-center justify-center min-h-[200px]">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-            <p className="text-sm text-muted-foreground">Connecting to softphone...</p>
-        </div>
-    )
-  }
-
-
   return (
     <>
     <AnimatePresence mode="wait">
@@ -560,3 +550,5 @@ export default function Softphone() {
     </div>
   );
 }
+
+    
