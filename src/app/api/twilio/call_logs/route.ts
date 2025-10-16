@@ -3,15 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Handle GET requests to fetch call logs
 export async function GET(req: NextRequest) {
-  const agentId = req.nextUrl.searchParams.get('agent_id');
-
-  // FIX: Correctly point to the versioned backend API endpoint
-  let getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
+  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
   
-  if (agentId) {
-    getCallLogsEndpoint += `?agent_id=${agentId}`;
-  }
-
   if (!process.env.BASE_URL) {
     return NextResponse.json(
       { error: 'Call logs endpoint is not configured in environment variables.' },
@@ -45,7 +38,6 @@ export async function GET(req: NextRequest) {
 
 // Handles POST requests to create or update a call log
 export async function POST(req: NextRequest) {
-    // FIX: Correctly point to the versioned backend API endpoint
     const postCallLogEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
   
     if (!process.env.BASE_URL) {

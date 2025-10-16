@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from './ui/button';
 import { ArrowDown, ArrowUp, Edit, Mail, PhoneCall, PhoneIncoming, PhoneOutgoing, Voicemail, Check } from 'lucide-react';
 import { useCall } from '@/contexts/call-context';
-import type { Call, CallStatus, ActionTaken, Lead } from '@/lib/types';
+import type { Call, CallStatus, ActionTaken, Lead, Agent } from '@/lib/types';
 import { formatDuration, cn } from '@/lib/utils';
 import { format, isValid, formatRelative } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -61,7 +61,8 @@ const StatusBadge = ({ status }: { status: CallStatus }) => {
 const CALLS_PER_PAGE = 10;
 
 export default function CallHistoryTable() {
-  const { state, dispatch, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
+  const { state, dispatch, openVoicemailDialogForLead, sendMissedCallEmail, fetchAgents } = useCall();
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'incoming' | 'outgoing'>('all');
@@ -76,6 +77,16 @@ export default function CallHistoryTable() {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const loadAgents = async () => {
+        if (fetchAgents) {
+            const fetched = await fetchAgents();
+            setAgents(fetched);
+        }
+    }
+    loadAgents();
+  }, [fetchAgents])
   
   // Reset page when filters change
   useEffect(() => {
@@ -149,9 +160,7 @@ export default function CallHistoryTable() {
 
 
   const { paginatedCalls, totalPages } = useMemo(() => {
-    if (!state.currentAgent) return { paginatedCalls: [], totalPages: 0 };
-    
-    let filtered = state.callHistory;
+    let filtered = state.allCallHistory;
 
     if (searchQuery) {
         filtered = filtered.filter(call => {
@@ -159,7 +168,9 @@ export default function CallHistoryTable() {
             const from = call.from?.toLowerCase() || '';
             const to = call.to?.toLowerCase() || '';
             const name = call.contactName?.toLowerCase() || '';
-            return from.includes(searchTerm) || to.includes(searchTerm) || name.includes(searchTerm);
+            const agent = agents.find(a => String(a.id) === String(call.agentId));
+            const agentName = agent?.name.toLowerCase() || '';
+            return from.includes(searchTerm) || to.includes(searchTerm) || name.includes(searchTerm) || agentName.includes(searchTerm);
         });
     }
 
@@ -188,12 +199,11 @@ export default function CallHistoryTable() {
     const paginated = filtered.slice(startIndex, startIndex + CALLS_PER_PAGE);
 
     return { paginatedCalls: paginated, totalPages: calculatedTotalPages };
-  }, [state.callHistory, state.currentAgent, statusFilter, directionFilter, sortConfig, currentPage, searchQuery]);
+  }, [state.allCallHistory, agents, statusFilter, directionFilter, sortConfig, currentPage, searchQuery]);
 
   const allStatuses = useMemo(() => {
-    if (!state.currentAgent) return ['all'];
     return ['all', ...Array.from(new Set(state.allCallHistory.map(c => c.status)))];
-  }, [state.allCallHistory, state.currentAgent]);
+  }, [state.allCallHistory]);
 
 
   const SortableHeader = ({ tkey, label }: { tkey: keyof Call; label: string }) => (
@@ -244,10 +254,10 @@ export default function CallHistoryTable() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
-          placeholder="Search by name or number..."
+          placeholder="Search by contact, number, or agent..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full sm:w-[250px]"
+          className="w-full sm:w-[300px]"
         />
         <div className="flex gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -278,6 +288,7 @@ export default function CallHistoryTable() {
             <TableRow>
               <TableHead className="w-[50px]">Type</TableHead>
               <TableHead>Contact</TableHead>
+              <SortableHeader tkey="agentName" label="Agent" />
               <SortableHeader tkey="status" label="Status" />
               <SortableHeader tkey="duration" label="Duration" />
               <SortableHeader tkey="startTime" label="Timestamp (US Eastern)" />
@@ -291,6 +302,7 @@ export default function CallHistoryTable() {
                 const isDateValid = callDate && isValid(callDate);
                 const contactIdentifier = call.direction === 'incoming' ? call.from : call.to;
                 const displayName = call.contactName || contactIdentifier;
+                const agent = agents.find(a => String(a.id) === String(call.agentId));
                 
                 return (
                   <TableRow key={`${call.id}-${index}`}>
@@ -309,6 +321,7 @@ export default function CallHistoryTable() {
                         </div>
                       </div>
                     </TableCell>
+                     <TableCell>{agent?.name || 'Unknown'}</TableCell>
                     <TableCell>
                       <StatusBadge status={call.status} />
                     </TableCell>
@@ -350,7 +363,7 @@ export default function CallHistoryTable() {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center">
                   No calls found.
                 </TableCell>
               </TableRow>

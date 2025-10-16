@@ -108,10 +108,10 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
             newHistory[index] = call;
             return newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
         };
-        const isCurrentAgentCall = String(state.currentAgent?.id) === String(call.agentId);
+        
         return {
             ...state,
-            callHistory: isCurrentAgentCall ? update(state.callHistory) : state.callHistory,
+            callHistory: update(state.callHistory),
             allCallHistory: update(state.allCallHistory),
         };
     }
@@ -167,7 +167,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     let summary = log.summary || '';
     let notes = log.notes || '';
     
-    // This logic is now handled by the backend, but we'll keep it for display purposes
     const summaryMarker = 'SUMMARY: ';
     const notesMarker = '\n---\nNOTES: ';
     const summaryIndex = notes.indexOf(summaryMarker);
@@ -190,7 +189,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       notes,
       summary,
       agentId: log.agent_id,
-      leadId: log.lead_id || '', // FIX: Ensure leadId is not undefined
+      leadId: log.lead_id || '',
       action_taken: log.action_taken || 'call',
       contactName: log.contact_name,
       followUpRequired: log.follow_up_required || false,
@@ -208,12 +207,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: formattedCalls });
-      
-      // Also set the agent-specific call history
-      if (currentAgentRef.current) {
-        const agentCalls = formattedCalls.filter(c => String(c.agentId) === String(currentAgentRef.current!.id));
-        dispatch({ type: 'SET_CALL_HISTORY', payload: agentCalls });
-      }
+      dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
 
     } catch (error: any) {
       console.error("Fetch all call history error:", error);
@@ -328,12 +322,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    // Prevent multiple disconnect handlers for the same call
     if (callInState.status !== 'in-progress' && callInState.status !== 'ringing-outgoing' && callInState.status !== 'ringing-incoming' && callInState.status !== 'queued') {
         return;
     }
     
-    // Optimistically update the status to prevent re-entry
     dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
 
     if (!callInState.startTime || isNaN(callInState.startTime)) {
@@ -376,7 +368,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
         }
     } else {
-        // Even if saving failed, update the history locally to reflect the change
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
         if (finalStatus !== 'voicemail-dropped' && finalStatus !== 'emailed') {
             dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
@@ -384,7 +375,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     activeTwilioCallRef.current = null;
-    // We keep the active call in state for a moment so the UI can update, then clear it
     setTimeout(() => {
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
     }, 5000);
@@ -520,10 +510,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     
-    if (!twilioDeviceRef.current || twilioDeviceRef.current.state !== 'registered') {
+    if (state.twilioDeviceStatus !== 'ready') {
       toast({
         title: 'Softphone Not Ready',
-        description: 'The softphone is not connected. Please try again.',
+        description: 'The softphone is not connected. Please wait or try logging in again.',
         variant: 'destructive',
       });
       return;
@@ -553,7 +543,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
       dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
       
-      const twilioCall = await twilioDeviceRef.current.connect({
+      const twilioCall = await twilioDeviceRef.current!.connect({
         params: { To: formattedNumber },
       });
       
@@ -586,13 +576,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       endActiveCall('failed');
     }
-  }, [toast, endActiveCall, handleCallDisconnect]);
+  }, [toast, endActiveCall, handleCallDisconnect, state.twilioDeviceStatus]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
     if (twilioCall && state.activeCall) {
       twilioCall.accept();
-      // 'accept' listener handles state update
     }
   }, [state.activeCall]);
 
@@ -600,7 +589,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const twilioCall = activeTwilioCallRef.current;
     if (twilioCall) {
       twilioCall.reject();
-      // 'reject' listener handles state update
     }
   }, []);
   
@@ -630,7 +618,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const loginAsAgent = useCallback((agent: Agent) => {
     currentAgentRef.current = agent;
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    initializeTwilio();
+    initializeTwilio(); 
     fetchAllCallHistory();
   }, [fetchAllCallHistory, initializeTwilio]);
 

@@ -33,6 +33,7 @@ export interface Call {
   summary?: string;
   avatarUrl?: string;
   agentId: number; 
+  agentName?: string; // For display purposes
   leadId?: string;
   followUpRequired?: boolean;
   callAttemptNumber?: number;
