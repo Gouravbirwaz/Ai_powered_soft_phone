@@ -21,6 +21,7 @@ type LoginRole = 'agent' | 'admin';
 interface CallState {
   callHistory: Call[];
   allCallHistory: Call[]; // To track all calls for lead status
+  agents: Agent[];
   activeCall: Call | null;
   softphoneOpen: boolean;
   showIncomingCall: boolean;
@@ -43,6 +44,7 @@ type CallAction =
   | { type: 'REPLACE_IN_HISTORY'; payload: { tempId: string, finalCall: Call } }
   | { type: 'SET_CALL_HISTORY'; payload: Call[] }
   | { type: 'SET_ALL_CALL_HISTORY'; payload: Call[] }
+  | { type: 'SET_AGENTS'; payload: Agent[] }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'OPEN_VOICEMAIL_DIALOG'; payload: { lead: Lead } }
@@ -53,6 +55,7 @@ type CallAction =
 const initialState: CallState = {
   callHistory: [],
   allCallHistory: [],
+  agents: [],
   activeCall: null,
   softphoneOpen: false,
   showIncomingCall: false,
@@ -129,6 +132,8 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         return { ...state, callHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
     case 'SET_ALL_CALL_HISTORY':
         return { ...state, allCallHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
+    case 'SET_AGENTS':
+        return { ...state, agents: action.payload };
     case 'CLOSE_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
@@ -199,6 +204,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const fetchAllCallHistory = useCallback(async () => {
+    if (state.allCallHistory.length > 0) {
+      return state.allCallHistory;
+    }
     try {
       const url = '/api/twilio/call_logs';
       const response = await fetch(url, { method: 'GET' });
@@ -224,7 +232,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return [];
     }
-  }, [toast, mapCallLog]);
+  }, [toast, mapCallLog, state.allCallHistory]);
 
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call | null) => {
@@ -606,13 +614,18 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, []);
   
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
+    if (state.agents.length > 0) {
+      return state.agents;
+    }
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
         throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      return (data.agents || []) as Agent[];
+      const agents = (data.agents || []) as Agent[];
+      dispatch({ type: 'SET_AGENTS', payload: agents });
+      return agents;
     } catch (error: any) {
       console.error("Fetch agents error:", error);
       toast({
@@ -622,7 +635,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return [];
     }
-  }, [toast]);
+  }, [toast, state.agents]);
   
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
@@ -667,6 +680,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
     dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
+    dispatch({ type: 'SET_AGENTS', payload: [] });
   }, [cleanupTwilio]);
 
   const openVoicemailDialogForLead = useCallback((lead: Lead) => {

@@ -29,7 +29,7 @@ function AgentLoginTab() {
   const router = useRouter();
 
   useEffect(() => {
-    if (state.currentAgent) {
+    if (state.currentAgent && state.currentAgent.role === 'agent') {
       router.replace('/');
     }
   }, [state.currentAgent, router]);
@@ -41,7 +41,7 @@ function AgentLoginTab() {
       try {
         const fetchedAgents = await fetchAgents();
         if (fetchedAgents && fetchedAgents.length > 0) {
-          setAgents(fetchedAgents);
+          setAgents(fetchedAgents.filter(a => a.name !== 'Zackary Beckham' && a.name !== 'Kevin Hong'));
         } else {
           setError('No agents found. Please check the backend configuration.');
         }
@@ -174,6 +174,20 @@ function AdminLoginTab() {
 }
 
 export default function LoginPage() {
+  const { state } = useCall();
+  const router = useRouter();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (state.currentAgent) {
+      if (state.currentAgent.role === 'admin') {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/');
+      }
+    }
+  }, [state.currentAgent, router]);
+
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
