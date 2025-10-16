@@ -642,14 +642,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = agentWithRole;
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
     
+    // Always initialize twilio for all roles now
+    const twilioPromise = initializeTwilio();
     const historyPromise = fetchAllCallHistory();
     
-    if (role === 'agent') {
-      const twilioPromise = initializeTwilio();
-      await Promise.all([historyPromise, twilioPromise]);
-    } else {
-      await historyPromise;
-    }
+    await Promise.all([historyPromise, twilioPromise]);
+
   }, [fetchAllCallHistory, initializeTwilio]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {

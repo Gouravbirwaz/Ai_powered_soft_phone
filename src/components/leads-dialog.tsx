@@ -119,7 +119,7 @@ export default function LeadsDialog({
                           variant="outline"
                           size="sm"
                           onClick={() => handleCall(lead)}
-                          disabled={!!state.activeCall || !lead.companyPhone}
+                          disabled={!!state.activeCall}
                           className="whitespace-nowrap"
                         >
                           <Phone className="mr-2 h-4 w-4" />
@@ -129,7 +129,7 @@ export default function LeadsDialog({
                           variant="outline"
                           size="sm"
                           onClick={() => handleVoicemail(lead)}
-                           disabled={!!state.activeCall || !lead.companyPhone}
+                           disabled={!!state.activeCall}
                           className="whitespace-nowrap"
                         >
                           <Voicemail className="mr-2 h-4 w-4" />
