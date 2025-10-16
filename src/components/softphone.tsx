@@ -371,7 +371,7 @@ export default function Softphone() {
 
       const headers = lines[0].split(delimiter).map(cleanHeader);
 
-      const leads: Lead[] => {
+      const leads = lines.slice(1).map((line, rowIndex) => {
         const values = line.split(delimiter);
         const leadData: { [key: string]: any } = {};
 
@@ -503,3 +503,5 @@ export default function Softphone() {
     </div>
   );
 }
+
+    
