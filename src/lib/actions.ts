@@ -32,6 +32,7 @@ export async function generateSummaryAction(
 
 const evaluationResultSchema = z.object({
   evaluation: z.string().optional(),
+  score: z.number().optional(),
   error: z.string().optional(),
 });
 
@@ -39,12 +40,12 @@ export async function evaluateAgentPerformanceAction(
   calls: Call[],
 ): Promise<z.infer<typeof evaluationResultSchema>> {
   if (!calls || calls.length === 0) {
-    return { evaluation: 'No call data provided for this agent.' };
+    return { evaluation: 'No call data provided for this agent.', score: 0 };
   }
 
   try {
     const output = await evaluateAgentPerformance(calls);
-    return { evaluation: output.evaluation };
+    return { evaluation: output.evaluation, score: output.score };
   } catch (error) {
     console.error('Error evaluating performance:', error);
     return { error: 'Failed to generate performance evaluation. Please try again.' };

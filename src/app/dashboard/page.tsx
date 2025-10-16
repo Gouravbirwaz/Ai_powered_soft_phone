@@ -28,14 +28,16 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Clock, Users, Phone } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Users, Phone, Star } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 
 
 interface AgentStats extends Agent {
     calls: Call[];
     evaluation: string;
+    score: number;
     isEvaluating: boolean;
 }
 
@@ -62,6 +64,7 @@ export default function DashboardPage() {
           ...agent,
           calls: calls.filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
+          score: 0,
           isEvaluating: false,
         }));
         setAgentStats(stats);
@@ -82,7 +85,12 @@ export default function DashboardPage() {
     const result = await evaluateAgentPerformanceAction(agentToEvaluate.calls);
     
     setAgentStats(prevStats => prevStats.map(stat => 
-        stat.id === agentId ? { ...stat, evaluation: result.evaluation || result.error || '', isEvaluating: false } : stat
+        stat.id === agentId ? { 
+            ...stat, 
+            evaluation: result.evaluation || result.error || '', 
+            score: result.score || 0,
+            isEvaluating: false 
+        } : stat
     ));
   };
   
@@ -237,8 +245,17 @@ export default function DashboardPage() {
                                     </div>
                                 ) : agent.evaluation ? (
                                     <Card className="bg-background">
-                                        <CardContent className="p-4">
-                                            <p className="text-sm whitespace-pre-wrap">{agent.evaluation}</p>
+                                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                            <CardTitle className="text-sm font-medium">Performance Score</CardTitle>
+                                            <Star className="w-4 h-4 text-yellow-500" />
+                                        </CardHeader>
+                                        <CardContent className="p-4 pt-0">
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-2xl font-bold">{agent.score.toFixed(1)}</span>
+                                                <span className="text-sm text-muted-foreground">/ 10</span>
+                                            </div>
+                                            <Progress value={agent.score * 10} className="w-full h-2 mt-2" />
+                                            <p className="text-sm whitespace-pre-wrap mt-4">{agent.evaluation}</p>
                                         </CardContent>
                                     </Card>
                                 ) : (
