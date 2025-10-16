@@ -82,7 +82,7 @@ export default function DashboardPage() {
     const agentToEvaluate = agentStats.find(stat => stat.id === agentId);
     if (!agentToEvaluate) return;
 
-    const result = await evaluateAgentPerformanceAction(agentToEvaluate.calls);
+    const result = await evaluateAgentPerformanceAction(agentToEvaluate.name, agentToEvaluate.calls);
     
     setAgentStats(prevStats => prevStats.map(stat => 
         stat.id === agentId ? { 

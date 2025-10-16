@@ -37,14 +37,15 @@ const evaluationResultSchema = z.object({
 });
 
 export async function evaluateAgentPerformanceAction(
+  agentName: string,
   calls: Call[],
 ): Promise<z.infer<typeof evaluationResultSchema>> {
   if (!calls || calls.length === 0) {
-    return { evaluation: 'No call data provided for this agent.', score: 0 };
+    return { evaluation: `No call data provided for ${agentName}.`, score: 0 };
   }
 
   try {
-    const output = await evaluateAgentPerformance(calls);
+    const output = await evaluateAgentPerformance({ agentName, calls });
     return { evaluation: output.evaluation, score: output.score };
   } catch (error) {
     console.error('Error evaluating performance:', error);

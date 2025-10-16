@@ -11,20 +11,22 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import type { Call } from '@/lib/types';
 
-const EvaluateAgentPerformanceInputSchema = z.array(
-    z.object({
-        id: z.string(),
-        direction: z.enum(['incoming', 'outgoing']),
-        status: z.string(),
-        duration: z.number().optional(),
-        notes: z.string().optional(),
-        summary: z.string().optional(),
-    })
-);
+const EvaluateAgentPerformanceInputSchema = z.object({
+    agentName: z.string().describe("The name of the agent being evaluated."),
+    calls: z.array(
+        z.object({
+            id: z.string(),
+            direction: z.enum(['incoming', 'outgoing']),
+            status: z.string(),
+            duration: z.number().optional(),
+            notes: z.string().optional(),
+            summary: z.string().optional(),
+        })
+    ),
+});
 
-export type EvaluateAgentPerformanceInput = Call[];
+export type EvaluateAgentPerformanceInput = z.infer<typeof EvaluateAgentPerformanceInputSchema>;
 
 const EvaluateAgentPerformanceOutputSchema = z.object({
   evaluation: z.string().describe("A comprehensive, yet concise, evaluation of the agent's performance, formatted as a professional report. Use Markdown for formatting (e.g., headings, bullet points). This evaluation must explain the reasoning behind the score."),
@@ -41,9 +43,9 @@ export async function evaluateAgentPerformance(
 
 const prompt = ai.definePrompt({
   name: 'evaluateAgentPerformancePrompt',
-  input: { schema: z.object({ callDataJson: z.string() }) },
+  input: { schema: z.object({ agentName: z.string(), callDataJson: z.string() }) },
   output: { schema: EvaluateAgentPerformanceOutputSchema },
-  prompt: `You are an expert performance analyst for a financial services company, Caprae Capital Partners. Your task is to evaluate a sales agent's performance based on their recent call logs and provide a score out of 10.
+  prompt: `You are an expert performance analyst for a financial services company, Caprae Capital Partners. Your task is to evaluate the performance of agent '{{{agentName}}}' based on their recent call logs and provide a score out of 10.
 
 Analyze the provided call data to identify trends, strengths, and areas for improvement. Focus on the quality of interactions and outcomes, not just the quantity of calls. A few high-quality, long 'completed' calls are better than many failed or busy calls.
 
@@ -61,7 +63,7 @@ Analyze the provided call data to identify trends, strengths, and areas for impr
     - An "Areas for Improvement" section with 2-3 bullet points.
     - A final "Recommendation" for the agent.
 
-Here are the call logs to analyze:
+Here are the call logs for {{{agentName}}} to analyze:
 {{{callDataJson}}}
 `,
 });
@@ -74,7 +76,7 @@ const evaluateAgentPerformanceFlow = ai.defineFlow(
   },
   async (input) => {
     // Filter out unnecessary fields to keep the prompt clean and focused
-    const cleanInput = input.map(call => ({
+    const cleanCalls = input.calls.map(call => ({
         id: call.id,
         direction: call.direction,
         status: call.status,
@@ -83,11 +85,11 @@ const evaluateAgentPerformanceFlow = ai.defineFlow(
         summary: call.summary,
     }));
 
-    if (cleanInput.length === 0) {
-        return { evaluation: "No call data available for this agent. Unable to generate an evaluation.", score: 0 };
+    if (cleanCalls.length === 0) {
+        return { evaluation: `No call data available for ${input.agentName}. Unable to generate an evaluation.`, score: 0 };
     }
 
-    const { output } = await prompt({ callDataJson: JSON.stringify(cleanInput) });
+    const { output } = await prompt({ agentName: input.agentName, callDataJson: JSON.stringify(cleanCalls) });
     return output!;
   }
 );
