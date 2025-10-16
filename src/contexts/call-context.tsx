@@ -14,6 +14,7 @@ import React, {
 import { useToast } from '@/hooks/use-toast';
 import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
 import { formatUSPhoneNumber } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 type LoginRole = 'agent' | 'admin';
@@ -162,6 +163,7 @@ const CallContext = createContext<any>(null);
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
+  const router = useRouter();
   const twilioDeviceRef = useRef<Device | null>(null);
   const activeTwilioCallRef = useRef<TwilioCall | null>(null);
   const activeCallRef = useRef<Call | null>(null);
@@ -458,70 +460,75 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   }, [handleCallDisconnect]);
 
-  const initializeTwilio = useCallback(async () => {
-    const agent = currentAgentRef.current;
-    if (!agent || twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing') {
-      return;
-    }
-    
-    dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
-    
-    try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
-        
-        const response = await fetch(`/api/twilio/token?identity=${agent.id}`);
-        if (!response.ok) {
-            throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
-        }
-        const { token } = await response.json();
+  const initializeTwilio = useCallback((agent: Agent): Promise<boolean> => {
+    return new Promise(async (resolve, reject) => {
+      if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing') {
+        if (state.twilioDeviceStatus === 'ready') resolve(true);
+        else reject(new Error("Initialization already in progress."));
+        return;
+      }
+      
+      dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
+      
+      try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
+          
+          const response = await fetch(`/api/twilio/token?identity=${agent.id}`);
+          if (!response.ok) {
+              throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
+          }
+          const { token } = await response.json();
 
-        if (typeof token !== 'string') {
-            throw new Error('Received invalid token from server.');
-        }
-        
-        const device = new Device(token, {
-            codecPreferences: ['opus', 'pcmu'],
-            logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
-        });
-        
-        device.on('ready', () => {
-            console.log('Twilio Device is ready.');
-            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
-        });
+          if (typeof token !== 'string') {
+              throw new Error('Received invalid token from server.');
+          }
+          
+          const device = new Device(token, {
+              codecPreferences: ['opus', 'pcmu'],
+              logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
+          });
+          
+          device.on('ready', () => {
+              console.log('Twilio Device is ready.');
+              dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
+              resolve(true);
+          });
 
-        device.on('error', (error) => {
-            console.error('Twilio Device Error:', error);
-            // Don't show toast for this specific, common error
-            if (error.code !== 31000) {
-              toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
-            }
-            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-            cleanupTwilio();
-        });
+          device.on('error', (error) => {
+              console.error('Twilio Device Error:', error);
+              if (error.code !== 31000) {
+                toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
+              }
+              dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+              cleanupTwilio();
+              reject(error);
+          });
 
-        device.on('incoming', handleIncomingCall);
+          device.on('incoming', handleIncomingCall);
 
-        await device.register();
-        twilioDeviceRef.current = device;
+          await device.register();
+          twilioDeviceRef.current = device;
 
-    } catch (error: any) {
-        console.error('Error initializing Twilio:', error);
-        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-        if (error.name === 'NotAllowedError') {
-             toast({ 
-                title: 'Microphone Access Denied', 
-                description: 'Please grant microphone access in your browser settings to use the softphone.', 
-                variant: 'destructive' 
-            });
-        } else {
-            toast({ 
-                title: 'Initialization Failed', 
-                description: error.message || 'Could not connect to the softphone service.', 
-                variant: 'destructive' 
-            });
-        }
-    }
+      } catch (error: any) {
+          console.error('Error initializing Twilio:', error);
+          dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
+          if (error.name === 'NotAllowedError') {
+               toast({ 
+                  title: 'Microphone Access Denied', 
+                  description: 'Please grant microphone access in your browser settings to use the softphone.', 
+                  variant: 'destructive' 
+              });
+          } else {
+              toast({ 
+                  title: 'Initialization Failed', 
+                  description: error.message || 'Could not connect to the softphone service.', 
+                  variant: 'destructive' 
+              });
+          }
+          reject(error);
+      }
+    });
   }, [state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
@@ -703,7 +710,23 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
-  }, []);
+    
+    try {
+      const isReady = await initializeTwilio(agentWithRole);
+      if (isReady) {
+        await fetchAllCallHistory();
+        if (role === 'admin') {
+          router.replace('/dashboard');
+        } else {
+          router.replace('/');
+        }
+      }
+    } catch (error) {
+      console.error("Login failed due to Twilio initialization error", error);
+      // The toast is already shown in initializeTwilio
+      dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null }}); // Log out on failure
+    }
+  }, [initializeTwilio, fetchAllCallHistory, router]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -849,18 +872,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return false;
     }
   }, [createOrUpdateCallOnBackend, toast]);
-
-  useEffect(() => {
-    if (state.currentAgent && state.twilioDeviceStatus === 'uninitialized') {
-      initializeTwilio();
-    }
-  }, [state.currentAgent, state.twilioDeviceStatus, initializeTwilio]);
-
-  useEffect(() => {
-    if(state.currentAgent) {
-        fetchAllCallHistory();
-    }
-  }, [state.currentAgent, fetchAllCallHistory]);
 
   return (
     <CallContext.Provider value={{

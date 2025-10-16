@@ -9,6 +9,7 @@ import PostCallSheet from '@/components/post-call-sheet';
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import VoicemailDialog from './voicemail-dialog';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { state } = useCall();

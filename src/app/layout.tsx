@@ -1,8 +1,12 @@
+
+'use client';
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { AppProvider } from '@/components/app-provider';
+import { useRouter } from 'next/navigation';
 
-export const metadata: Metadata = {
+const metadata: Metadata = {
   title: 'Caprae Capital Partners',
   description: 'AI-powered softphone for your business.',
 };
