@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { Call, Lead, Agent, CallStatus, CallDirection, ActionTaken } from '@/lib/types';
+import type { Call, Lead, Agent, CallStatus, CallDirection, ActionTaken, NewAgent } from '@/lib/types';
 import React, {
   createContext,
   useContext,
@@ -45,6 +45,7 @@ type CallAction =
   | { type: 'SET_CALL_HISTORY'; payload: Call[] }
   | { type: 'SET_ALL_CALL_HISTORY'; payload: Call[] }
   | { type: 'SET_AGENTS'; payload: Agent[] }
+  | { type: 'ADD_AGENT'; payload: Agent }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'OPEN_VOICEMAIL_DIALOG'; payload: { lead: Lead } }
@@ -134,6 +135,8 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         return { ...state, allCallHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
     case 'SET_AGENTS':
         return { ...state, agents: action.payload };
+    case 'ADD_AGENT':
+        return { ...state, agents: [...state.agents, action.payload] };
     case 'CLOSE_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
@@ -636,6 +639,36 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       return [];
     }
   }, [toast, state.agents]);
+
+  const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
+    try {
+        const response = await fetch('/api/agents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(agentData),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.details || error.error || 'Failed to add agent.');
+        }
+
+        const { agent_id } = await response.json();
+        const newAgent: Agent = { id: agent_id, ...agentData, status: 'active' };
+
+        dispatch({ type: 'ADD_AGENT', payload: newAgent });
+        toast({ title: 'Success', description: 'New agent has been added.' });
+        return true;
+
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: error.message,
+        });
+        return false;
+    }
+}, [toast]);
   
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
@@ -800,6 +833,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       state,
       dispatch,
       fetchAgents,
+      addAgent,
       fetchAllCallHistory,
       loginAsAgent,
       logout,

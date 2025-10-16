@@ -28,10 +28,11 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Users, Phone, Star } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
+import AddAgentDialog from '@/components/add-agent-dialog';
 
 
 interface AgentStats extends Agent {
@@ -42,10 +43,11 @@ interface AgentStats extends Agent {
 }
 
 export default function DashboardPage() {
-  const { state, fetchAgents, fetchAllCallHistory, logout } = useCall();
+  const { state, fetchAgents, fetchAllCallHistory, logout, addAgent } = useCall();
   const router = useRouter();
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
 
   useEffect(() => {
     if (!state.currentAgent || state.currentAgent.role !== 'admin') {
@@ -57,6 +59,7 @@ export default function DashboardPage() {
     if (state.currentAgent && state.currentAgent.role === 'admin') {
       const loadData = async () => {
         setIsLoading(true);
+        // fetchAgents is now cached, so this is fine to call
         const agents = await fetchAgents();
         const calls = await fetchAllCallHistory();
         
@@ -72,9 +75,9 @@ export default function DashboardPage() {
       }
       loadData();
     }
-  }, [state.currentAgent, fetchAgents, fetchAllCallHistory]);
+  }, [state.currentAgent, state.agents, fetchAgents, fetchAllCallHistory]); // Depend on state.agents
   
-  const handleEvaluate = async (agentId: number) => {
+  const handleEvaluate = async (agentId: number, agentName: string) => {
     setAgentStats(prevStats => prevStats.map(stat => 
         stat.id === agentId ? { ...stat, isEvaluating: true } : stat
     ));
@@ -82,7 +85,7 @@ export default function DashboardPage() {
     const agentToEvaluate = agentStats.find(stat => stat.id === agentId);
     if (!agentToEvaluate) return;
 
-    const result = await evaluateAgentPerformanceAction(agentToEvaluate.name, agentToEvaluate.calls);
+    const result = await evaluateAgentPerformanceAction(agentName, agentToEvaluate.calls);
     
     setAgentStats(prevStats => prevStats.map(stat => 
         stat.id === agentId ? { 
@@ -99,7 +102,13 @@ export default function DashboardPage() {
     router.replace('/login');
   }
 
+  const handleAgentAdded = () => {
+    // The context will handle updating the state, and the useEffect will trigger a re-render
+    setIsAddAgentOpen(false);
+  }
+
   const totalCalls = useMemo(() => agentStats.reduce((sum, agent) => sum + agent.calls.length, 0), [agentStats]);
+  const totalAgents = useMemo(() => agentStats.length, [agentStats]);
 
   if (!state.currentAgent || state.currentAgent.role !== 'admin') {
     return (
@@ -111,6 +120,12 @@ export default function DashboardPage() {
 
   return (
     <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
+       <AddAgentDialog
+        open={isAddAgentOpen}
+        onOpenChange={setIsAddAgentOpen}
+        onAgentAdded={handleAgentAdded}
+        addAgent={addAgent}
+      />
       <div className="flex items-center justify-between space-x-4">
         <div className="flex items-center space-x-4">
             <Image
@@ -128,7 +143,13 @@ export default function DashboardPage() {
                 </p>
             </div>
         </div>
-        <Button onClick={handleLogout} variant="outline">Logout</Button>
+        <div className="flex items-center gap-2">
+            <Button onClick={() => setIsAddAgentOpen(true)}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Agent
+            </Button>
+            <Button onClick={handleLogout} variant="outline">Logout</Button>
+        </div>
       </div>
 
         <Card>
@@ -139,10 +160,10 @@ export default function DashboardPage() {
             <CardContent className="grid gap-4 md:grid-cols-3">
                 <Card className="p-4">
                     <div className="flex items-center gap-4">
-                        <Users className="h-8 w-8 text-muted-foreground" />
+                        <User className="h-8 w-8 text-muted-foreground" />
                         <div>
                             <p className="text-sm text-muted-foreground">Total Agents</p>
-                            <p className="text-2xl font-bold">{agentStats.length}</p>
+                            <p className="text-2xl font-bold">{totalAgents}</p>
                         </div>
                     </div>
                 </Card>
@@ -161,7 +182,7 @@ export default function DashboardPage() {
                         <div>
                             <p className="text-sm text-muted-foreground">Avg Calls per Agent</p>
                             <p className="text-2xl font-bold">
-                                {agentStats.length > 0 ? (totalCalls / agentStats.length).toFixed(1) : 0}
+                                {totalAgents > 0 ? (totalCalls / totalAgents).toFixed(1) : 0}
                             </p>
                         </div>
                     </div>
@@ -234,7 +255,7 @@ export default function DashboardPage() {
                             <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <h4 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4" /> AI Evaluation</h4>
-                                    <Button size="sm" variant="outline" onClick={() => handleEvaluate(agent.id)} disabled={agent.isEvaluating || agent.calls.length === 0}>
+                                    <Button size="sm" variant="outline" onClick={() => handleEvaluate(agent.id, agent.name)} disabled={agent.isEvaluating || agent.calls.length === 0}>
                                         {agent.isEvaluating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                                         Analyze
                                     </Button>
@@ -255,7 +276,7 @@ export default function DashboardPage() {
                                                 <span className="text-sm text-muted-foreground">/ 10</span>
                                             </div>
                                             <Progress value={agent.score * 10} className="w-full h-2 mt-2" />
-                                            <p className="text-sm whitespace-pre-wrap mt-4">{agent.evaluation}</p>
+                                            <div className="prose prose-sm dark:prose-invert text-sm whitespace-pre-wrap mt-4" dangerouslySetInnerHTML={{ __html: agent.evaluation }} />
                                         </CardContent>
                                     </Card>
                                 ) : (

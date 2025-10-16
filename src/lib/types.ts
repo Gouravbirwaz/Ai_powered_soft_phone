@@ -73,4 +73,5 @@ export interface Agent {
     role?: 'agent' | 'admin';
 }
 
+export type NewAgent = Omit<Agent, 'id' | 'status' | 'role'>;
     
