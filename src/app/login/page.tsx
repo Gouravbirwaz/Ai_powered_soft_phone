@@ -137,9 +137,10 @@ function AdminLoginTab() {
       setError(null);
       try {
         const fetchedAgents = await fetchAgents();
-        console.log('Fetched agent names:', fetchedAgents.map((agent: Agent) => agent.name));
+        console.log('Fetched agent names for admin check:', fetchedAgents.map((agent: Agent) => agent.name.toLowerCase()));
+        const adminUsersLower = ADMIN_USERS.map(u => u.toLowerCase());
         const adminAgents = fetchedAgents.filter((agent: Agent) => 
-            ADMIN_USERS.includes(agent.name.toLowerCase())
+            adminUsersLower.includes(agent.name.toLowerCase())
         );
         if (adminAgents.length > 0) {
           setAdmins(adminAgents);
