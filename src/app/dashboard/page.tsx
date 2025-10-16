@@ -28,7 +28,7 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2 } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2, Users } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
@@ -178,7 +178,7 @@ export default function DashboardPage() {
             <CardContent className="grid gap-4 md:grid-cols-3">
                 <Card className="p-4">
                     <div className="flex items-center gap-4">
-                        <User className="h-8 w-8 text-muted-foreground" />
+                        <Users className="h-8 w-8 text-muted-foreground" />
                         <div>
                             <p className="text-sm text-muted-foreground">Total Agents</p>
                             <p className="text-2xl font-bold">{totalAgents}</p>
@@ -224,8 +224,8 @@ export default function DashboardPage() {
           <Accordion type="single" collapsible className="w-full">
             {agentStats.map((agent) => (
               <AccordionItem value={`agent-${agent.id}`} key={agent.id}>
-                <AccordionTrigger>
-                    <div className="flex justify-between items-center w-full">
+                <div className="flex items-center w-full">
+                    <AccordionTrigger className="flex-1">
                         <div className="flex items-center gap-3">
                             <Avatar>
                                 <AvatarFallback><User /></AvatarFallback>
@@ -235,11 +235,11 @@ export default function DashboardPage() {
                                 <p className="text-sm text-muted-foreground">{agent.calls.length} calls</p>
                             </div>
                         </div>
-                        <Button variant="ghost" size="icon" className="mr-4" onClick={(e) => { e.stopPropagation(); setAgentToDelete(agent); }}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                    </div>
-                </AccordionTrigger>
+                    </AccordionTrigger>
+                    <Button variant="ghost" size="icon" className="mr-4" onClick={() => setAgentToDelete(agent)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                </div>
                 <AccordionContent>
                     <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
