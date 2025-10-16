@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
-const ADMIN_USERS = ["Zackary Beckham", "Kevin Hong"];
+const ADMIN_USERS = ["zack", "kevin"];
 
 function AgentLoginTab() {
   const { loginAsAgent, state, fetchAgents, initializeTwilio } = useCall();
@@ -137,7 +137,9 @@ function AdminLoginTab() {
       setError(null);
       try {
         const fetchedAgents = await fetchAgents();
-        const adminAgents = fetchedAgents.filter((agent: Agent) => ADMIN_USERS.includes(agent.name));
+        const adminAgents = fetchedAgents.filter((agent: Agent) => 
+            ADMIN_USERS.includes(agent.name.toLowerCase())
+        );
         if (adminAgents.length > 0) {
           setAdmins(adminAgents);
         } else {
