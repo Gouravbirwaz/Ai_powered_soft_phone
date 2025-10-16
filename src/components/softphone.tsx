@@ -196,14 +196,24 @@ const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string) => v
           <div className="p-4">
               <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Initialization Failed</AlertTitle>
+                  <AlertTitle>Connection Failed</AlertTitle>
                   <AlertDescription>
-                    Could not connect to the calling service. Please try reloading the page.
+                    Could not connect to the calling service. Please reload the page and log in again.
                   </AlertDescription>
               </Alert>
           </div>
       )
   }
+
+  if (state.twilioDeviceStatus === 'initializing') {
+    return (
+        <div className="p-4 flex flex-col items-center justify-center min-h-[200px]">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
+            <p className="text-sm text-muted-foreground">Connecting to softphone...</p>
+        </div>
+    )
+  }
+
 
   return (
     <>
@@ -376,19 +386,22 @@ const ActiveCallView = () => {
 export default function Softphone() {
   const { state, dispatch, startOutgoingCall, initializeTwilio } = useCall();
   const { toast } = useToast();
-  const { activeCall, softphoneOpen, twilioDeviceStatus } = state;
+  const { currentAgent, activeCall, softphoneOpen, twilioDeviceStatus } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
   
+  useEffect(() => {
+    if (currentAgent && twilioDeviceStatus === 'uninitialized') {
+        initializeTwilio(currentAgent);
+    }
+  }, [currentAgent, twilioDeviceStatus, initializeTwilio]);
+
   const handleCall = (number: string) => {
     startOutgoingCall(number, number);
   };
   
-  const handleToggle = async (open: boolean) => {
-    if (open && twilioDeviceStatus === 'uninitialized') {
-        initializeTwilio();
-    }
-    dispatch({ type: 'TOGGLE_SOFTPHONE' });
+  const handleToggle = (open: boolean) => {
+    dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: open });
   }
 
   const getTriggerIcon = () => {
