@@ -167,7 +167,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     let summary = log.summary || '';
     let notes = log.notes || '';
     
-    // This logic is now handled by the backend, but we'll keep it for display purposes
     const summaryMarker = 'SUMMARY: ';
     const notesMarker = '\n---\nNOTES: ';
     const summaryIndex = notes.indexOf(summaryMarker);
@@ -190,33 +189,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       notes,
       summary,
       agentId: log.agent_id,
-      leadId: log.lead_id, // This may be empty/null from the backend
+      leadId: log.lead_id || '', // FIX: Ensure leadId is not undefined
       action_taken: log.action_taken || 'call',
       contactName: log.contact_name,
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
     };
   }, []);
-
-  const fetchCallHistory = useCallback(async (agentId: number) => {
-    try {
-      const url = `/api/twilio/call_logs?agent_id=${agentId}`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agent call history. Status: ${response.status}`);
-      }
-      const data = await response.json();
-      const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
-      dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
-    } catch (error: any) {
-      console.error("Fetch agent call history error:", error);
-      toast({
-        variant: 'destructive',
-        title: 'API Error',
-        description: error.message || 'Could not fetch call history.'
-      });
-    }
-  }, [toast, mapCallLog]);
 
   const fetchAllCallHistory = useCallback(async () => {
     try {
@@ -226,8 +205,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch all call history. Status: ${response.status}`);
       }
       const data = await response.json();
-       const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
+      const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: formattedCalls });
+      
+      // Also set the agent-specific call history
+      if (currentAgentRef.current) {
+        const agentCalls = formattedCalls.filter(c => String(c.agentId) === String(currentAgentRef.current!.id));
+        dispatch({ type: 'SET_CALL_HISTORY', payload: agentCalls });
+      }
+
     } catch (error: any) {
       console.error("Fetch all call history error:", error);
       toast({
@@ -254,6 +240,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     
     try {
         const body: { [key: string]: any } = {
+            call_log_id: call.id.startsWith('temp-') ? undefined : call.id, // Only send ID if it's not temporary
             agent_id: agentId ? parseInt(String(agentId), 10) : undefined,
             phone_number: phoneNumber,
             notes: call.notes,
@@ -265,7 +252,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             action_taken: call.action_taken,
             follow_up_required: call.followUpRequired,
             call_attempt_number: call.callAttemptNumber,
-            // No lead_id is sent, as per backend logic
+            direction: call.direction,
+            contact_name: call.contactName,
         };
         
         const response = await fetch('/api/twilio/call_logs', {
@@ -333,10 +321,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, initialStatus: CallStatus = 'completed') => {
-    const callInState = activeCallRef.current;
-    if (!callInState) {
+    if (!activeCallRef.current) {
         return;
     }
+
+    const callInState = activeCallRef.current;
     
     // Prevent multiple disconnect handlers for the same call
     activeCallRef.current = null;
@@ -529,7 +518,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         body: JSON.stringify({
           to: formattedNumber,
           agent_id: agent.id,
-          dialer_type: 'manual', // or auto, depending on context
+          dialer_type: 'manual', 
           lead_id: leadId,
         }),
       });
@@ -546,11 +535,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       }
       
       const callData: Call = {
-        id: customer_call_sid || `conf-${conference}`,
+        id: customer_call_sid || `temp-${Date.now()}`,
         from: agent.phone,
         to: formattedNumber,
         direction: 'outgoing',
-        status: 'ringing-outgoing', // Changed from 'queued'
+        status: 'ringing-outgoing',
         startTime: Date.now(),
         duration: 0,
         agentId: agent.id,
@@ -637,9 +626,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     currentAgentRef.current = agent;
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
     await initializeTwilio();
-    fetchCallHistory(agent.id); 
-    fetchAllCallHistory();
-  }, [fetchCallHistory, fetchAllCallHistory, initializeTwilio]);
+    await fetchAllCallHistory();
+  }, [fetchAllCallHistory, initializeTwilio]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -700,17 +688,28 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             throw new Error(error.error || error.message || 'Failed to send voicemail');
         }
 
-        const { call_log } = await response.json();
+        const responseData = await response.json();
         
-        if (!call_log) {
-          console.error('sendVoicemail: Backend did not return a call_log object.');
-          toast({ title: 'Logging Error', description: 'Voicemail sent, but failed to get log details from backend.', variant: 'destructive' });
-          return false;
-        }
+        const interactionLog: Call = {
+          id: responseData.call_sid || `voicemail-${Date.now()}`,
+          direction: 'outgoing',
+          from: agent.phone,
+          to: formattedNumber,
+          startTime: Date.now(),
+          duration: 0,
+          status: 'voicemail-dropped',
+          agentId: agent.id,
+          leadId: lead.lead_id,
+          action_taken: 'voicemail',
+          contactName: lead.company,
+        };
 
-        const finalLog = { ...mapCallLog(call_log), action_taken: 'voicemail' as ActionTaken, contactName: lead.company };
+        const savedLog = await createOrUpdateCallOnBackend(interactionLog);
+
+        if (savedLog) {
+            dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
+        }
         
-        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalLog } });
         toast({ title: 'Voicemail Sent', description: `Voicemail to ${formattedNumber} was sent successfully.` });
         return true;
 
@@ -719,7 +718,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Voicemail Failed', description: error.message, variant: 'destructive' });
         return false;
     }
-  }, [toast, mapCallLog]);
+  }, [toast, createOrUpdateCallOnBackend]);
   
   const sendMissedCallEmail = useCallback(async (lead: Lead) => {
     const agent = currentAgentRef.current;
@@ -779,7 +778,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       state,
       dispatch,
       fetchAgents,
-      fetchCallHistory,
       loginAsAgent,
       logout,
       initializeTwilio,
