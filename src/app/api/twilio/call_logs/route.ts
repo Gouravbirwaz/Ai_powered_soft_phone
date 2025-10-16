@@ -6,8 +6,8 @@ export async function GET(req: NextRequest) {
   const agentId = req.nextUrl.searchParams.get('agent_id');
 
   // FIX: Correctly point to the versioned backend API endpoint
-  let getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
-
+  let getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
+  
   if (agentId) {
     getCallLogsEndpoint += `?agent_id=${agentId}`;
   }
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-
+   console.log("The flow is comming to this hit")
   try {
     const response = await fetch(getCallLogsEndpoint, {
       method: 'GET',
