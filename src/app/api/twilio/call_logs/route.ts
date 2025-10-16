@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-   console.log("The flow is comming to this hit")
+
   try {
     const response = await fetch(getCallLogsEndpoint, {
-      method: 'GET',
+      method: 'GET', // Explicitly set GET method
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
