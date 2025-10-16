@@ -28,11 +28,12 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2 } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import AddAgentDialog from '@/components/add-agent-dialog';
+import DeleteAgentDialog from '@/components/delete-agent-dialog';
 
 
 interface AgentStats extends Agent {
@@ -43,11 +44,12 @@ interface AgentStats extends Agent {
 }
 
 export default function DashboardPage() {
-  const { state, fetchAgents, fetchAllCallHistory, logout, addAgent } = useCall();
+  const { state, fetchAgents, fetchAllCallHistory, logout, addAgent, deleteAgent } = useCall();
   const router = useRouter();
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
 
   useEffect(() => {
     if (!state.currentAgent || state.currentAgent.role !== 'admin') {
@@ -107,6 +109,16 @@ export default function DashboardPage() {
     setIsAddAgentOpen(false);
   }
 
+  const handleDeleteConfirm = async () => {
+    if (agentToDelete && deleteAgent) {
+      const success = await deleteAgent(agentToDelete.id);
+      if (success) {
+        setAgentStats(prev => prev.filter(stat => stat.id !== agentToDelete.id));
+        setAgentToDelete(null);
+      }
+    }
+  };
+
   const totalCalls = useMemo(() => agentStats.reduce((sum, agent) => sum + agent.calls.length, 0), [agentStats]);
   const totalAgents = useMemo(() => agentStats.length, [agentStats]);
 
@@ -125,6 +137,12 @@ export default function DashboardPage() {
         onOpenChange={setIsAddAgentOpen}
         onAgentAdded={handleAgentAdded}
         addAgent={addAgent}
+      />
+       <DeleteAgentDialog
+        open={!!agentToDelete}
+        onOpenChange={() => setAgentToDelete(null)}
+        agentName={agentToDelete?.name || ''}
+        onConfirm={handleDeleteConfirm}
       />
       <div className="flex items-center justify-between space-x-4">
         <div className="flex items-center space-x-4">
@@ -207,14 +225,19 @@ export default function DashboardPage() {
             {agentStats.map((agent) => (
               <AccordionItem value={`agent-${agent.id}`} key={agent.id}>
                 <AccordionTrigger>
-                    <div className="flex items-center gap-3">
-                        <Avatar>
-                            <AvatarFallback><User /></AvatarFallback>
-                        </Avatar>
-                        <div className="text-left">
-                            <p className="font-semibold">{agent.name}</p>
-                            <p className="text-sm text-muted-foreground">{agent.calls.length} calls</p>
+                    <div className="flex justify-between items-center w-full">
+                        <div className="flex items-center gap-3">
+                            <Avatar>
+                                <AvatarFallback><User /></AvatarFallback>
+                            </Avatar>
+                            <div className="text-left">
+                                <p className="font-semibold">{agent.name}</p>
+                                <p className="text-sm text-muted-foreground">{agent.calls.length} calls</p>
+                            </div>
                         </div>
+                        <Button variant="ghost" size="icon" className="mr-4" onClick={(e) => { e.stopPropagation(); setAgentToDelete(agent); }}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                     </div>
                 </AccordionTrigger>
                 <AccordionContent>

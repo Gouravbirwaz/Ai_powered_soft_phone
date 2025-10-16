@@ -46,6 +46,7 @@ type CallAction =
   | { type: 'SET_ALL_CALL_HISTORY'; payload: Call[] }
   | { type: 'SET_AGENTS'; payload: Agent[] }
   | { type: 'ADD_AGENT'; payload: Agent }
+  | { type: 'REMOVE_AGENT'; payload: { agentId: number } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'OPEN_VOICEMAIL_DIALOG'; payload: { lead: Lead } }
@@ -137,6 +138,8 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         return { ...state, agents: action.payload };
     case 'ADD_AGENT':
         return { ...state, agents: [...state.agents, action.payload] };
+     case 'REMOVE_AGENT':
+        return { ...state, agents: state.agents.filter(a => a.id !== action.payload.agentId) };
     case 'CLOSE_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
@@ -669,6 +672,31 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return false;
     }
 }, [toast]);
+
+  const deleteAgent = useCallback(async (agentId: number): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/agents/${agentId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.details || `Failed to delete agent. Status: ${response.status}`);
+      }
+
+      dispatch({ type: 'REMOVE_AGENT', payload: { agentId } });
+      toast({ title: 'Success', description: 'Agent has been deleted.' });
+      return true;
+
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message,
+      });
+      return false;
+    }
+  }, [toast]);
   
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
@@ -834,6 +862,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch,
       fetchAgents,
       addAgent,
+      deleteAgent,
       fetchAllCallHistory,
       loginAsAgent,
       logout,
