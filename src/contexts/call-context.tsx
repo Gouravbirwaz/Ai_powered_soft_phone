@@ -167,6 +167,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     let summary = log.summary || '';
     let notes = log.notes || '';
     
+    // This logic is now handled by the backend, but we'll keep it for display purposes
     const summaryMarker = 'SUMMARY: ';
     const notesMarker = '\n---\nNOTES: ';
     const summaryIndex = notes.indexOf(summaryMarker);
@@ -240,7 +241,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     
     try {
         const body: { [key: string]: any } = {
-            call_log_id: call.id.startsWith('temp-') ? undefined : call.id, // Only send ID if it's not temporary
+            call_log_id: call.id.startsWith('temp-') ? undefined : call.id,
             agent_id: agentId ? parseInt(String(agentId), 10) : undefined,
             phone_number: phoneNumber,
             notes: call.notes,
@@ -254,6 +255,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             call_attempt_number: call.callAttemptNumber,
             direction: call.direction,
             contact_name: call.contactName,
+            lead_id: call.leadId,
         };
         
         const response = await fetch('/api/twilio/call_logs', {
@@ -622,11 +624,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
   
-  const loginAsAgent = useCallback(async (agent: Agent) => {
+  const loginAsAgent = useCallback((agent: Agent) => {
     currentAgentRef.current = agent;
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent } });
-    await initializeTwilio();
-    await fetchAllCallHistory();
+    initializeTwilio();
+    fetchAllCallHistory();
   }, [fetchAllCallHistory, initializeTwilio]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
