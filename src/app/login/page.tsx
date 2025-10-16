@@ -20,8 +20,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
-const ADMIN_USERS = ["zackary beckham", "kevin hong", "zack", "kevin"];
-
 function AgentLoginTab() {
   const { loginAsAgent, state, fetchAgents, initializeTwilio } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -117,13 +115,15 @@ function AgentLoginTab() {
 
 
 function AdminLoginTab() {
-  const { loginAsAgent, state, fetchAgents } = useCall();
-  const [admins, setAdmins] = useState<Agent[]>([]);
+  const { loginAsAgent, state } = useCall();
+  
+  const [admins] = useState<Agent[]>([
+    { id: 999, name: 'Zackary Beckham', email: 'zack@capraecapital.com', phone: '', status: 'admin' },
+    { id: 998, name: 'Kevin Hong', email: 'kevin@capraecapital.com', phone: '', status: 'admin' }
+  ]);
+  
   const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-   const { toast } = useToast();
 
   useEffect(() => {
     if (state.currentAgent && state.currentAgent.role === 'admin') {
@@ -131,53 +131,11 @@ function AdminLoginTab() {
     }
   }, [state.currentAgent, router]);
 
-  useEffect(() => {
-    const loadAdmins = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const fetchedAgents = await fetchAgents();
-        console.log('Fetched agent names for admin check:', fetchedAgents.map((agent: Agent) => agent.name.toLowerCase()));
-        const adminUsersLower = ADMIN_USERS.map(u => u.toLowerCase());
-        const adminAgents = fetchedAgents.filter((agent: Agent) => 
-            adminUsersLower.includes(agent.name.toLowerCase())
-        );
-        if (adminAgents.length > 0) {
-          setAdmins(adminAgents);
-        } else {
-          setError('No admin users found.');
-        }
-      } catch (e: any) {
-        setError(e.message || 'Failed to fetch users.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadAdmins();
-  }, [fetchAgents]);
-
   const handleLogin = async (agent: Agent) => {
     setIsLoggingIn(agent.id);
     await loginAsAgent({ ...agent, role: 'admin' }, 'admin');
   };
   
-    if (isLoading) {
-    return (
-      <div className="flex justify-center items-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-destructive text-center p-4 flex items-center gap-2 justify-center">
-        <AlertCircle className="h-5 w-5" />
-        <p>{error}</p>
-      </div>
-    );
-  }
-
   return (
     <ScrollArea className="h-64">
       <div className="space-y-2 pr-4">
