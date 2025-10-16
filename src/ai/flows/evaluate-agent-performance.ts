@@ -41,7 +41,7 @@ export async function evaluateAgentPerformance(
 
 const prompt = ai.definePrompt({
   name: 'evaluateAgentPerformancePrompt',
-  input: { schema: EvaluateAgentPerformanceInputSchema },
+  input: { schema: z.object({ callDataJson: z.string() }) },
   output: { schema: EvaluateAgentPerformanceOutputSchema },
   prompt: `You are an expert performance analyst for a financial services company, Caprae Capital Partners. Your task is to evaluate a sales agent's performance based on their recent call logs and provide a score out of 10.
 
@@ -62,7 +62,7 @@ Analyze the provided call data to identify trends, strengths, and areas for impr
     - A final "Recommendation" for the agent.
 
 Here are the call logs to analyze:
-{{{jsonStringify this}}}
+{{{callDataJson}}}
 `,
 });
 
@@ -87,7 +87,7 @@ const evaluateAgentPerformanceFlow = ai.defineFlow(
         return { evaluation: "No call data available for this agent. Unable to generate an evaluation.", score: 0 };
     }
 
-    const { output } = await prompt(cleanInput);
+    const { output } = await prompt({ callDataJson: JSON.stringify(cleanInput) });
     return output!;
   }
 );
