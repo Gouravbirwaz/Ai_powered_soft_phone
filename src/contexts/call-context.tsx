@@ -19,6 +19,12 @@ import { useRouter } from 'next/navigation';
 type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 type LoginRole = 'agent' | 'admin';
 
+interface QueuedCall {
+    to: string;
+    contactName?: string;
+    leadId?: string;
+}
+
 interface CallState {
   callHistory: Call[];
   allCallHistory: Call[]; // To track all calls for lead status
@@ -168,6 +174,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const activeTwilioCallRef = useRef<TwilioCall | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const currentAgentRef = useRef<Agent | null>(null);
+  const queuedCallRef = useRef<QueuedCall | null>(null);
 
   useEffect(() => {
     activeCallRef.current = state.activeCall;
@@ -460,6 +467,54 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   }, [handleCallDisconnect]);
 
+  const executeQueuedCall = useCallback(async () => {
+    if (!queuedCallRef.current) return;
+
+    const { to, contactName, leadId } = queuedCallRef.current;
+    queuedCallRef.current = null; // Clear the queue
+
+    const agent = currentAgentRef.current;
+    if (!agent || state.twilioDeviceStatus !== 'ready' || !twilioDeviceRef.current) {
+        toast({ title: 'Call Failed', description: 'Softphone is not connected.', variant: 'destructive' });
+        return;
+    }
+
+    try {
+        const formattedNumber = formatUSPhoneNumber(to);
+        const tempId = `temp-${Date.now()}`;
+        const callData: Call = {
+            id: tempId, from: agent.phone, to: formattedNumber, direction: 'outgoing', status: 'queued',
+            startTime: Date.now(), duration: 0, agentId: agent.id, leadId, contactName,
+            action_taken: 'call', followUpRequired: false, callAttemptNumber: 1,
+        };
+
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
+        dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
+
+        const twilioCall = await twilioDeviceRef.current.connect({
+            params: { To: formattedNumber, From: agent.phone },
+        });
+
+        activeTwilioCallRef.current = twilioCall;
+        const permanentCall: Call = { ...callData, id: twilioCall.parameters.CallSid, status: 'ringing-outgoing' };
+        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId, finalCall: permanentCall } });
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
+
+        twilioCall.on('accept', () => dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } }));
+        twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
+        twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
+        twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
+        twilioCall.on('error', (e) => {
+            console.error("Twilio call error", e);
+            handleCallDisconnect(null, 'failed');
+        });
+    } catch (error: any) {
+        console.error('Error starting queued outgoing call:', error);
+        toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
+        endActiveCall('failed');
+    }
+  }, [state.twilioDeviceStatus, toast, endActiveCall, handleCallDisconnect]);
+  
   const initializeTwilio = useCallback(async (agent: Agent) => {
     if (!agent) {
         console.error("initializeTwilio called without an agent.");
@@ -493,11 +548,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         device.on('ready', () => {
             console.log('Twilio Device is ready.');
             dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
+            executeQueuedCall(); // Attempt to execute any queued call
         });
 
         device.on('error', (error) => {
             console.error('Twilio Device Error:', error);
-            // Don't show toast for "JWT token expired" as we might handle it gracefully
             if (error.code !== 31205 && error.code !== 31000) {
               toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
             }
@@ -527,86 +582,26 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             });
         }
     }
-  }, [state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall]);
+  }, [state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall, executeQueuedCall]);
 
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     const agent = currentAgentRef.current;
     if (!agent) {
-      toast({
-        title: 'Softphone Not Ready',
-        description: 'No agent logged in.',
-        variant: 'destructive',
-      });
-      return;
+        toast({ title: 'Softphone Not Ready', description: 'No agent logged in.', variant: 'destructive' });
+        return;
     }
-    
-    if (state.twilioDeviceStatus !== 'ready') {
-      toast({
-        title: 'Softphone Not Ready',
-        description: 'The softphone is not connected. Please wait or try logging in again.',
-        variant: 'destructive',
-      });
-      return;
+
+    if (state.twilioDeviceStatus === 'ready' && twilioDeviceRef.current) {
+        queuedCallRef.current = { to, contactName, leadId };
+        executeQueuedCall();
+    } else {
+        queuedCallRef.current = { to, contactName, leadId };
+        dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true }); // Open softphone to show status
+        if (state.twilioDeviceStatus !== 'initializing') {
+            initializeTwilio(agent);
+        }
     }
-  
-    try {
-      const formattedNumber = formatUSPhoneNumber(to);
-      
-      const tempId = `temp-${Date.now()}`;
-      
-      const callData: Call = {
-        id: tempId,
-        from: agent.phone,
-        to: formattedNumber,
-        direction: 'outgoing',
-        status: 'queued',
-        startTime: Date.now(),
-        duration: 0,
-        agentId: agent.id,
-        leadId: leadId,
-        contactName: contactName,
-        action_taken: 'call',
-        followUpRequired: false,
-        callAttemptNumber: 1,
-      };
-      
-      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
-      dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
-      
-      const twilioCall = await twilioDeviceRef.current!.connect({
-        params: { To: formattedNumber, From: agent.phone },
-      });
-      
-      activeTwilioCallRef.current = twilioCall;
-
-      const permanentCall: Call = { ...callData, id: twilioCall.parameters.CallSid, status: 'ringing-outgoing' };
-      dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId, finalCall: permanentCall } });
-      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
-
-
-      twilioCall.on('accept', () => {
-          console.log("Call accepted by remote party.");
-          dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
-      });
-
-      twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
-      twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
-      twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
-      twilioCall.on('error', (e) => {
-        console.error("Twilio call error", e);
-        handleCallDisconnect(null, 'failed');
-      });
-      
-    } catch (error: any) {
-      console.error('Error starting outgoing call:', error);
-      toast({
-        title: 'Call Failed',
-        description: error.message || 'Could not start the call.',
-        variant: 'destructive',
-      });
-      endActiveCall('failed');
-    }
-  }, [toast, endActiveCall, handleCallDisconnect, state.twilioDeviceStatus]);
+  }, [state.twilioDeviceStatus, initializeTwilio, executeQueuedCall, toast]);
 
   const acceptIncomingCall = useCallback(() => {
     const twilioCall = activeTwilioCallRef.current;
@@ -895,3 +890,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
