@@ -210,7 +210,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const fetchAllCallHistory = useCallback(async () => {
-    if (state.allCallHistory.length > 0) {
+    if (state.allCallHistory.length > 0 && currentAgentRef.current?.role === 'admin') {
       return state.allCallHistory;
     }
     try {
@@ -316,8 +316,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
   const cleanupTwilio = useCallback(() => {
-    twilioDeviceRef.current?.destroy();
-    twilioDeviceRef.current = null;
+    if (twilioDeviceRef.current) {
+        twilioDeviceRef.current.destroy();
+        twilioDeviceRef.current = null;
+    }
     activeTwilioCallRef.current = null;
     dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'uninitialized' } });
     dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
@@ -700,14 +702,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
+    // This is the only place we should set currentAgentRef directly and dispatch
     currentAgentRef.current = agentWithRole;
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
     
-    // Always initialize twilio for all roles now
-    const twilioPromise = initializeTwilio();
-    const historyPromise = fetchAllCallHistory();
-    
-    await Promise.all([historyPromise, twilioPromise]);
+    // Now that agent is set, fetch data and initialize twilio
+    await fetchAllCallHistory();
+    await initializeTwilio();
 
   }, [fetchAllCallHistory, initializeTwilio]);
 
