@@ -523,13 +523,16 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || state.twilioDeviceStatus === 'ready') {
       return;
     }
-    
-    dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
-    
+
     try {
+        // 1. Request permissions first
         await navigator.mediaDevices.getUserMedia({ audio: true });
         dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
         
+        // 2. Now set status to initializing
+        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
+    
+        // 3. Fetch token and initialize device
         const response = await fetch(`/api/twilio/token?identity=${agent.id}`);
         if (!response.ok) {
             throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
@@ -553,7 +556,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
         device.on('error', (error) => {
             console.error('Twilio Device Error:', error);
-            if (error.code !== 31205 && error.code !== 31000) {
+            if (error.code !== 31205 && error.code !== 31000) { // Ignore JWT expired/invalid errors as they are often transient
               toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
             }
             dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
@@ -568,11 +571,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any) {
         console.error('Error initializing Twilio:', error);
         dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-        if (error.name === 'NotAllowedError') {
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
              toast({ 
                 title: 'Microphone Access Denied', 
                 description: 'Please grant microphone access in your browser settings to use the softphone.', 
-                variant: 'destructive' 
+                variant: 'destructive',
+                duration: 10000,
             });
         } else {
             toast({ 
@@ -591,15 +595,17 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
+    // Always queue the call
+    queuedCallRef.current = { to, contactName, leadId };
+    
+    // Open the softphone UI immediately
+    dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
+
+    // If ready, execute immediately. Otherwise, initialize.
     if (state.twilioDeviceStatus === 'ready' && twilioDeviceRef.current) {
-        queuedCallRef.current = { to, contactName, leadId };
         executeQueuedCall();
-    } else {
-        queuedCallRef.current = { to, contactName, leadId };
-        dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true }); // Open softphone to show status
-        if (state.twilioDeviceStatus !== 'initializing') {
-            initializeTwilio(agent);
-        }
+    } else if (state.twilioDeviceStatus !== 'initializing') {
+        initializeTwilio(agent);
     }
   }, [state.twilioDeviceStatus, initializeTwilio, executeQueuedCall, toast]);
 
@@ -704,12 +710,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const agentWithRole = { ...agent, role };
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
     await fetchAllCallHistory();
-    if (role === 'admin') {
-      router.replace('/dashboard');
-    } else {
-      router.replace('/');
-    }
-  }, [fetchAllCallHistory, router]);
+    // Do not initialize twilio here, let the softphone component handle it.
+  }, [fetchAllCallHistory]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -890,5 +892,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    

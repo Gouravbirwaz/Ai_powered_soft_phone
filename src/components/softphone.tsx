@@ -140,7 +140,7 @@ const ChoiceView = ({ onDial, onViewLeads }: { onDial: () => void; onViewLeads: 
 };
 
 
-const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string) => void; onNewLeads: (leads: Lead[]) => void; }) => {
+const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string, contactName?: string, leadId?: string) => void; onNewLeads: (event: React.ChangeEvent<HTMLInputElement>) => void; }) => {
   const [view, setView] = useState<'choice' | 'dialpad'>('choice');
   const { state } = useCall();
   const { toast } = useToast();
@@ -198,7 +198,7 @@ const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string) => v
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Connection Failed</AlertTitle>
                   <AlertDescription>
-                    Could not connect to the calling service. Please reload the page and log in again.
+                    Could not connect to the calling service. Please check microphone permissions and reload the page.
                   </AlertDescription>
               </Alert>
           </div>
@@ -396,8 +396,8 @@ export default function Softphone() {
     }
   }, [currentAgent, twilioDeviceStatus, initializeTwilio]);
 
-  const handleCall = (number: string) => {
-    startOutgoingCall(number, number);
+  const handleCall = (number: string, contactName?: string, leadId?: string) => {
+    startOutgoingCall(number, contactName, leadId);
   };
   
   const handleToggle = (open: boolean) => {

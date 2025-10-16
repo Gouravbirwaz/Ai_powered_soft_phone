@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 function AgentLoginTab() {
-  const { loginAsAgent, state, fetchAgents, initializeTwilio } = useCall();
+  const { loginAsAgent, state, fetchAgents } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null); // Store agentId
   const [isLoading, setIsLoading] = useState(true);
@@ -57,6 +57,7 @@ function AgentLoginTab() {
   const handleLogin = async (agent: Agent) => {
     setIsLoggingIn(agent.id);
     await loginAsAgent(agent, 'agent');
+    // Navigation is now handled by the useEffect hook watching currentAgent
   };
 
   if (isLoading) {
@@ -134,6 +135,7 @@ function AdminLoginTab() {
   const handleLogin = async (agent: Agent) => {
     setIsLoggingIn(agent.id);
     await loginAsAgent(agent, 'admin');
+     // Navigation is now handled by the useEffect hook watching currentAgent
   };
   
   return (
