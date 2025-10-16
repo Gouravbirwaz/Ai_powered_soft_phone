@@ -4,18 +4,15 @@
 import {
   Grid3x3,
   Phone,
-  PhoneIncoming,
   PhoneOff,
   Mic,
   MicOff,
   Clock,
   CircleDotDashed,
   Move,
-  Upload,
   AlertCircle,
   Loader2,
   X,
-  RefreshCw,
   Users,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react';
@@ -30,7 +27,6 @@ import { cn, formatDuration } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import type { CallStatus, Lead } from '@/lib/types';
 import LeadsDialog from './leads-dialog';
 
@@ -191,20 +187,6 @@ const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string, cont
     triggerFileUpload();
   }
 
-  if (state.twilioDeviceStatus === 'error') {
-      return (
-          <div className="p-4">
-              <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Connection Failed</AlertTitle>
-                  <AlertDescription>
-                    Could not connect to the calling service. Please check microphone permissions and reload the page.
-                  </AlertDescription>
-              </Alert>
-          </div>
-      )
-  }
-
   return (
     <>
     <AnimatePresence mode="wait">
@@ -249,16 +231,15 @@ const DialerContainer = ({ onCall, onNewLeads }: { onCall: (number: string, cont
 
 
 const ActiveCallView = () => {
-  const { state, endActiveCall, getActiveTwilioCall } = useCall();
+  const { state, endActiveCall } = useCall();
   const { activeCall } = state;
   const [duration, setDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const twilioCall = getActiveTwilioCall();
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (activeCall?.status === 'in-progress' && activeCall.startTime) {
-      setDuration(Math.floor((Date.now() - activeCall.startTime) / 1000));
+    if (activeCall?.status === 'in-progress' || activeCall?.status === 'ringing-outgoing') {
+      const startTime = activeCall.startTime || Date.now();
+      setDuration(Math.floor((Date.now() - startTime) / 1000));
       interval = setInterval(() => {
         setDuration(d => d + 1);
       }, 1000);
@@ -267,41 +248,21 @@ const ActiveCallView = () => {
         if(interval) clearInterval(interval);
     };
   }, [activeCall?.status, activeCall?.startTime]);
-  
-  useEffect(() => {
-    const currentTwilioCall = getActiveTwilioCall();
-    if (currentTwilioCall) {
-        const handleMute = (muted: boolean) => setIsMuted(muted);
-        currentTwilioCall.on('mute', handleMute);
-        setIsMuted(currentTwilioCall.isMuted());
-        return () => {
-            currentTwilioCall.off('mute', handleMute);
-        }
-    }
-  }, [getActiveTwilioCall, activeCall]);
 
 
   if (!activeCall) return null;
   
-  const isConnecting = ['ringing-outgoing', 'queued', 'ringing-incoming'].includes(activeCall.status);
+  const isConnecting = ['ringing-outgoing', 'queued'].includes(activeCall.status);
   const isCallActive = activeCall.status === 'in-progress';
 
   const handleHangup = () => {
     endActiveCall('canceled');
   };
 
-  const handleMute = () => {
-    const currentTwilioCall = getActiveTwilioCall();
-    if (currentTwilioCall) {
-      currentTwilioCall.mute(!isMuted);
-    }
-  }
-
   const statusTextMap: { [key in CallStatus]?: string } = {
     'ringing-outgoing': 'Ringing...',
     'in-progress': formatDuration(duration),
     'queued': 'Connecting...',
-    'ringing-incoming': 'Ringing...',
     'completed': 'Call Ended',
     'busy': 'Busy',
     'failed': 'Call Failed',
@@ -348,8 +309,8 @@ const ActiveCallView = () => {
         </div>
         
         <div className="grid grid-cols-2 gap-4 my-8">
-            <Button variant="outline" className="h-16 w-16 rounded-full flex-col" onClick={handleMute} disabled={!isCallActive}>
-                {isMuted ? <MicOff /> : <Mic />}
+            <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
+                <Mic />
                 <span className="text-xs mt-1">Mute</span>
             </Button>
             <Button variant="outline" className="h-16 w-16 rounded-full flex-col" disabled>
@@ -374,17 +335,11 @@ const ActiveCallView = () => {
 
 
 export default function Softphone() {
-  const { state, dispatch, startOutgoingCall, initializeTwilio } = useCall();
+  const { state, dispatch, startOutgoingCall } = useCall();
   const { toast } = useToast();
-  const { currentAgent, activeCall, softphoneOpen, twilioDeviceStatus } = state;
+  const { activeCall, softphoneOpen } = state;
   const dragControls = useDragControls();
   const constraintsRef = useRef(null);
-  
-  useEffect(() => {
-    if (currentAgent && twilioDeviceStatus === 'uninitialized') {
-        initializeTwilio(currentAgent);
-    }
-  }, [currentAgent, twilioDeviceStatus, initializeTwilio]);
 
   const handleCall = (number: string, contactName?: string, leadId?: string) => {
     startOutgoingCall(number, contactName, leadId);
@@ -395,12 +350,10 @@ export default function Softphone() {
   }
 
   const getTriggerIcon = () => {
-    if (activeCall?.status === 'ringing-incoming') return <PhoneIncoming className="h-6 w-6" />;
-    if (activeCall) return <Phone className="h-6 w-6" />;
     return <Phone className="h-6 w-6" />;
   };
   
-  const isRinging = activeCall?.status === 'ringing-outgoing' || activeCall?.status === 'ringing-incoming';
+  const isRinging = activeCall?.status === 'ringing-outgoing';
 
   const parseCSV = (text: string): Lead[] => {
     try {
@@ -418,7 +371,7 @@ export default function Softphone() {
 
       const headers = lines[0].split(delimiter).map(cleanHeader);
 
-      const leads: Lead[] = lines.slice(1).map((line, rowIndex) => {
+      const leads: Lead[] => {
         const values = line.split(delimiter);
         const leadData: { [key: string]: any } = {};
 
@@ -550,5 +503,3 @@ export default function Softphone() {
     </div>
   );
 }
-
-    

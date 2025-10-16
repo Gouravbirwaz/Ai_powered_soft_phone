@@ -12,7 +12,6 @@ import React, {
   useRef,
 } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Device, Call as TwilioCall } from '@twilio/voice-sdk';
 import { formatUSPhoneNumber } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 
@@ -34,16 +33,12 @@ interface CallState {
   showIncomingCall: boolean;
   showPostCallSheetForId: string | null;
   voicemailLeadTarget: Lead | null;
-  twilioDeviceStatus: TwilioDeviceStatus;
-  audioPermissionsGranted: boolean;
   currentAgent: Agent | null;
 }
 
 type CallAction =
   | { type: 'TOGGLE_SOFTPHONE' }
   | { type: 'SET_SOFTPHONE_OPEN'; payload: boolean }
-  | { type: 'SET_TWILIO_DEVICE_STATUS'; payload: { status: TwilioDeviceStatus } }
-  | { type: 'SET_AUDIO_PERMISSIONS'; payload: { granted: boolean } }
   | { type: 'SET_ACTIVE_CALL'; payload: { call: Call | null } }
   | { type: 'UPDATE_ACTIVE_CALL'; payload: { call: Partial<Call> } }
   | { type: 'ADD_TO_HISTORY'; payload: { call: Call } }
@@ -70,8 +65,6 @@ const initialState: CallState = {
   showIncomingCall: false,
   showPostCallSheetForId: null,
   voicemailLeadTarget: null,
-  twilioDeviceStatus: 'uninitialized',
-  audioPermissionsGranted: false,
   currentAgent: null,
 };
 
@@ -81,10 +74,6 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return { ...state, softphoneOpen: !state.softphoneOpen };
     case 'SET_SOFTPHONE_OPEN':
       return { ...state, softphoneOpen: action.payload };
-    case 'SET_TWILIO_DEVICE_STATUS':
-      return { ...state, twilioDeviceStatus: action.payload.status };
-    case 'SET_AUDIO_PERMISSIONS':
-      return { ...state, audioPermissionsGranted: action.payload.granted };
     case 'SET_ACTIVE_CALL':
       return { ...state, activeCall: action.payload.call };
     case 'UPDATE_ACTIVE_CALL': {
@@ -169,16 +158,7 @@ const CallContext = createContext<any>(null);
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { toast } = useToast();
-  const router = useRouter();
-  const twilioDeviceRef = useRef<Device | null>(null);
-  const activeTwilioCallRef = useRef<TwilioCall | null>(null);
-  const activeCallRef = useRef<Call | null>(null);
   const currentAgentRef = useRef<Agent | null>(null);
-  const queuedCallRef = useRef<QueuedCall | null>(null);
-
-  useEffect(() => {
-    activeCallRef.current = state.activeCall;
-  }, [state.activeCall]);
 
   useEffect(() => {
     currentAgentRef.current = state.currentAgent;
@@ -323,309 +303,55 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast, mapCallLog]);
 
-
-  const cleanupTwilio = useCallback(() => {
-    if (twilioDeviceRef.current) {
-        twilioDeviceRef.current.destroy();
-        twilioDeviceRef.current = null;
-    }
-    activeTwilioCallRef.current = null;
-    dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'uninitialized' } });
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-  }, []);
-
-  const fetchTranscript = async (callSid: string) => {
-    try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const response = await fetch(`/api/twilio/transcript/${callSid}`);
-        if (!response.ok) {
-            console.warn(`Could not fetch transcript for ${callSid}. Status: ${response.status}`);
-            return null;
-        }
-        const data = await response.json();
-        return data.recordings?.[0]?.transcript || null;
-    } catch (error) {
-        console.error('Error fetching transcript:', error);
-        return null;
-    }
-  };
-  
-  const handleCallDisconnect = useCallback(async (twilioCall: TwilioCall | null, initialStatus: CallStatus = 'completed') => {
-    const callInState = activeCallRef.current;
-    if (!callInState) {
-        return;
-    }
-
-    if (callInState.status !== 'in-progress' && callInState.status !== 'ringing-outgoing' && callInState.status !== 'ringing-incoming' && callInState.status !== 'queued') {
-        return;
-    }
-    
-    dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'fetching-transcript' } } });
-
-    if (!callInState.startTime || isNaN(callInState.startTime)) {
-        console.error('handleCallDisconnect: active call has invalid startTime.', callInState);
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-        dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-        return;
-    }
-    
-    let transcript = null;
-    const callSid = twilioCall?.parameters.CallSid || callInState.id;
-    if ((initialStatus === 'completed' || initialStatus === 'canceled') && callSid && !callSid.startsWith('temp-')) {
-        transcript = await fetchTranscript(callSid);
-    }
-    
-    const endTime = Date.now();
-    const duration = Math.round((endTime - callInState.startTime) / 1000);
-
-    let finalStatus = initialStatus;
-    if (finalStatus === 'completed' && duration < 5 && callInState.direction === 'outgoing') {
-        finalStatus = 'failed'; // Or 'canceled' if preferred
-    }
-
-    const finalCallState: Call = {
-      ...callInState,
-      status: finalStatus,
-      endTime,
-      duration,
-      notes: transcript ? `${transcript}\n\n${callInState.notes || ''}`.trim() : callInState.notes || '',
-    };
-    
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: finalCallState } });
-    dispatch({ type: 'SHOW_INCOMING_CALL', payload: false });
-    
-    const savedCall = await createOrUpdateCallOnBackend(finalCallState);
-
-    if (savedCall) {
-        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
-        if (finalStatus !== 'voicemail-dropped' && finalStatus !== 'emailed') {
-            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
-        }
-    } else {
-        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: finalCallState } });
-        if (finalStatus !== 'voicemail-dropped' && finalStatus !== 'emailed') {
-            dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: finalCallState.id } });
-        }
-    }
-    
-    activeTwilioCallRef.current = null;
-
-  }, [createOrUpdateCallOnBackend]);
-
-
-  const endActiveCall = useCallback((status: CallStatus = 'completed') => {
-    const twilioCall = activeTwilioCallRef.current;
-    
-    if (twilioCall) {
-      twilioCall.disconnect();
-    } else {
-      const call = activeCallRef.current;
-      if (call) {
-        handleCallDisconnect(null, status);
-      }
-    }
-  }, [handleCallDisconnect]);
-  
-  const closeSoftphone = useCallback(() => {
-    const currentCall = activeCallRef.current;
-    if (currentCall && (currentCall.status !== 'in-progress' && currentCall.status !== 'ringing-outgoing')) {
-       dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: null } });
-    }
-    dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: false });
-  }, []);
-
-  const handleIncomingCall = useCallback((twilioCall: TwilioCall) => {
-    console.log('Incoming call from', twilioCall.parameters.From);
-
-    const callData: Call = {
-        id: twilioCall.parameters.CallSid,
-        from: twilioCall.parameters.From,
-        to: twilioCall.parameters.To,
-        direction: 'incoming',
-        status: 'ringing-incoming',
-        startTime: Date.now(),
-        duration: 0,
-        agentId: currentAgentRef.current!.id,
-        action_taken: 'call',
-        followUpRequired: false,
-        callAttemptNumber: 1,
-    };
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
-    dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
-    dispatch({ type: 'SHOW_INCOMING_CALL', payload: true });
-    dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
-    
-    activeTwilioCallRef.current = twilioCall;
-
-    twilioCall.on('accept', (call) => {
-      console.log('Call accepted, updating status to in-progress');
-      dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } });
-    });
-    twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
-    twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
-    twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
-
-  }, [handleCallDisconnect]);
-
-  const executeQueuedCall = useCallback(async () => {
-    if (!queuedCallRef.current) return;
-
-    const { to, contactName, leadId } = queuedCallRef.current;
-    queuedCallRef.current = null; // Clear the queue
-
-    const agent = currentAgentRef.current;
-    if (!agent || state.twilioDeviceStatus !== 'ready' || !twilioDeviceRef.current) {
-        toast({ title: 'Call Failed', description: 'Softphone is not connected.', variant: 'destructive' });
-        return;
-    }
-
-    try {
-        const formattedNumber = formatUSPhoneNumber(to);
-        const tempId = `temp-${Date.now()}`;
-        const callData: Call = {
-            id: tempId, from: agent.phone, to: formattedNumber, direction: 'outgoing', status: 'queued',
-            startTime: Date.now(), duration: 0, agentId: agent.id, leadId, contactName,
-            action_taken: 'call', followUpRequired: false, callAttemptNumber: 1,
-        };
-
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
-        dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
-
-        const twilioCall = await twilioDeviceRef.current.connect({
-            params: { To: formattedNumber, From: agent.phone },
-        });
-
-        activeTwilioCallRef.current = twilioCall;
-        const permanentCall: Call = { ...callData, id: twilioCall.parameters.CallSid, status: 'ringing-outgoing' };
-        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId, finalCall: permanentCall } });
-        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
-
-        twilioCall.on('accept', () => dispatch({ type: 'UPDATE_ACTIVE_CALL', payload: { call: { status: 'in-progress' } } }));
-        twilioCall.on('disconnect', (call) => handleCallDisconnect(call, 'completed'));
-        twilioCall.on('cancel', (call) => handleCallDisconnect(call, 'canceled'));
-        twilioCall.on('reject', (call) => handleCallDisconnect(call, 'busy'));
-        twilioCall.on('error', (e) => {
-            console.error("Twilio call error", e);
-            handleCallDisconnect(null, 'failed');
-        });
-    } catch (error: any) {
-        console.error('Error starting queued outgoing call:', error);
-        toast({ title: 'Call Failed', description: error.message || 'Could not start the call.', variant: 'destructive' });
-        endActiveCall('failed');
-    }
-  }, [state.twilioDeviceStatus, toast, endActiveCall, handleCallDisconnect]);
-  
-  const initializeTwilio = useCallback(async (agent: Agent) => {
-    if (!agent) {
-        console.error("initializeTwilio called without an agent.");
-        return;
-    }
-    if (twilioDeviceRef.current || state.twilioDeviceStatus === 'initializing' || state.twilioDeviceStatus === 'ready') {
-      return;
-    }
-
-    try {
-        // 1. Request permissions first
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        dispatch({ type: 'SET_AUDIO_PERMISSIONS', payload: { granted: true } });
-        
-        // 2. Now set status to initializing
-        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'initializing' } });
-    
-        // 3. Fetch token and initialize device
-        const response = await fetch(`/api/twilio/token?identity=${agent.id}`);
-        if (!response.ok) {
-            throw new Error(`Failed to get a token from the server. Status: ${response.status}.`);
-        }
-        const { token } = await response.json();
-
-        if (typeof token !== 'string') {
-            throw new Error('Received invalid token from server.');
-        }
-        
-        const device = new Device(token, {
-            codecPreferences: ['opus', 'pcmu'],
-            logLevel: process.env.NODE_ENV === 'development' ? 'debug' : 'error',
-        });
-        
-        device.on('ready', () => {
-            console.log('Twilio Device is ready.');
-            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'ready' } });
-            executeQueuedCall(); // Attempt to execute any queued call
-        });
-
-        device.on('error', (error) => {
-            console.error('Twilio Device Error:', error);
-            if (error.code !== 31205 && error.code !== 31000) { // Ignore JWT expired/invalid errors as they are often transient
-              toast({ title: 'Softphone Error', description: error.message, variant: 'destructive' });
-            }
-            dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-            cleanupTwilio();
-        });
-
-        device.on('incoming', handleIncomingCall);
-
-        await device.register();
-        twilioDeviceRef.current = device;
-
-    } catch (error: any) {
-        console.error('Error initializing Twilio:', error);
-        dispatch({ type: 'SET_TWILIO_DEVICE_STATUS', payload: { status: 'error' } });
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-             toast({ 
-                title: 'Microphone Access Denied', 
-                description: 'Please grant microphone access in your browser settings to use the softphone.', 
-                variant: 'destructive',
-                duration: 10000,
-            });
-        } else {
-            toast({ 
-                title: 'Initialization Failed', 
-                description: error.message || 'Could not connect to the softphone service.', 
-                variant: 'destructive' 
-            });
-        }
-    }
-  }, [state.twilioDeviceStatus, toast, cleanupTwilio, handleIncomingCall, executeQueuedCall]);
-
   const startOutgoingCall = useCallback(async (to: string, contactName?: string, leadId?: string) => {
     const agent = currentAgentRef.current;
     if (!agent) {
         toast({ title: 'Softphone Not Ready', description: 'No agent logged in.', variant: 'destructive' });
         return;
     }
-
-    // Always queue the call
-    queuedCallRef.current = { to, contactName, leadId };
     
-    // Open the softphone UI immediately
     dispatch({ type: 'SET_SOFTPHONE_OPEN', payload: true });
 
-    // If ready, execute immediately. Otherwise, initialize.
-    if (state.twilioDeviceStatus === 'ready' && twilioDeviceRef.current) {
-        executeQueuedCall();
-    } else if (state.twilioDeviceStatus !== 'initializing') {
-        initializeTwilio(agent);
-    }
-  }, [state.twilioDeviceStatus, initializeTwilio, executeQueuedCall, toast]);
+    const formattedNumber = formatUSPhoneNumber(to);
+    const tempId = `temp-${Date.now()}`;
+    const callData: Call = {
+        id: tempId, from: agent.phone, to: formattedNumber, direction: 'outgoing', status: 'ringing-outgoing',
+        startTime: Date.now(), duration: 0, agentId: agent.id, leadId, contactName,
+        action_taken: 'call', followUpRequired: false, callAttemptNumber: 1,
+    };
+    
+    dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: callData } });
+    dispatch({ type: 'ADD_TO_HISTORY', payload: { call: callData } });
 
-  const acceptIncomingCall = useCallback(() => {
-    const twilioCall = activeTwilioCallRef.current;
-    if (twilioCall && state.activeCall) {
-      twilioCall.accept();
-    }
-  }, [state.activeCall]);
+    try {
+        const response = await fetch('/api/twilio/make_call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agent_id: agent.id, to: formattedNumber }),
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to initiate call.');
+        }
 
-  const rejectIncomingCall = useCallback(() => {
-    const twilioCall = activeTwilioCallRef.current;
-    if (twilioCall) {
-      twilioCall.reject();
+        const { call_sid } = await response.json();
+        const permanentCall: Call = { ...callData, id: call_sid };
+
+        dispatch({ type: 'REPLACE_IN_HISTORY', payload: { tempId, finalCall: permanentCall } });
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: permanentCall } });
+        
+        toast({ title: 'Calling...', description: `Calling ${contactName || formattedNumber}`});
+
+    } catch (error: any) {
+        console.error('Error starting outgoing call:', error);
+        toast({ title: 'Call Failed', description: error.message, variant: 'destructive' });
+        
+        const failedCall: Call = { ...callData, status: 'failed', endTime: Date.now() };
+        dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: failedCall }});
+        dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: failedCall } });
     }
-  }, []);
-  
-  const getActiveTwilioCall = useCallback(() => {
-    return activeTwilioCallRef.current;
-  }, []);
+  }, [toast]);
   
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
     if (state.agents.length > 0) {
@@ -710,7 +436,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const agentWithRole = { ...agent, role };
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
     await fetchAllCallHistory();
-    // Do not initialize twilio here, let the softphone component handle it.
   }, [fetchAllCallHistory]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
@@ -737,12 +462,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
 
   const logout = useCallback(() => {
-    cleanupTwilio();
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
     dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_AGENTS', payload: [] });
-  }, [cleanupTwilio]);
+  }, []);
 
   const openVoicemailDialogForLead = useCallback((lead: Lead) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead } });
@@ -857,6 +581,27 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return false;
     }
   }, [createOrUpdateCallOnBackend, toast]);
+  
+  const endActiveCall = useCallback((status: CallStatus = 'completed') => {
+      const { activeCall } = state;
+      if (!activeCall) return;
+
+      const updatedCall: Call = {
+          ...activeCall,
+          status,
+          endTime: Date.now(),
+          duration: Math.round((Date.now() - activeCall.startTime) / 1000)
+      };
+
+      dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: updatedCall } });
+      createOrUpdateCallOnBackend(updatedCall).then(savedCall => {
+          if (savedCall) {
+              dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
+              dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
+          }
+      });
+  }, [state.activeCall, createOrUpdateCallOnBackend]);
+
 
   return (
     <CallContext.Provider value={{
@@ -868,13 +613,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       fetchAllCallHistory,
       loginAsAgent,
       logout,
-      initializeTwilio,
       startOutgoingCall,
-      acceptIncomingCall,
-      rejectIncomingCall,
       endActiveCall,
-      getActiveTwilioCall,
-      closeSoftphone,
       updateNotesAndSummary,
       openVoicemailDialogForLead,
       sendVoicemail,
