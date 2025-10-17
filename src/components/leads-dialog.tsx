@@ -101,6 +101,7 @@ export default function LeadsDialog({
               <TableRow>
                 <TableHead>Company</TableHead>
                 <TableHead>Phone</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -113,6 +114,7 @@ export default function LeadsDialog({
                       <div className="text-sm text-muted-foreground">{lead.website}</div>
                     </TableCell>
                     <TableCell>{lead.phoneNumber || lead.companyPhone}</TableCell>
+                    <TableCell>{lead.email}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
                         <Button
@@ -141,7 +143,7 @@ export default function LeadsDialog({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={3} className="h-24 text-center">
+                  <TableCell colSpan={4} className="h-24 text-center">
                     No leads found.
                   </TableCell>
                 </TableRow>
