@@ -546,11 +546,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                recipient_email: lead.email,
-                recipient_name: lead.name || lead.company,
-                agent_name: agent.name,
-                agent_email: agent.email,
-                agent_phone: agent.phone,
+                email: lead.email,
+                name: lead.name || lead.company,
             }),
         });
 
