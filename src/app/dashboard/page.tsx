@@ -232,20 +232,22 @@ export default function DashboardPage() {
             {agentStats.map((agent) => (
               <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
                  <Card>
-                    <AccordionTrigger className="flex w-full items-center p-4 hover:no-underline">
-                        <div className="flex flex-1 items-center gap-4 text-left">
-                            <Avatar className="h-12 w-12">
-                                <AvatarFallback>
-                                <User size={24} />
-                                </AvatarFallback>
-                            </Avatar>
-                            <div>
-                                <p className="text-lg font-semibold">{agent.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                {agent.calls.length} calls recorded
-                                </p>
+                    <div className="flex w-full items-center justify-between p-4">
+                        <AccordionTrigger className="flex-1 justify-start p-0 hover:no-underline">
+                             <div className="flex items-center gap-4 text-left">
+                                <Avatar className="h-12 w-12">
+                                    <AvatarFallback>
+                                    <User size={24} />
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <p className="text-lg font-semibold">{agent.name}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                    {agent.calls.length} calls recorded
+                                    </p>
+                                </div>
                             </div>
-                        </div>
+                        </AccordionTrigger>
                         <Button
                             variant="ghost"
                             size="icon"
@@ -257,7 +259,8 @@ export default function DashboardPage() {
                         >
                             <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                         </Button>
-                    </AccordionTrigger>
+                    </div>
+
                     <AccordionContent>
                         <div className="p-6 bg-background/50 rounded-b-lg border-t">
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -380,3 +383,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
