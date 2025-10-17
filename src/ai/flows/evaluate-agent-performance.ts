@@ -51,9 +51,9 @@ Analyze the provided call data to identify trends, strengths, and areas for impr
 
 **Key areas to analyze:**
 1.  **Call Outcomes:** Look at the distribution of call statuses ('completed', 'voicemail-dropped', 'busy', 'failed'). A high number of 'completed' calls with long durations is very positive. A high number of 'failed' or 'busy' calls is a negative signal, indicating issues with the lead list or dialing strategy.
-2.  **Conversion Quality:** Examine the 'notes' and 'summary' fields for 'completed' calls. Look for evidence of positive engagement, such as scheduled follow-ups, expressions of interest from the lead, or successful information gathering. A good agent will have detailed and positive notes. Vague notes are a negative signal.
+2.  **Conversion Quality:** Examine the 'notes' and 'summary' fields for 'completed' calls. The 'notes' field contains the raw call transcript or agent notes. The 'summary' field is an AI-generated summary. Both are crucial. Look for evidence of positive engagement, such as scheduled follow-ups, expressions of interest from the lead, or successful information gathering. A good agent will have detailed and positive notes. Vague notes or summaries are a negative signal.
 3.  **Efficiency:** Consider the average call duration for 'completed' calls. Very short 'completed' calls might indicate the agent is not engaging leads effectively. Very long calls are only good if they consistently lead to positive outcomes noted in the summary.
-4.  **Communication Skills (Inferred):** Based on the AI-generated summaries and the agent's own notes, assess the clarity and effectiveness of their communication.
+4.  **Communication Skills (Inferred):** Based on the call 'notes' (transcript) and AI-generated 'summary', assess the clarity and effectiveness of their communication.
 
 **Your Output:**
 1.  **Score:** Provide an overall performance score from 1 (poor) to 10 (excellent).
