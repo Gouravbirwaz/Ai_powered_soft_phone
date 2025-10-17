@@ -474,7 +474,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
     const agent = currentAgentRef.current;
-    const phoneNumber = lead.companyPhone;
+    const phoneNumber = lead.phoneNumber || lead.companyPhone;
 
     if (!agent || !phoneNumber) {
         toast({ title: 'Error', description: 'Agent or lead phone number is missing.', variant: 'destructive' });
@@ -535,14 +535,19 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       toast({ title: 'Cannot Send Email', description: 'No agent is logged in.', variant: 'destructive' });
       return false;
     }
+    
+    if (!lead.email) {
+      toast({ title: 'Cannot Send Email', description: `No email address found for ${lead.company}.`, variant: 'destructive' });
+      return false;
+    }
 
     try {
         const response = await fetch('/api/send_email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                recipient_email: "test@test.com", // Placeholder
-                recipient_name: lead.company,
+                recipient_email: lead.email,
+                recipient_name: lead.name || lead.company,
                 agent_name: agent.name,
                 agent_email: agent.email,
                 agent_phone: agent.phone,
@@ -565,7 +570,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           agentId: agent.id,
           leadId: lead.lead_id,
           action_taken: 'email',
-          contactName: lead.company,
+          contactName: lead.name || lead.company,
         };
         const savedLog = await createOrUpdateCallOnBackend(interactionLog);
         if (savedLog) {

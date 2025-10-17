@@ -61,10 +61,10 @@ export default function LeadsDialog({
   }, [leads, currentPage]);
 
   const handleCall = (lead: Lead) => {
-    const phoneNumber = lead.companyPhone;
+    const phoneNumber = lead.phoneNumber || lead.companyPhone;
     
     if (phoneNumber && /^\+?\d+$/.test(phoneNumber.replace(/[\s()-]/g, ''))) {
-      startOutgoingCall(phoneNumber, lead.company, lead.lead_id);
+      startOutgoingCall(phoneNumber, lead.name || lead.company, lead.lead_id);
       onOpenChange(false);
     } else {
         toast({ 
@@ -112,7 +112,7 @@ export default function LeadsDialog({
                       <div className="font-medium">{lead.company}</div>
                       <div className="text-sm text-muted-foreground">{lead.website}</div>
                     </TableCell>
-                    <TableCell>{lead.companyPhone}</TableCell>
+                    <TableCell>{lead.phoneNumber || lead.companyPhone}</TableCell>
                     <TableCell>
                       <div className="flex gap-2 justify-end">
                         <Button

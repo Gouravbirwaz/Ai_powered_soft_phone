@@ -43,25 +43,18 @@ export interface Call {
 
 export interface Lead {
   lead_id: string;
+  name?: string;
+  title?: string;
+  phoneNumber?: string; // For the "Phone Number" column
   company: string;
-  website?: string;
   industry?: string;
+  businessAddress?: string;
+  email?: string; // For the "Email" column
+  linkedin?: string;
+  website?: string;
   employees?: string;
-  revenue?: string;
   yearFounded?: string;
-  productCategory?: string;
-  businessType?: string;
-  bbbRating?: string;
-  street?: string;
-  city?: string;
-  state?: string;
-  companyPhone?: string;
-  companyLinkedin?: string;
-  owner_email?: string;
-  owner_first_name?: string;
-  owner_last_name?: string;
-  phone?: string; // Add this to handle multiple phone fields
-  company_phone?: string;
+  companyPhone?: string; // Fallback
 }
 
 export interface Agent {

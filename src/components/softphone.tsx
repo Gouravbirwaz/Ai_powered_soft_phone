@@ -357,53 +357,58 @@ export default function Softphone() {
 
   const parseCSV = (text: string): Lead[] => {
     try {
-      const lines = text.trim().split(/\r\n|\n/);
-      if (lines.length < 2) return [];
+        const lines = text.trim().split(/\r\n|\n/);
+        if (lines.length < 2) return [];
 
-      const delimiter = lines[0].includes('\t') ? '\t' : ',';
-      
-      const cleanHeader = (header: string) => {
-        let clean = header.trim().replace(/"/g, '');
-        // Convert to camelCase
-        clean = clean.replace(/[^a-zA-Z0-9]+(.)/g, (m, chr) => chr.toUpperCase());
-        return clean;
-      };
+        const delimiter = lines[0].includes('\t') ? '\t' : ',';
+        
+        const cleanHeader = (header: string) => {
+            let clean = header.trim().replace(/"/g, '').toLowerCase();
+            // Specific mappings for user's columns
+            if (clean.includes('phone number')) return 'phoneNumber';
+            if (clean.includes('email')) return 'email';
+            if (clean.includes('company')) return 'company';
+            if (clean.includes('website')) return 'website';
+            if (clean.includes('name')) return 'name';
+            // Generic camelCase conversion for others
+            return clean.replace(/[^a-zA-Z0-9]+(.)/g, (m, chr) => chr.toUpperCase());
+        };
 
-      const headers = lines[0].split(delimiter).map(cleanHeader);
+        const headers = lines[0].split(delimiter).map(cleanHeader);
 
-      const leads = lines.slice(1).map((line, rowIndex) => {
-        const values = line.split(delimiter);
-        const leadData: { [key: string]: any } = {};
+        const leads = lines.slice(1).map((line, rowIndex) => {
+            const values = line.split(delimiter);
+            const leadData: { [key: string]: any } = {};
 
-        headers.forEach((header, index) => {
-          let value = (values[index] || '').trim().replace(/"/g, '');
-          
-          if (header === 'companyPhone') {
-              if (/e/i.test(value)) {
-                  const num = parseFloat(value);
-                  if (!isNaN(num)) {
-                      value = String(BigInt(Math.round(num)));
-                  }
-              }
-              value = value.replace(/[^\d+]/g, '');
-          }
-          
-          leadData[header] = value;
+            headers.forEach((header, index) => {
+                let value = (values[index] || '').trim().replace(/"/g, '');
+                
+                if (header === 'phoneNumber') {
+                    if (/e/i.test(value)) {
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                            value = String(BigInt(Math.round(num)));
+                        }
+                    }
+                    value = value.replace(/[^\d+]/g, '');
+                }
+                
+                leadData[header] = value;
+            });
+
+            if (!leadData['lead_id']) {
+                leadData['lead_id'] = `gen_${Date.now()}_${rowIndex}`;
+            }
+            
+            return leadData as Lead;
         });
 
-        if (!leadData['lead_id']) {
-          leadData['lead_id'] = `gen_${Date.now()}_${rowIndex}`;
-        }
-        
-        return leadData as Lead;
-      });
-
-      return leads.filter(lead => lead.company);
+        return leads.filter(lead => lead.company);
 
     } catch (e) {
-      console.error("Failed to parse CSV", e);
-      toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
-      return [];
+        console.error("Failed to parse CSV", e);
+        toast({ title: 'Upload Failed', description: 'Could not parse the CSV file. Please check the format.', variant: 'destructive' });
+        return [];
     }
   };
 
@@ -503,5 +508,3 @@ export default function Softphone() {
     </div>
   );
 }
-
-    
