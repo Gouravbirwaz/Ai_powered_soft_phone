@@ -230,147 +230,147 @@ export default function DashboardPage() {
         ) : (
           <Accordion type="single" collapsible className="w-full space-y-4">
             {agentStats.map((agent) => (
-              <AccordionItem value={`agent-${agent.id}`} key={agent.id} asChild>
-                <Card>
-                  <AccordionTrigger className="flex w-full items-center p-4 hover:no-underline">
-                    <div className="flex flex-1 items-center gap-4 text-left">
-                      <Avatar className="h-12 w-12">
-                        <AvatarFallback>
-                          <User size={24} />
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-lg font-semibold">{agent.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {agent.calls.length} calls recorded
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="ml-4 shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAgentToDelete(agent);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                    </Button>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="p-6 bg-background/50 rounded-b-lg border-t">
-                      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                        <div className="lg:col-span-2">
-                          <h4 className="font-semibold mb-4 text-lg">
-                            Call Statistics
-                          </h4>
-                          <Card>
-                            <CardContent className="p-0">
-                              <Table>
-                                <TableBody>
-                                  <TableRow>
-                                    <TableCell className="font-medium">
-                                      Total Calls
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {agent.calls.length}
-                                    </TableCell>
-                                  </TableRow>
-                                  <TableRow>
-                                    <TableCell className="font-medium">
-                                      Completed
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {
-                                        agent.calls.filter(
-                                          (c) => c.status === 'completed'
-                                        ).length
-                                      }
-                                    </TableCell>
-                                  </TableRow>
-                                  <TableRow>
-                                    <TableCell className="font-medium">
-                                      Voicemails
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {
-                                        agent.calls.filter(
-                                          (c) => c.status === 'voicemail-dropped'
-                                        ).length
-                                      }
-                                    </TableCell>
-                                  </TableRow>
-                                  <TableRow>
-                                    <TableCell className="font-medium">
-                                      Failed/Busy
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {
-                                        agent.calls.filter(
-                                          (c) =>
-                                            c.status === 'failed' ||
-                                            c.status === 'busy'
-                                        ).length
-                                      }
-                                    </TableCell>
-                                  </TableRow>
-                                  <TableRow className="border-none">
-                                    <TableCell className="font-medium">
-                                      Avg. Duration
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {agent.calls.length > 0
-                                        ? `${Math.round(
-                                            agent.calls.reduce(
-                                              (acc, c) => acc + (c.duration || 0),
-                                              0
-                                            ) / agent.calls.length
-                                          )}s`
-                                        : 'N/A'}
-                                    </TableCell>
-                                  </TableRow>
-                                </TableBody>
-                              </Table>
-                            </CardContent>
-                          </Card>
+              <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
+                 <Card>
+                    <AccordionTrigger className="flex w-full items-center p-4 hover:no-underline">
+                        <div className="flex flex-1 items-center gap-4 text-left">
+                            <Avatar className="h-12 w-12">
+                                <AvatarFallback>
+                                <User size={24} />
+                                </AvatarFallback>
+                            </Avatar>
+                            <div>
+                                <p className="text-lg font-semibold">{agent.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                {agent.calls.length} calls recorded
+                                </p>
+                            </div>
                         </div>
-                        <div className="lg:col-span-3">
-                          <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-semibold text-lg">
-                              AI Performance Review
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-4 shrink-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setAgentToDelete(agent);
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                        <div className="p-6 bg-background/50 rounded-b-lg border-t">
+                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                            <div className="lg:col-span-2">
+                            <h4 className="font-semibold mb-4 text-lg">
+                                Call Statistics
                             </h4>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                handleEvaluate(agent.id, agent.name)
-                              }
-                              disabled={
-                                agent.isEvaluating || agent.calls.length === 0
-                              }
-                            >
-                              {agent.isEvaluating ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                              )}
-                              {agent.evaluation
-                                ? 'Re-Analyze'
-                                : 'Analyze Performance'}
-                            </Button>
-                          </div>
+                            <Card>
+                                <CardContent className="p-0">
+                                <Table>
+                                    <TableBody>
+                                    <TableRow>
+                                        <TableCell className="font-medium">
+                                        Total Calls
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                        {agent.calls.length}
+                                        </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">
+                                        Completed
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                        {
+                                            agent.calls.filter(
+                                            (c) => c.status === 'completed'
+                                            ).length
+                                        }
+                                        </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">
+                                        Voicemails
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                        {
+                                            agent.calls.filter(
+                                            (c) => c.status === 'voicemail-dropped'
+                                            ).length
+                                        }
+                                        </TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">
+                                        Failed/Busy
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                        {
+                                            agent.calls.filter(
+                                            (c) =>
+                                                c.status === 'failed' ||
+                                                c.status === 'busy'
+                                            ).length
+                                        }
+                                        </TableCell>
+                                    </TableRow>
+                                    <TableRow className="border-none">
+                                        <TableCell className="font-medium">
+                                        Avg. Duration
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                        {agent.calls.length > 0
+                                            ? `${Math.round(
+                                                agent.calls.reduce(
+                                                (acc, c) => acc + (c.duration || 0),
+                                                0
+                                                ) / agent.calls.length
+                                            )}s`
+                                            : 'N/A'}
+                                        </TableCell>
+                                    </TableRow>
+                                    </TableBody>
+                                </Table>
+                                </CardContent>
+                            </Card>
+                            </div>
+                            <div className="lg:col-span-3">
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="font-semibold text-lg">
+                                AI Performance Review
+                                </h4>
+                                <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                    handleEvaluate(agent.id, agent.name)
+                                }
+                                disabled={
+                                    agent.isEvaluating || agent.calls.length === 0
+                                }
+                                >
+                                {agent.isEvaluating ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                )}
+                                {agent.evaluation
+                                    ? 'Re-Analyze'
+                                    : 'Analyze Performance'}
+                                </Button>
+                            </div>
 
-                          <AgentEvaluationCard
-                            isEvaluating={agent.isEvaluating}
-                            evaluation={agent.evaluation}
-                            score={agent.score}
-                          />
+                            <AgentEvaluationCard
+                                isEvaluating={agent.isEvaluating}
+                                evaluation={agent.evaluation}
+                                score={agent.score}
+                            />
+                            </div>
                         </div>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </Card>
+                        </div>
+                    </AccordionContent>
+                 </Card>
               </AccordionItem>
             ))}
           </Accordion>
