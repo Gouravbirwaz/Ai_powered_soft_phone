@@ -34,6 +34,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import AddAgentDialog from '@/components/add-agent-dialog';
 import DeleteAgentDialog from '@/components/delete-agent-dialog';
+import AgentEvaluationCard from '@/components/agent-evaluation-card';
 
 
 interface AgentStats extends Agent {
@@ -131,7 +132,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 sm:p-6 lg:p-8">
+    <div className="flex-1 space-y-8 p-4 sm:p-6 lg:p-8">
        <AddAgentDialog
         open={isAddAgentOpen}
         onOpenChange={setIsAddAgentOpen}
@@ -173,30 +174,36 @@ export default function DashboardPage() {
         <Card>
             <CardHeader>
                 <CardTitle>Team Overview</CardTitle>
-                <CardDescription>A summary of your team's performance.</CardDescription>
+                <CardDescription>A real-time summary of your team's performance metrics.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-3">
-                <Card className="p-4">
+                <Card className="p-6">
                     <div className="flex items-center gap-4">
-                        <Users className="h-8 w-8 text-muted-foreground" />
+                        <div className="bg-muted p-3 rounded-full">
+                            <Users className="h-6 w-6 text-muted-foreground" />
+                        </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Agents</p>
                             <p className="text-2xl font-bold">{totalAgents}</p>
                         </div>
                     </div>
                 </Card>
-                <Card className="p-4">
+                <Card className="p-6">
                     <div className="flex items-center gap-4">
-                        <Phone className="h-8 w-8 text-muted-foreground" />
+                        <div className="bg-muted p-3 rounded-full">
+                            <Phone className="h-6 w-6 text-muted-foreground" />
+                        </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Total Calls Made</p>
                             <p className="text-2xl font-bold">{totalCalls}</p>
                         </div>
                     </div>
                 </Card>
-                <Card className="p-4">
+                <Card className="p-6">
                     <div className="flex items-center gap-4">
-                        <BarChart className="h-8 w-8 text-muted-foreground" />
+                        <div className="bg-muted p-3 rounded-full">
+                            <BarChart className="h-6 w-6 text-muted-foreground" />
+                        </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Avg Calls per Agent</p>
                             <p className="text-2xl font-bold">
@@ -218,99 +225,87 @@ export default function DashboardPage() {
         <CardContent>
         {isLoading ? (
             <div className="flex justify-center items-center h-48">
-                <Loader2 className="h-8 w-8 animate-spin" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         ) : (
-          <Accordion type="single" collapsible className="w-full">
+          <Accordion type="single" collapsible className="w-full space-y-2">
             {agentStats.map((agent) => (
-              <AccordionItem value={`agent-${agent.id}`} key={agent.id}>
-                <div className="flex items-center w-full">
-                    <AccordionTrigger className="flex-1">
-                        <div className="flex items-center gap-3">
-                            <Avatar>
-                                <AvatarFallback><User /></AvatarFallback>
-                            </Avatar>
-                            <div className="text-left">
-                                <p className="font-semibold">{agent.name}</p>
-                                <p className="text-sm text-muted-foreground">{agent.calls.length} calls</p>
-                            </div>
-                        </div>
-                    </AccordionTrigger>
-                    <Button variant="ghost" size="icon" className="mr-4" onClick={() => setAgentToDelete(agent)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                </div>
-                <AccordionContent>
-                    <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <h4 className="font-semibold mb-2 flex items-center gap-2"><BarChart className="h-4 w-4" /> Call Statistics</h4>
-                                <Table>
-                                    <TableBody>
-                                        <TableRow>
-                                            <TableCell className="font-medium">Total Calls</TableCell>
-                                            <TableCell className="text-right">{agent.calls.length}</TableCell>
-                                        </TableRow>
-                                        <TableRow>
-                                            <TableCell className="font-medium">Completed</TableCell>
-                                            <TableCell className="text-right">{agent.calls.filter(c => c.status === 'completed').length}</TableCell>
-                                        </TableRow>
-                                        <TableRow>
-                                            <TableCell className="font-medium">Voicemails</TableCell>
-                                            <TableCell className="text-right">{agent.calls.filter(c => c.status === 'voicemail-dropped').length}</TableCell>
-                                        </TableRow>
-                                        <TableRow>
-                                            <TableCell className="font-medium">Failed/Busy</TableCell>
-                                            <TableCell className="text-right">{agent.calls.filter(c => c.status === 'failed' || c.status === 'busy').length}</TableCell>
-                                        </TableRow>
-                                        <TableRow>
-                                            <TableCell className="font-medium">Avg. Duration</TableCell>
-                                            <TableCell className="text-right">
-                                                {agent.calls.length > 0 ? 
-                                                    `${Math.round(agent.calls.reduce((acc, c) => acc + (c.duration || 0), 0) / agent.calls.length)}s`
-                                                    : 'N/A'
-                                                }
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-center mb-2">
-                                    <h4 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4" /> AI Evaluation</h4>
-                                    <Button size="sm" variant="outline" onClick={() => handleEvaluate(agent.id, agent.name)} disabled={agent.isEvaluating || agent.calls.length === 0}>
-                                        {agent.isEvaluating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                                        Analyze
-                                    </Button>
-                                </div>
-                                {agent.isEvaluating ? (
-                                    <div className="flex items-center justify-center h-full min-h-[150px] bg-background rounded-md">
-                                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                                    </div>
-                                ) : agent.evaluation ? (
-                                    <Card className="bg-background">
-                                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                            <CardTitle className="text-sm font-medium">Performance Score</CardTitle>
-                                            <Star className="w-4 h-4 text-yellow-500" />
-                                        </CardHeader>
-                                        <CardContent className="p-4 pt-0">
-                                            <div className="flex items-baseline gap-2">
-                                                <span className="text-2xl font-bold">{agent.score.toFixed(1)}</span>
-                                                <span className="text-sm text-muted-foreground">/ 10</span>
-                                            </div>
-                                            <Progress value={agent.score * 10} className="w-full h-2 mt-2" />
-                                            <div className="prose prose-sm dark:prose-invert text-sm whitespace-pre-wrap mt-4" dangerouslySetInnerHTML={{ __html: agent.evaluation }} />
-                                        </CardContent>
-                                    </Card>
-                                ) : (
-                                    <div className="flex items-center justify-center text-sm text-muted-foreground h-full min-h-[150px] bg-background rounded-md">
-                                        Click "Analyze" to generate an AI performance review for this agent.
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </AccordionContent>
+              <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
+                 <Card className="bg-card">
+                  <div className="flex items-center w-full px-4">
+                      <AccordionTrigger className="flex-1 py-4">
+                          <div className="flex items-center gap-4">
+                              <Avatar className="h-12 w-12">
+                                  <AvatarFallback><User size={24} /></AvatarFallback>
+                              </Avatar>
+                              <div>
+                                  <p className="text-lg font-semibold">{agent.name}</p>
+                                  <p className="text-sm text-muted-foreground">{agent.calls.length} calls recorded</p>
+                              </div>
+                          </div>
+                      </AccordionTrigger>
+                       <Button variant="ghost" size="icon" className="ml-4" onClick={() => setAgentToDelete(agent)}>
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                  </div>
+                  <AccordionContent>
+                      <div className="p-6 bg-background/50 rounded-b-lg">
+                          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                              <div className="lg:col-span-2">
+                                  <h4 className="font-semibold mb-4 text-lg">Call Statistics</h4>
+                                  <Card>
+                                      <CardContent className="p-0">
+                                          <Table>
+                                              <TableBody>
+                                                  <TableRow>
+                                                      <TableCell className="font-medium">Total Calls</TableCell>
+                                                      <TableCell className="text-right">{agent.calls.length}</TableCell>
+                                                  </TableRow>
+                                                  <TableRow>
+                                                      <TableCell className="font-medium">Completed</TableCell>
+                                                      <TableCell className="text-right">{agent.calls.filter(c => c.status === 'completed').length}</TableCell>
+                                                  </TableRow>
+                                                  <TableRow>
+                                                      <TableCell className="font-medium">Voicemails</TableCell>
+                                                      <TableCell className="text-right">{agent.calls.filter(c => c.status === 'voicemail-dropped').length}</TableCell>
+                                                  </TableRow>
+                                                  <TableRow>
+                                                      <TableCell className="font-medium">Failed/Busy</TableCell>
+                                                      <TableCell className="text-right">{agent.calls.filter(c => c.status === 'failed' || c.status === 'busy').length}</TableCell>
+                                                  </TableRow>
+                                                  <TableRow className="border-none">
+                                                      <TableCell className="font-medium">Avg. Duration</TableCell>
+                                                      <TableCell className="text-right">
+                                                          {agent.calls.length > 0 ? 
+                                                              `${Math.round(agent.calls.reduce((acc, c) => acc + (c.duration || 0), 0) / agent.calls.length)}s`
+                                                              : 'N/A'
+                                                          }
+                                                      </TableCell>
+                                                  </TableRow>
+                                              </TableBody>
+                                          </Table>
+                                      </CardContent>
+                                  </Card>
+                              </div>
+                              <div className="lg:col-span-3">
+                                  <div className="flex justify-between items-center mb-4">
+                                      <h4 className="font-semibold text-lg">AI Performance Review</h4>
+                                      <Button size="sm" variant="outline" onClick={() => handleEvaluate(agent.id, agent.name)} disabled={agent.isEvaluating || agent.calls.length === 0}>
+                                          {agent.isEvaluating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                          {agent.evaluation ? 'Re-Analyze' : 'Analyze Performance'}
+                                      </Button>
+                                  </div>
+                                  
+                                  <AgentEvaluationCard
+                                      isEvaluating={agent.isEvaluating}
+                                      evaluation={agent.evaluation}
+                                      score={agent.score}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+                  </AccordionContent>
+                </Card>
               </AccordionItem>
             ))}
           </Accordion>
