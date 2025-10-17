@@ -57,7 +57,7 @@ export default function VoicemailDialog() {
       return;
     }
 
-    const phoneNumber = voicemailLeadTarget.companyPhone;
+    const phoneNumber = voicemailLeadTarget.companyPhone || voicemailLeadTarget.phoneNumber;
     if (!phoneNumber) {
         toast({ title: 'No Phone Number', description: 'This lead does not have a phone number.', variant: 'destructive' });
         return;
@@ -72,7 +72,7 @@ export default function VoicemailDialog() {
 
   if (!voicemailLeadTarget) return null;
 
-  const phoneNumber = voicemailLeadTarget.companyPhone;
+  const phoneNumber = voicemailLeadTarget.companyPhone || voicemailLeadTarget.phoneNumber;
   const leadName = voicemailLeadTarget.company;
 
   return (

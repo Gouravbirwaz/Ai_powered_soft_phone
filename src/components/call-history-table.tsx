@@ -133,6 +133,7 @@ export default function CallHistoryTable() {
         lead_id: call.leadId || `call-${call.id}`,
         company: name,
         companyPhone: phoneNumber,
+        email: call.notes?.match(/Email: (.*)/)?.[1], // Basic email parsing from notes if available
     };
   }
 
@@ -146,13 +147,11 @@ export default function CallHistoryTable() {
     }
   }
 
-  const handleEmail = async (call: Call) => {
+  const handleEmail = (call: Call) => {
     const leadForAction = constructLeadForAction(call);
     if (leadForAction && sendMissedCallEmail) {
-      const success = await sendMissedCallEmail(leadForAction);
-      if (success) {
-        showActionFeedback(call.id, 'email');
-      }
+      sendMissedCallEmail(leadForAction);
+      showActionFeedback(call.id, 'email');
     } else {
       toast({ title: "Cannot Send Email", description: "Contact name or phone number for this call could not be found.", variant: 'destructive' });
     }

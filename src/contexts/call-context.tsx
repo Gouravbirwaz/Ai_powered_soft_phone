@@ -472,116 +472,95 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead } });
   }, []);
 
-  const sendVoicemail = useCallback(async (lead: Lead, script: string) => {
+  const sendVoicemail = useCallback((lead: Lead, script: string) => {
     const agent = currentAgentRef.current;
     const phoneNumber = lead.phoneNumber || lead.companyPhone;
 
     if (!agent || !phoneNumber) {
         toast({ title: 'Error', description: 'Agent or lead phone number is missing.', variant: 'destructive' });
-        return false;
+        return;
     }
-    
-    try {
-        const formattedNumber = formatUSPhoneNumber(phoneNumber);
-        const response = await fetch('/api/twilio/send_voicemail', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: formattedNumber,
-                script: script,
-            }),
-        });
 
+    const formattedNumber = formatUSPhoneNumber(phoneNumber);
+    toast({ title: 'Voicemail Sending...', description: `Sending to ${formattedNumber}.` });
+
+    fetch('/api/twilio/send_voicemail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formattedNumber, script: script }),
+    })
+    .then(async (response) => {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || error.message || 'Failed to send voicemail');
         }
-
-        const responseData = await response.json();
-        
+        return response.json();
+    })
+    .then(responseData => {
         const interactionLog: Call = {
-          id: responseData.call_sid || `voicemail-${Date.now()}`,
-          direction: 'outgoing',
-          from: agent.phone,
-          to: formattedNumber,
-          startTime: Date.now(),
-          duration: 0,
-          status: 'voicemail-dropped',
-          agentId: agent.id,
-          leadId: lead.lead_id,
-          action_taken: 'voicemail',
-          contactName: lead.company,
+            id: responseData.call_sid || `voicemail-${Date.now()}`,
+            direction: 'outgoing', from: agent.phone, to: formattedNumber,
+            startTime: Date.now(), duration: 0, status: 'voicemail-dropped',
+            agentId: agent.id, leadId: lead.lead_id, action_taken: 'voicemail',
+            contactName: lead.company,
         };
-
-        const savedLog = await createOrUpdateCallOnBackend(interactionLog);
-
+        return createOrUpdateCallOnBackend(interactionLog);
+    })
+    .then(savedLog => {
         if (savedLog) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
         }
-        
-        toast({ title: 'Voicemail Sent', description: `Voicemail to ${formattedNumber} was sent successfully.` });
-        return true;
-
-    } catch (error: any) {
+    })
+    .catch(error => {
         console.error('Error sending voicemail:', error);
         toast({ title: 'Voicemail Failed', description: error.message, variant: 'destructive' });
-        return false;
-    }
+    });
   }, [toast, createOrUpdateCallOnBackend]);
   
-  const sendMissedCallEmail = useCallback(async (lead: Lead) => {
+  const sendMissedCallEmail = useCallback((lead: Lead) => {
     const agent = currentAgentRef.current;
     if (!agent) {
       toast({ title: 'Cannot Send Email', description: 'No agent is logged in.', variant: 'destructive' });
-      return false;
+      return;
     }
     
     if (!lead.email) {
       toast({ title: 'Cannot Send Email', description: `No email address found for ${lead.company}.`, variant: 'destructive' });
-      return false;
+      return;
     }
+    
+    toast({ title: 'Sending Email...', description: `Sending follow-up to ${lead.company}.` });
 
-    try {
-        const response = await fetch('/api/send_email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                email: lead.email,
-                name: lead.name || lead.company,
-            }),
-        });
-
+    fetch('/api/send_email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: lead.email, name: lead.name || lead.company }),
+    })
+    .then(async response => {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || 'Backend failed to send email');
         }
-
+        return response.json();
+    })
+    .then(() => {
         const interactionLog: Call = {
-          id: `email-${Date.now()}`,
-          direction: 'outgoing',
-          from: agent.email,
-          to: lead.company,
-          startTime: Date.now(),
-          duration: 0,
-          status: 'emailed',
-          agentId: agent.id,
-          leadId: lead.lead_id,
-          action_taken: 'email',
-          contactName: lead.name || lead.company,
+            id: `email-${Date.now()}`, direction: 'outgoing', from: agent.email,
+            to: lead.company, startTime: Date.now(), duration: 0, status: 'emailed',
+            agentId: agent.id, leadId: lead.lead_id, action_taken: 'email',
+            contactName: lead.name || lead.company,
         };
-        const savedLog = await createOrUpdateCallOnBackend(interactionLog);
+        return createOrUpdateCallOnBackend(interactionLog);
+    })
+    .then(savedLog => {
         if (savedLog) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
         }
-        
-        toast({ title: 'Email Sent', description: `Follow-up email sent to ${lead.company}.` });
-        return true;
-
-    } catch (error: any) {
+    })
+    .catch(error => {
         console.error('Error sending email:', error);
         toast({ title: 'Email Failed', description: error.message, variant: 'destructive' });
-        return false;
-    }
+    });
   }, [createOrUpdateCallOnBackend, toast]);
   
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
