@@ -14,13 +14,18 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
+    // The backend expects the payload to be nested under a 'data' key.
+    const requestPayload = {
+      data: body,
+    };
+    
     const response = await fetch(sendEmailEndpoint, {
       method: 'POST',
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestPayload),
     });
 
     if (!response.ok) {
