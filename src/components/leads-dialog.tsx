@@ -37,7 +37,7 @@ export default function LeadsDialog({
   leads: Lead[];
   onRefreshLeads: () => void;
 }) {
-  const { startOutgoingCall, state, openVoicemailDialogForLead } = useCall();
+  const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
   const [currentPage, setCurrentPage] = useState(1);
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const { toast } = useToast();
@@ -79,6 +79,13 @@ export default function LeadsDialog({
     if (openVoicemailDialogForLead) {
       openVoicemailDialogForLead(lead);
       onOpenChange(false);
+    }
+  };
+  
+  const handleEmail = (lead: Lead) => {
+    if (sendMissedCallEmail) {
+        sendMissedCallEmail(lead);
+        onOpenChange(false);
     }
   };
 
@@ -136,6 +143,16 @@ export default function LeadsDialog({
                         >
                           <Voicemail className="mr-2 h-4 w-4" />
                           Voicemail
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEmail(lead)}
+                            disabled={!lead.email || !!state.activeCall}
+                            className="whitespace-nowrap"
+                        >
+                            <Mail className="mr-2 h-4 w-4" />
+                            Email
                         </Button>
                       </div>
                     </TableCell>
