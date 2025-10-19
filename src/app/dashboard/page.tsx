@@ -96,7 +96,7 @@ export default function DashboardPage() {
         stat.id === agentId ? { 
             ...stat, 
             evaluation: result.evaluation || result.error || '', 
-            score: result.score || stat.score, // Keep manual score if AI fails
+            score: stat.score, // Keep existing manual score, AI only provides evaluation text
             isEvaluating: false 
         } : stat
     ));
@@ -361,7 +361,7 @@ export default function DashboardPage() {
                                 score={agent.score}
                             />
                             
-                            {agent.evaluation && (
+                            {(agent.evaluation || agent.score > 0) && (
                                 <div className="mt-4 space-y-3 pt-4 border-t">
                                     <div className="flex items-center justify-between">
                                         <Label htmlFor={`score-slider-${agent.id}`} className="font-semibold">
@@ -393,3 +393,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
