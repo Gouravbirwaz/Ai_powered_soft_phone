@@ -70,6 +70,8 @@ const initialState: CallState = {
 };
 
 const callReducer = (state: CallState, action: CallAction): CallState => {
+  const sortHistory = (history: Call[]) => history.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+
   switch (action.type) {
     case 'TOGGLE_SOFTPHONE':
       return { ...state, softphoneOpen: !state.softphoneOpen };
@@ -98,18 +100,22 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
 
         return {
             ...state,
-            callHistory: newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
-            allCallHistory: newAllHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
+            callHistory: sortHistory(newHistory),
+            allCallHistory: sortHistory(newAllHistory),
         };
     }
     case 'UPDATE_IN_HISTORY': {
         const { call } = action.payload;
         const update = (history: Call[]) => {
             const index = history.findIndex(c => c.id === call.id);
-            if (index === -1) return [call, ...history];
+            if (index === -1) {
+              // If not found, add it. This handles cases where a call object was created
+              // but didn't make it into history for some reason (e.g. race conditions)
+              return sortHistory([call, ...history]);
+            }
             const newHistory = [...history];
-            newHistory[index] = call;
-            return newHistory.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+            newHistory[index] = { ...newHistory[index], ...call };
+            return sortHistory(newHistory);
         };
         
         return {
@@ -123,14 +129,14 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         const replace = (history: Call[]) => history.map(c => c.id === tempId ? finalCall : c);
         return {
             ...state,
-            callHistory: replace(state.callHistory).sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
-            allCallHistory: replace(state.allCallHistory).sort((a,b) => (b.startTime || 0) - (a.startTime || 0)),
+            callHistory: sortHistory(replace(state.callHistory)),
+            allCallHistory: sortHistory(replace(state.allCallHistory)),
         }
     }
     case 'SET_CALL_HISTORY':
-        return { ...state, callHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
+        return { ...state, callHistory: sortHistory(action.payload) };
     case 'SET_ALL_CALL_HISTORY':
-        return { ...state, allCallHistory: action.payload.sort((a,b) => (b.startTime || 0) - (a.startTime || 0)) };
+        return { ...state, allCallHistory: sortHistory(action.payload) };
     case 'SET_AGENTS':
         return { ...state, agents: action.payload };
     case 'ADD_AGENT':
