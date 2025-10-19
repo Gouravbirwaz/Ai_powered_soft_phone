@@ -85,7 +85,16 @@ export async function PATCH(
   }
 
   try {
-    const body = await req.json();
+    let body;
+    const contentType = req.headers.get('content-type');
+    
+    // navigator.sendBeacon sends data as text/plain by default
+    if (contentType?.includes('text/plain')) {
+      body = JSON.parse(await req.text());
+    } else {
+      body = await req.json();
+    }
+
 
     const response = await fetch(`${AGENTS_API_ENDPOINT}/${agent_id}`, {
       method: 'PATCH',

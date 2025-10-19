@@ -450,6 +450,29 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
 
+  const updateAgent = useCallback(async (agentId: number, data: Partial<Agent>): Promise<boolean> => {
+    try {
+        const response = await fetch(`/api/agents/${agentId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ details: "Failed to update agent." }));
+            throw new Error(error.details || `Failed to update agent. Status: ${response.status}`);
+        }
+        
+        const updatedAgent = await response.json();
+        dispatch({ type: 'UPDATE_AGENT', payload: { agent: { id: agentId, ...updatedAgent } } });
+        return true;
+    } catch (error: any) {
+        // Don't show toast for background updates like status changes
+        console.error(`Failed to update agent ${agentId}:`, error.message);
+        return false;
+    }
+  }, []);
+
   const updateAgentScore = useCallback(async (agentId: number, score: number): Promise<boolean> => {
     try {
         const response = await fetch(`/api/agents/grade/${agentId}`, {
@@ -480,8 +503,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
+    await updateAgent(agent.id, { status: 'active' });
     await fetchAllCallHistory();
-  }, [fetchAllCallHistory]);
+  }, [fetchAllCallHistory, updateAgent]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -506,12 +530,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (currentAgentRef.current) {
+      await updateAgent(currentAgentRef.current.id, { status: 'inactive' });
+    }
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
     dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_AGENTS', payload: [] });
-  }, []);
+  }, [updateAgent]);
 
   const openVoicemailDialogForLead = useCallback((lead: Lead) => {
     dispatch({ type: 'OPEN_VOICEMAIL_DIALOG', payload: { lead } });
@@ -636,6 +663,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       fetchAgents,
       addAgent,
       deleteAgent,
+      updateAgent,
       updateAgentScore,
       fetchAllCallHistory,
       loginAsAgent,
