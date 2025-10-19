@@ -19,6 +19,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 function AgentLoginTab() {
   const { loginAsAgent, state, fetchAgents } = useCall();
@@ -117,14 +119,22 @@ function AgentLoginTab() {
 
 function AdminLoginTab() {
   const { loginAsAgent, state } = useCall();
-  
-  const [admins] = useState<Agent[]>([
-    { id: 999, name: 'Zackary Beckham', email: 'zack@capraecapital.com', phone: '', status: 'admin' },
-    { id: 998, name: 'Kevin Hong', email: 'kevin@capraecapital.com', phone: '', status: 'admin' }
-  ]);
-  
-  const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  const admins: { [email: string]: { agent: Agent, pass: string } } = {
+    'zack@capraecapital.com': { 
+      agent: { id: 999, name: 'Zackary Beckham', email: 'zack@capraecapital.com', phone: '', status: 'admin' },
+      pass: 'zack@caprae123'
+    },
+    'kevin@capraecapital.com': {
+      agent: { id: 998, name: 'Kevin Hong', email: 'kevin@capraecapital.com', phone: '', status: 'admin' },
+      pass: 'kevin@caprae123'
+    }
+  };
 
   useEffect(() => {
     if (state.currentAgent && state.currentAgent.role === 'admin') {
@@ -132,46 +142,56 @@ function AdminLoginTab() {
     }
   }, [state.currentAgent, router]);
 
-  const handleLogin = async (agent: Agent) => {
-    setIsLoggingIn(agent.id);
-    await loginAsAgent(agent, 'admin');
-     // Navigation is now handled by the useEffect hook watching currentAgent
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoggingIn(true);
+
+    const adminUser = admins[email.toLowerCase()];
+
+    if (adminUser && adminUser.pass === password) {
+      await loginAsAgent(adminUser.agent, 'admin');
+    } else {
+      setError('Invalid email or password.');
+      setIsLoggingIn(false);
+    }
   };
   
   return (
-    <ScrollArea className="h-64">
-      <div className="space-y-2 pr-4">
-        {admins.map((agent) => (
-          <Card key={agent.id} className="p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <Avatar>
-                  <AvatarFallback>
-                      <ShieldCheck />
-                  </AvatarFallback>
-                 </Avatar>
-                 <div>
-                     <p className="font-semibold">{agent.name}</p>
-                     <p className="text-sm text-muted-foreground">{agent.email}</p>
-                 </div>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => handleLogin(agent)}
-                disabled={isLoggingIn !== null}
-                className="w-24"
-              >
-                {isLoggingIn === agent.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Login'
-                )}
-              </Button>
-            </div>
-          </Card>
-        ))}
+    <form onSubmit={handleLogin} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="admin@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={isLoggingIn}
+        />
       </div>
-    </ScrollArea>
+      <div className="space-y-2">
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={isLoggingIn}
+        />
+      </div>
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4" />
+          <p>{error}</p>
+        </div>
+      )}
+      <Button type="submit" className="w-full" disabled={isLoggingIn}>
+        {isLoggingIn ? <Loader2 className="animate-spin" /> : 'Login as Admin'}
+      </Button>
+    </form>
   );
 }
 
