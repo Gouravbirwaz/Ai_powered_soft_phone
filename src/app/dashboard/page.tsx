@@ -99,6 +99,7 @@ export default function DashboardPage() {
             ...stat, 
             evaluation: result.evaluation || result.error || '', 
             aiSuggestedScore: result.score || 0,
+            score: stat.score, // Keep the manual score
             isEvaluating: false 
         } : stat
     ));
@@ -334,7 +335,7 @@ export default function DashboardPage() {
                             <div className="lg:col-span-3">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-semibold text-lg">
-                                AI Performance Review
+                                Agent Grading
                                 </h4>
                                 <Button
                                 size="sm"
@@ -349,11 +350,11 @@ export default function DashboardPage() {
                                 {agent.isEvaluating ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : (
-                                    <Wand2 className="mr-2 h-4 w-4" />
+                                    <Star className="mr-2 h-4 w-4" />
                                 )}
                                 {agent.evaluation
-                                    ? 'Re-Analyze'
-                                    : 'Analyze Performance'}
+                                    ? 'Re-Grade Agent'
+                                    : 'Grade Agent'}
                                 </Button>
                             </div>
 
@@ -395,7 +396,5 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
 
     
