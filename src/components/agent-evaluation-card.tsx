@@ -10,7 +10,7 @@ import { useMemo } from 'react';
 interface AgentEvaluationCardProps {
     isEvaluating: boolean;
     evaluation: string;
-    score: number;
+    score: number; // This is now the AI-suggested score
 }
 
 interface ParsedEvaluation {
@@ -99,8 +99,8 @@ export default function AgentEvaluationCard({ isEvaluating, evaluation, score }:
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <div>
-                        <CardTitle className="text-base font-medium">Performance Score</CardTitle>
-                        <CardDescription>Based on AI analysis</CardDescription>
+                        <CardTitle className="text-base font-medium">AI Suggested Score</CardTitle>
+                        <CardDescription>Based on call data analysis</CardDescription>
                     </div>
                     <div className="flex items-baseline gap-2 text-right">
                         <span className="text-3xl font-bold">{score.toFixed(1)}</span>
@@ -140,3 +140,4 @@ export default function AgentEvaluationCard({ isEvaluating, evaluation, score }:
     );
 }
 
+    

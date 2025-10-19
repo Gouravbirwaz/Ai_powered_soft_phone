@@ -28,7 +28,7 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2, Users, Timer, TimerOff } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AddAgentDialog from '@/components/add-agent-dialog';
@@ -42,6 +42,7 @@ import { debounce } from 'lodash';
 interface AgentStats extends Agent {
     calls: Call[];
     evaluation: string;
+    aiSuggestedScore: number;
     score: number;
     isEvaluating: boolean;
 }
@@ -72,6 +73,7 @@ export default function DashboardPage() {
           ...agent,
           calls: calls.filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
+          aiSuggestedScore: 0,
           score: agent.score_given || 0,
           isEvaluating: false,
         }));
@@ -96,7 +98,7 @@ export default function DashboardPage() {
         stat.id === agentId ? { 
             ...stat, 
             evaluation: result.evaluation || result.error || '', 
-            score: stat.score, // Keep existing manual score, AI only provides evaluation text
+            aiSuggestedScore: result.score || 0,
             isEvaluating: false 
         } : stat
     ));
@@ -347,25 +349,25 @@ export default function DashboardPage() {
                                 {agent.isEvaluating ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : (
-                                    <Star className="mr-2 h-4 w-4" />
+                                    <Wand2 className="mr-2 h-4 w-4" />
                                 )}
                                 {agent.evaluation
-                                    ? 'Re-Grade Agent'
-                                    : 'Grade Agent'}
+                                    ? 'Re-Analyze'
+                                    : 'Analyze Performance'}
                                 </Button>
                             </div>
 
                             <AgentEvaluationCard
                                 isEvaluating={agent.isEvaluating}
                                 evaluation={agent.evaluation}
-                                score={agent.score}
+                                score={agent.aiSuggestedScore}
                             />
                             
                             {(agent.evaluation || agent.score > 0) && (
                                 <div className="mt-4 space-y-3 pt-4 border-t">
                                     <div className="flex items-center justify-between">
                                         <Label htmlFor={`score-slider-${agent.id}`} className="font-semibold">
-                                            Manual Score Override
+                                            Manual Score
                                         </Label>
                                         <span className="font-bold text-lg">{agent.score.toFixed(1)}</span>
                                     </div>
@@ -393,3 +395,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
