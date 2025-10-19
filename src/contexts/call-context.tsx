@@ -446,10 +446,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const updateAgentScore = useCallback(async (agentId: number, score: number): Promise<boolean> => {
     try {
-        const response = await fetch(`/api/agents/${agentId}`, {
-            method: 'PATCH',
+        const response = await fetch(`/api/agents/grade/${agentId}`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ score_given: score }),
+            body: JSON.stringify({ score: score }),
         });
 
         if (!response.ok) {
