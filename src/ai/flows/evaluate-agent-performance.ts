@@ -50,10 +50,13 @@ const prompt = ai.definePrompt({
 Analyze the provided call data to identify trends, strengths, and areas for improvement. Focus on the quality of interactions and outcomes, not just the quantity of calls. A few high-quality, long 'completed' calls are better than many failed or busy calls.
 
 **Key areas to analyze:**
-1.  **Call Outcomes:** Look at the distribution of call statuses ('completed', 'voicemail-dropped', 'busy', 'failed'). A high number of 'completed' calls with long durations is very positive. A high number of 'failed' or 'busy' calls is a negative signal, indicating issues with the lead list or dialing strategy.
-2.  **Conversion Quality:** Examine the 'notes' and 'summary' fields for 'completed' calls. The 'notes' field contains the raw call transcript or agent notes. The 'summary' field is an AI-generated summary. Both are crucial. Look for evidence of positive engagement, such as scheduled follow-ups, expressions of interest from the lead, or successful information gathering. A good agent will have detailed and positive notes. Vague notes or summaries are a negative signal.
-3.  **Efficiency:** Consider the average call duration for 'completed' calls. Very short 'completed' calls might indicate the agent is not engaging leads effectively. Very long calls are only good if they consistently lead to positive outcomes noted in the summary.
-4.  **Communication Skills (Inferred):** Based on the call 'notes' (transcript) and AI-generated 'summary', assess the clarity and effectiveness of their communication.
+1.  **Call Outcomes:** Look at the distribution of call statuses ('completed', 'voicemail-dropped', 'busy', 'failed'). A high number of 'completed' calls is positive. A high number of 'failed' or 'busy' calls is a negative signal.
+2.  **Conversion Quality & Notes Analysis:** Examine the 'notes' (raw transcript/notes) and 'summary' fields for 'completed' calls. The 'notes' field is the most important source. Look for evidence of positive engagement, such as scheduled follow-ups, expressions of interest, or successful information gathering. A good agent will have detailed and positive notes. Vague notes, negative sentiment, or summaries that don't indicate progress are a negative signal.
+3.  **Efficiency & Call Duration:**
+    *   **Short Calls:** A high number of very short 'completed' calls (e.g., under 30 seconds) is a major red flag, suggesting the agent is not engaging leads effectively or is marking calls as complete incorrectly.
+    *   **Long Calls:** Long calls (e.g., over 3 minutes) are only good if they consistently lead to positive outcomes noted in the 'notes' and 'summary'. Long calls with no outcome are inefficient.
+    *   Analyze the average duration in context with the outcomes.
+4.  **Communication Skills (Inferred from Notes):** Based on the call 'notes' (transcript), assess the clarity and effectiveness of their communication.
 
 **Your Output:**
 1.  **Score:** Provide an overall performance score from 1 (poor) to 10 (excellent).

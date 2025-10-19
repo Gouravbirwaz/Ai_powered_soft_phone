@@ -28,7 +28,7 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2, Users } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2, Users, Timer, TimerOff } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
@@ -232,8 +232,8 @@ export default function DashboardPage() {
             {agentStats.map((agent) => (
               <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
                  <Card>
-                    <div className="flex w-full items-center justify-between p-4">
-                        <AccordionTrigger className="flex-1 justify-start p-0 hover:no-underline">
+                    <div className="flex w-full items-center p-4">
+                        <AccordionTrigger className="flex-1 p-0 hover:no-underline">
                              <div className="flex items-center gap-4 text-left">
                                 <Avatar className="h-12 w-12">
                                     <AvatarFallback>
@@ -273,62 +273,35 @@ export default function DashboardPage() {
                                 <Table>
                                     <TableBody>
                                     <TableRow>
-                                        <TableCell className="font-medium">
-                                        Total Calls
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                        {agent.calls.length}
-                                        </TableCell>
+                                        <TableCell className="font-medium">Total Calls</TableCell>
+                                        <TableCell className="text-right">{agent.calls.length}</TableCell>
                                     </TableRow>
                                     <TableRow>
-                                        <TableCell className="font-medium">
-                                        Completed
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                        {
-                                            agent.calls.filter(
-                                            (c) => c.status === 'completed'
-                                            ).length
-                                        }
-                                        </TableCell>
+                                        <TableCell className="font-medium">Completed</TableCell>
+                                        <TableCell className="text-right">{agent.calls.filter((c) => c.status === 'completed').length}</TableCell>
                                     </TableRow>
                                     <TableRow>
-                                        <TableCell className="font-medium">
-                                        Voicemails
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                        {
-                                            agent.calls.filter(
-                                            (c) => c.status === 'voicemail-dropped'
-                                            ).length
-                                        }
-                                        </TableCell>
+                                        <TableCell className="font-medium">Voicemails</TableCell>
+                                        <TableCell className="text-right">{agent.calls.filter((c) => c.status === 'voicemail-dropped').length}</TableCell>
                                     </TableRow>
                                     <TableRow>
-                                        <TableCell className="font-medium">
-                                        Failed/Busy
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                        {
-                                            agent.calls.filter(
-                                            (c) =>
-                                                c.status === 'failed' ||
-                                                c.status === 'busy'
-                                            ).length
-                                        }
-                                        </TableCell>
+                                        <TableCell className="font-medium">Failed/Busy</TableCell>
+                                        <TableCell className="text-right">{agent.calls.filter((c) => c.status === 'failed' || c.status === 'busy').length}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium flex items-center gap-2"><TimerOff className="h-4 w-4 text-yellow-500" /> Short Calls (&lt; 30s)</TableCell>
+                                        <TableCell className="text-right">{agent.calls.filter(c => c.status === 'completed' && (c.duration || 0) < 30).length}</TableCell>
+                                    </TableRow>
+                                     <TableRow>
+                                        <TableCell className="font-medium flex items-center gap-2"><Timer className="h-4 w-4 text-green-500" /> Long Calls (&gt; 3m)</TableCell>
+                                        <TableCell className="text-right">{agent.calls.filter(c => c.status === 'completed' && (c.duration || 0) > 180).length}</TableCell>
                                     </TableRow>
                                     <TableRow className="border-none">
-                                        <TableCell className="font-medium">
-                                        Avg. Duration
-                                        </TableCell>
+                                        <TableCell className="font-medium">Avg. Duration</TableCell>
                                         <TableCell className="text-right">
                                         {agent.calls.length > 0
                                             ? `${Math.round(
-                                                agent.calls.reduce(
-                                                (acc, c) => acc + (c.duration || 0),
-                                                0
-                                                ) / agent.calls.length
+                                                agent.calls.reduce((acc, c) => acc + (c.duration || 0),0) / agent.calls.length
                                             )}s`
                                             : 'N/A'}
                                         </TableCell>
