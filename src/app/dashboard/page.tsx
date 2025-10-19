@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useCall } from '@/contexts/call-context';
@@ -28,14 +27,13 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff, Star } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff, Star, Edit } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AddAgentDialog from '@/components/add-agent-dialog';
 import DeleteAgentDialog from '@/components/delete-agent-dialog';
 import AgentEvaluationCard from '@/components/agent-evaluation-card';
-import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
+import GradeAgentDialog from '@/components/grade-agent-dialog';
 import { debounce } from 'lodash';
 
 
@@ -43,7 +41,6 @@ interface AgentStats extends Agent {
     calls: Call[];
     evaluation: string;
     aiSuggestedScore: number;
-    score: number;
     isEvaluating: boolean;
 }
 
@@ -54,6 +51,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+  const [agentToGrade, setAgentToGrade] = useState<Agent | null>(null);
+
 
   useEffect(() => {
     if (!state.currentAgent || state.currentAgent.role !== 'admin') {
@@ -74,7 +73,6 @@ export default function DashboardPage() {
           calls: calls.filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
           aiSuggestedScore: 0,
-          score: agent.score_given || 0,
           isEvaluating: false,
         }));
         setAgentStats(stats);
@@ -99,26 +97,21 @@ export default function DashboardPage() {
             ...stat, 
             evaluation: result.evaluation || result.error || '', 
             aiSuggestedScore: result.score || 0,
-            score: stat.score, // Keep the manual score
             isEvaluating: false 
         } : stat
     ));
   };
-
-  const debouncedUpdateScore = useCallback(
-    debounce((agentId: number, score: number) => {
-        if(updateAgentScore) {
-            updateAgentScore(agentId, score);
-        }
-    }, 500),
-    [updateAgentScore]
-  );
   
-  const handleScoreChange = (agentId: number, newScore: number) => {
-    setAgentStats(prevStats => prevStats.map(stat =>
-      stat.id === agentId ? { ...stat, score: newScore } : stat
-    ));
-    debouncedUpdateScore(agentId, newScore);
+  const handleScoreUpdate = async (agentId: number, score: number) => {
+    if(updateAgentScore) {
+        const success = await updateAgentScore(agentId, score);
+        if (success) {
+            setAgentStats(prevStats => prevStats.map(stat =>
+              stat.id === agentId ? { ...stat, score_given: score } : stat
+            ));
+            setAgentToGrade(null); // Close dialog on success
+        }
+    }
   };
   
   const handleLogout = () => {
@@ -165,6 +158,12 @@ export default function DashboardPage() {
         onOpenChange={() => setAgentToDelete(null)}
         agentName={agentToDelete?.name || ''}
         onConfirm={handleDeleteConfirm}
+      />
+      <GradeAgentDialog 
+        agent={agentToGrade}
+        open={!!agentToGrade}
+        onOpenChange={() => setAgentToGrade(null)}
+        onSave={handleScoreUpdate}
       />
       <div className="flex items-center justify-between space-x-4">
         <div className="flex items-center space-x-4">
@@ -253,35 +252,40 @@ export default function DashboardPage() {
             {agentStats.map((agent) => (
               <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
                  <Card>
-                    <div className="flex w-full items-center p-4">
-                        <AccordionTrigger className="flex-1 p-0 justify-start hover:no-underline">
-                            <div className="flex items-center gap-4 text-left">
-                                <Avatar className="h-12 w-12">
-                                    <AvatarFallback>
-                                    <User size={24} />
-                                    </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <p className="text-lg font-semibold">{agent.name}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                    {agent.calls.length} calls recorded
-                                    </p>
-                                </div>
-                            </div>
-                        </AccordionTrigger>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="ml-4 shrink-0"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setAgentToDelete(agent);
-                            }}
-                        >
-                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                        </Button>
-                    </div>
-
+                   <div className="flex w-full items-center p-4">
+                      <AccordionTrigger className="flex-1 p-0 justify-start hover:no-underline group">
+                          <div className="flex items-center gap-4 text-left">
+                              <Avatar className="h-12 w-12">
+                                  <AvatarFallback>
+                                  <User size={24} />
+                                  </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                  <p className="text-lg font-semibold">{agent.name}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                  {agent.calls.length} calls recorded
+                                  </p>
+                              </div>
+                              <div className="flex items-center gap-1 text-primary ml-4">
+                                <Star className="h-5 w-5" />
+                                <span className="text-lg font-bold">
+                                  {(agent.score_given || 0).toFixed(1)}
+                                </span>
+                              </div>
+                          </div>
+                      </AccordionTrigger>
+                      <Button
+                          variant="ghost"
+                          size="icon"
+                          className="ml-4 shrink-0"
+                          onClick={(e) => {
+                              e.stopPropagation();
+                              setAgentToDelete(agent);
+                          }}
+                      >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                   </div>
                     <AccordionContent>
                         <div className="p-6 bg-background/50 rounded-b-lg border-t">
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -335,27 +339,36 @@ export default function DashboardPage() {
                             <div className="lg:col-span-3">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-semibold text-lg">
-                                Agent Grading
+                                Agent Evaluation
                                 </h4>
-                                <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                    handleEvaluate(agent.id, agent.name)
-                                }
-                                disabled={
-                                    agent.isEvaluating || agent.calls.length === 0
-                                }
-                                >
-                                {agent.isEvaluating ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Star className="mr-2 h-4 w-4" />
-                                )}
-                                {agent.evaluation
-                                    ? 'Re-Grade Agent'
-                                    : 'Grade Agent'}
-                                </Button>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                        handleEvaluate(agent.id, agent.name)
+                                    }
+                                    disabled={
+                                        agent.isEvaluating || agent.calls.length === 0
+                                    }
+                                    >
+                                    {agent.isEvaluating ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Wand2 className="mr-2 h-4 w-4" />
+                                    )}
+                                    {agent.evaluation
+                                        ? 'Re-Analyze'
+                                        : 'Run AI Analysis'}
+                                  </Button>
+                                   <Button
+                                    size="sm"
+                                    onClick={() => setAgentToGrade(agent)}
+                                  >
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Grade Agent
+                                  </Button>
+                                </div>
                             </div>
 
                             <AgentEvaluationCard
@@ -364,24 +377,6 @@ export default function DashboardPage() {
                                 score={agent.aiSuggestedScore}
                             />
                             
-                            {(agent.evaluation || agent.score > 0) && (
-                                <div className="mt-4 space-y-3 pt-4 border-t">
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor={`score-slider-${agent.id}`} className="font-semibold">
-                                            Manual Score
-                                        </Label>
-                                        <span className="font-bold text-lg">{agent.score.toFixed(1)}</span>
-                                    </div>
-                                    <Slider
-                                        id={`score-slider-${agent.id}`}
-                                        min={1}
-                                        max={10}
-                                        step={0.1}
-                                        value={[agent.score]}
-                                        onValueChange={(value) => handleScoreChange(agent.id, value[0])}
-                                    />
-                                </div>
-                            )}
                             </div>
                         </div>
                         </div>
