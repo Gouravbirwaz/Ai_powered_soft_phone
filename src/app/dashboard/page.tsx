@@ -347,11 +347,11 @@ export default function DashboardPage() {
                                 {agent.isEvaluating ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : (
-                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    <Star className="mr-2 h-4 w-4" />
                                 )}
                                 {agent.evaluation
-                                    ? 'Re-Analyze'
-                                    : 'Analyze Performance'}
+                                    ? 'Re-Grade Agent'
+                                    : 'Grade Agent'}
                                 </Button>
                             </div>
 
@@ -393,4 +393,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
