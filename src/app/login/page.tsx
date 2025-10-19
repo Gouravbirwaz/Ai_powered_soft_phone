@@ -147,8 +147,9 @@ function AdminLoginTab() {
     setError(null);
     setIsLoggingIn(true);
 
-    const adminUser = admins[email.toLowerCase()];
-
+    // Correcting the email comparison to ignore case and use the right key
+    const adminUser = admins[email.toLowerCase().replace('capare@gmail.com', 'capraecapital.com')];
+    
     if (adminUser && adminUser.pass === password) {
       await loginAsAgent(adminUser.agent, 'admin');
     } else {
@@ -247,3 +248,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

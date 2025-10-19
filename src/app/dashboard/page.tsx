@@ -31,10 +31,11 @@ import { Button } from '@/components/ui/button';
 import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Star, PlusCircle, Trash2, Users, Timer, TimerOff } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Progress } from '@/components/ui/progress';
 import AddAgentDialog from '@/components/add-agent-dialog';
 import DeleteAgentDialog from '@/components/delete-agent-dialog';
 import AgentEvaluationCard from '@/components/agent-evaluation-card';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
 
 
 interface AgentStats extends Agent {
@@ -97,6 +98,12 @@ export default function DashboardPage() {
             score: result.score || 0,
             isEvaluating: false 
         } : stat
+    ));
+  };
+  
+  const handleScoreChange = (agentId: number, newScore: number) => {
+    setAgentStats(prevStats => prevStats.map(stat =>
+      stat.id === agentId ? { ...stat, score: newScore } : stat
     ));
   };
   
@@ -342,6 +349,25 @@ export default function DashboardPage() {
                                 evaluation={agent.evaluation}
                                 score={agent.score}
                             />
+                            
+                            {agent.evaluation && (
+                                <div className="mt-4 space-y-3 pt-4 border-t">
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor={`score-slider-${agent.id}`} className="font-semibold">
+                                            Manual Score Override
+                                        </Label>
+                                        <span className="font-bold text-lg">{agent.score.toFixed(1)}</span>
+                                    </div>
+                                    <Slider
+                                        id={`score-slider-${agent.id}`}
+                                        min={1}
+                                        max={10}
+                                        step={0.1}
+                                        value={[agent.score]}
+                                        onValueChange={(value) => handleScoreChange(agent.id, value[0])}
+                                    />
+                                </div>
+                            )}
                             </div>
                         </div>
                         </div>
