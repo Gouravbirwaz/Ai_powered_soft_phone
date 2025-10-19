@@ -119,9 +119,9 @@ export default function AgentEvaluationCard({ isEvaluating, evaluation, score }:
                              </ul>
                         </div>
                         <div>
-                             <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><TrendingDown className="text-amber-500"/> Areas for Improvement</h4>
+                             <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><TrendingDown className="text-destructive"/> Areas for Improvement</h4>
                              <ul className="space-y-2 pl-2">
-                                 {parsedEvaluation.improvements.map((item, i) => <li key={`i-${i}`} className="flex items-start gap-3"><div className="w-1 h-1 mt-2 rounded-full bg-amber-500 shrink-0"></div><span className="text-sm text-muted-foreground">{item}</span></li>)}
+                                 {parsedEvaluation.improvements.map((item, i) => <li key={`i-${i}`} className="flex items-start gap-3"><div className="w-1 h-1 mt-2 rounded-full bg-destructive shrink-0"></div><span className="text-sm text-muted-foreground">{item}</span></li>)}
                              </ul>
                         </div>
                         <div>
@@ -139,5 +139,3 @@ export default function AgentEvaluationCard({ isEvaluating, evaluation, score }:
         </Card>
     );
 }
-
-    
