@@ -27,14 +27,14 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff, Star, Edit } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff, Star, Edit, Crown } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AddAgentDialog from '@/components/add-agent-dialog';
 import DeleteAgentDialog from '@/components/delete-agent-dialog';
 import AgentEvaluationCard from '@/components/agent-evaluation-card';
 import GradeAgentDialog from '@/components/grade-agent-dialog';
-import { debounce } from 'lodash';
+import { Badge } from '@/components/ui/badge';
 
 
 interface AgentStats extends Agent {
@@ -81,6 +81,17 @@ export default function DashboardPage() {
       loadData();
     }
   }, [state.currentAgent, state.agents, fetchAgents, fetchAllCallHistory]); // Depend on state.agents
+
+  const sortedAgentStats = useMemo(() => {
+    return [...agentStats].sort((a, b) => (b.score_given || 0) - (a.score_given || 0));
+  }, [agentStats]);
+
+  const topPerformerId = useMemo(() => {
+    if (sortedAgentStats.length > 0 && (sortedAgentStats[0].score_given || 0) > 0) {
+      return sortedAgentStats[0].id;
+    }
+    return null;
+  }, [sortedAgentStats]);
   
   const handleEvaluate = async (agentId: number, agentName: string) => {
     setAgentStats(prevStats => prevStats.map(stat => 
@@ -249,43 +260,51 @@ export default function DashboardPage() {
             </div>
         ) : (
           <Accordion type="single" collapsible className="w-full space-y-4">
-            {agentStats.map((agent) => (
+            {sortedAgentStats.map((agent) => (
               <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
                  <Card>
-                   <div className="flex w-full items-center p-4">
-                      <AccordionTrigger className="flex-1 p-0 justify-start hover:no-underline group">
-                          <div className="flex items-center gap-4 text-left">
-                              <Avatar className="h-12 w-12">
-                                  <AvatarFallback>
-                                  <User size={24} />
-                                  </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                  <p className="text-lg font-semibold">{agent.name}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                  {agent.calls.length} calls recorded
-                                  </p>
-                              </div>
-                              <div className="flex items-center gap-1 text-primary ml-4">
+                    <div className="flex w-full items-center p-4">
+                        <AccordionTrigger className="flex-1 p-0 justify-start hover:no-underline group">
+                            <div className="flex items-center gap-4 text-left">
+                                <Avatar className="h-12 w-12">
+                                    <AvatarFallback>
+                                    <User size={24} />
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-lg font-semibold">{agent.name}</p>
+                                        {agent.id === topPerformerId && (
+                                            <Badge variant="secondary" className="border-yellow-500/50 bg-yellow-500/10 text-yellow-300">
+                                                <Crown className="h-4 w-4 mr-1.5"/>
+                                                Top Performer
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                    {agent.calls.length} calls recorded
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1 text-primary ml-4">
                                 <Star className="h-5 w-5" />
                                 <span className="text-lg font-bold">
                                   {(agent.score_given || 0).toFixed(1)}
                                 </span>
-                              </div>
-                          </div>
-                      </AccordionTrigger>
-                      <Button
-                          variant="ghost"
-                          size="icon"
-                          className="ml-4 shrink-0"
-                          onClick={(e) => {
-                              e.stopPropagation();
-                              setAgentToDelete(agent);
-                          }}
-                      >
-                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                      </Button>
-                   </div>
+                                </div>
+                            </div>
+                        </AccordionTrigger>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-4 shrink-0"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setAgentToDelete(agent);
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                    </div>
                     <AccordionContent>
                         <div className="p-6 bg-background/50 rounded-b-lg border-t">
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -391,3 +410,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
