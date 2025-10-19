@@ -254,8 +254,8 @@ export default function DashboardPage() {
               <AccordionItem value={`agent-${agent.id}`} key={agent.id} className="border-b-0">
                  <Card>
                     <div className="flex w-full items-center p-4">
-                        <AccordionTrigger className="flex-1 p-0 hover:no-underline">
-                             <div className="flex items-center gap-4 text-left">
+                        <AccordionTrigger>
+                            <div className="flex flex-1 items-center gap-4 text-left">
                                 <Avatar className="h-12 w-12">
                                     <AvatarFallback>
                                     <User size={24} />
@@ -396,5 +396,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
