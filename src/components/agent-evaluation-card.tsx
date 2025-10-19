@@ -14,10 +14,10 @@ interface AgentEvaluationCardProps {
 }
 
 interface ParsedEvaluation {
-    summary: string;
+    summary: string[];
     strengths: string[];
     improvements: string[];
-    recommendation: string;
+    recommendation: string[];
 }
 
 // Custom renderers for ReactMarkdown
@@ -30,49 +30,50 @@ const markdownComponents = {
 
 export default function AgentEvaluationCard({ isEvaluating, evaluation, score }: AgentEvaluationCardProps) {
     const parsedEvaluation = useMemo((): ParsedEvaluation | null => {
-        if (!evaluation) return null;
+    if (!evaluation) return null;
 
-        const sections = {
-            summary: '',
-            strengths: [] as string[],
-            improvements: [] as string[],
-            recommendation: '',
-        };
+    const lines = evaluation.split('\n');
+    const sections: ParsedEvaluation = {
+      summary: [],
+      strengths: [],
+      improvements: [],
+      recommendation: [],
+    };
 
-        // This parsing logic is fragile and depends on the exact output format of the LLM.
-        try {
-            const strengthMatch = evaluation.match(/(?:\*\*Strengths\*\*|### Strengths)\s*([\s\S]*?)(?=\n\n(?:\*\*Areas for Improvement\*\*|### Areas for Improvement))/);
-            if (strengthMatch && strengthMatch[1]) {
-                sections.strengths = strengthMatch[1].trim().split('\n').map(s => s.replace(/^-|^\*|\s/g, ' ').trim()).filter(Boolean);
-            }
+    let currentSection: keyof ParsedEvaluation | null = 'summary';
 
-            const improvementMatch = evaluation.match(/(?:\*\*Areas for Improvement\*\*|### Areas for Improvement)\s*([\s\S]*?)(?=\n\n(?:\*\*Recommendation\*\*|### Recommendation))/);
-            if (improvementMatch && improvementMatch[1]) {
-                sections.improvements = improvementMatch[1].trim().split('\n').map(s => s.replace(/^-|^\*|\s/g, ' ').trim()).filter(Boolean);
-            }
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
 
-            const recommendationMatch = evaluation.match(/(?:\*\*Recommendation\*\*|### Recommendation)\s*([\s\S]*)/);
-            if (recommendationMatch && recommendationMatch[1]) {
-                sections.recommendation = recommendationMatch[1].trim();
-            }
+      const lowerLine = trimmedLine.toLowerCase();
 
-            const summaryMatch = evaluation.match(/^([\s\S]*?)(?=\n\n(?:\*\*Strengths\*\*|### Strengths))/);
-            if (summaryMatch && summaryMatch[1]) {
-                sections.summary = summaryMatch[1].trim();
-            }
-            
-            // If any section is empty, it might be a format we don't recognize, so return null to fall back to full markdown.
-            if (sections.strengths.length === 0 && sections.improvements.length === 0) {
-                return null;
-            }
+      if (lowerLine.includes('strengths')) {
+        currentSection = 'strengths';
+        continue;
+      } else if (lowerLine.includes('areas for improvement')) {
+        currentSection = 'improvements';
+        continue;
+      } else if (lowerLine.includes('recommendation')) {
+        currentSection = 'recommendation';
+        continue;
+      }
 
-            return sections;
-        } catch (e) {
-            console.error("Failed to parse evaluation markdown:", e);
-            return null; // Fallback to full markdown rendering
-        }
+      if (currentSection && (trimmedLine.startsWith('-') || trimmedLine.startsWith('*'))) {
+        sections[currentSection].push(trimmedLine.substring(1).trim());
+      } else if (currentSection) {
+        // Capture non-bullet point text as part of the current section
+        sections[currentSection].push(trimmedLine);
+      }
+    }
 
-    }, [evaluation]);
+    // If parsing fails to find specific sections, fallback to showing the whole thing
+    if (sections.strengths.length === 0 && sections.improvements.length === 0) {
+        return null;
+    }
+
+    return sections;
+  }, [evaluation]);
 
     if (isEvaluating) {
         return (
@@ -112,22 +113,30 @@ export default function AgentEvaluationCard({ isEvaluating, evaluation, score }:
             <CardContent className="space-y-6 pt-2">
                 {parsedEvaluation ? (
                      <>
-                        <div>
-                             <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><TrendingUp className="text-green-500"/> Strengths</h4>
-                             <ul className="space-y-2 pl-2">
-                                 {parsedEvaluation.strengths.map((item, i) => <li key={`s-${i}`} className="flex items-start gap-3"><div className="w-1 h-1 mt-2 rounded-full bg-green-500 shrink-0"></div><span className="text-sm text-muted-foreground">{item}</span></li>)}
-                             </ul>
-                        </div>
-                        <div>
-                             <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><TrendingDown className="text-red-500"/> Areas for Improvement</h4>
-                             <ul className="space-y-2 pl-2">
-                                 {parsedEvaluation.improvements.map((item, i) => <li key={`i-${i}`} className="flex items-start gap-3"><div className="w-1 h-1 mt-2 rounded-full bg-red-500 shrink-0"></div><span className="text-sm text-muted-foreground">{item}</span></li>)}
-                             </ul>
-                        </div>
-                        <div>
-                             <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><ClipboardCheck className="text-blue-500"/> Recommendation</h4>
-                             <p className="text-sm text-muted-foreground pl-2">{parsedEvaluation.recommendation}</p>
-                        </div>
+                        {parsedEvaluation.strengths.length > 0 && (
+                            <div>
+                                <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><TrendingUp className="text-green-500"/> Strengths</h4>
+                                <ul className="space-y-2 pl-2">
+                                    {parsedEvaluation.strengths.map((item, i) => <li key={`s-${i}`} className="flex items-start gap-3"><div className="w-1 h-1 mt-2 rounded-full bg-green-500 shrink-0"></div><span className="text-sm text-muted-foreground">{item}</span></li>)}
+                                </ul>
+                            </div>
+                        )}
+                        {parsedEvaluation.improvements.length > 0 && (
+                            <div>
+                                <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><TrendingDown className="text-red-500"/> Areas for Improvement</h4>
+                                <ul className="space-y-2 pl-2">
+                                    {parsedEvaluation.improvements.map((item, i) => <li key={`i-${i}`} className="flex items-start gap-3"><div className="w-1 h-1 mt-2 rounded-full bg-red-500 shrink-0"></div><span className="text-sm text-muted-foreground">{item}</span></li>)}
+                                </ul>
+                            </div>
+                        )}
+                        {parsedEvaluation.recommendation.length > 0 && (
+                            <div>
+                                <h4 className="font-semibold text-base mb-2 flex items-center gap-2"><ClipboardCheck className="text-blue-500"/> Recommendation</h4>
+                                <div className="space-y-1 pl-2">
+                                  {parsedEvaluation.recommendation.map((item, i) => <p key={`r-${i}`} className="text-sm text-muted-foreground">{item}</p>)}
+                                </div>
+                            </div>
+                        )}
                     </>
                 ) : (
                     // Fallback for when parsing fails
