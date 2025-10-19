@@ -3,7 +3,7 @@
 
 import { useCall } from '@/contexts/call-context';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -36,6 +36,7 @@ import DeleteAgentDialog from '@/components/delete-agent-dialog';
 import AgentEvaluationCard from '@/components/agent-evaluation-card';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
+import { debounce } from 'lodash';
 
 
 interface AgentStats extends Agent {
@@ -46,7 +47,7 @@ interface AgentStats extends Agent {
 }
 
 export default function DashboardPage() {
-  const { state, fetchAgents, fetchAllCallHistory, logout, addAgent, deleteAgent } = useCall();
+  const { state, fetchAgents, fetchAllCallHistory, logout, addAgent, deleteAgent, updateAgentScore } = useCall();
   const router = useRouter();
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +72,7 @@ export default function DashboardPage() {
           ...agent,
           calls: calls.filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
-          score: 0,
+          score: agent.score_given || 0,
           isEvaluating: false,
         }));
         setAgentStats(stats);
@@ -95,16 +96,26 @@ export default function DashboardPage() {
         stat.id === agentId ? { 
             ...stat, 
             evaluation: result.evaluation || result.error || '', 
-            score: result.score || 0,
+            score: result.score || stat.score, // Keep manual score if AI fails
             isEvaluating: false 
         } : stat
     ));
   };
+
+  const debouncedUpdateScore = useCallback(
+    debounce((agentId: number, score: number) => {
+        if(updateAgentScore) {
+            updateAgentScore(agentId, score);
+        }
+    }, 500),
+    [updateAgentScore]
+  );
   
   const handleScoreChange = (agentId: number, newScore: number) => {
     setAgentStats(prevStats => prevStats.map(stat =>
       stat.id === agentId ? { ...stat, score: newScore } : stat
     ));
+    debouncedUpdateScore(agentId, newScore);
   };
   
   const handleLogout = () => {
@@ -382,5 +393,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    

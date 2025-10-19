@@ -49,6 +49,7 @@ type CallAction =
   | { type: 'SET_AGENTS'; payload: Agent[] }
   | { type: 'ADD_AGENT'; payload: Agent }
   | { type: 'REMOVE_AGENT'; payload: { agentId: number } }
+  | { type: 'UPDATE_AGENT'; payload: { agent: Partial<Agent> & Pick<Agent, 'id'> } }
   | { type: 'CLOSE_POST_CALL_SHEET' }
   | { type: 'OPEN_POST_CALL_SHEET'; payload: { callId: string; } }
   | { type: 'OPEN_VOICEMAIL_DIALOG'; payload: { lead: Lead } }
@@ -136,6 +137,13 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         return { ...state, agents: [...state.agents, action.payload] };
      case 'REMOVE_AGENT':
         return { ...state, agents: state.agents.filter(a => a.id !== action.payload.agentId) };
+    case 'UPDATE_AGENT': {
+        const { agent } = action.payload;
+        return {
+            ...state,
+            agents: state.agents.map(a => a.id === agent.id ? { ...a, ...agent } : a),
+        };
+    }
     case 'CLOSE_POST_CALL_SHEET':
       return { ...state, showPostCallSheetForId: null };
     case 'OPEN_POST_CALL_SHEET':
@@ -195,6 +203,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       contactName: log.contact_name,
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
+      score_given: log.score_given,
     };
   }, []);
 
@@ -363,7 +372,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      const agents = (data.agents || []) as Agent[];
+      const agents = (data.agents || []).map((agent: any) => ({
+        ...agent,
+        score_given: agent.score_given,
+      })) as Agent[];
       dispatch({ type: 'SET_AGENTS', payload: agents });
       return agents;
     } catch (error: any) {
@@ -429,6 +441,33 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         description: error.message,
       });
       return false;
+    }
+  }, [toast]);
+
+  const updateAgentScore = useCallback(async (agentId: number, score: number): Promise<boolean> => {
+    try {
+        const response = await fetch(`/api/agents/${agentId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score_given: score }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ details: "Failed to save score." }));
+            throw new Error(error.details || `Failed to update score. Status: ${response.status}`);
+        }
+
+        const updatedAgent = await response.json();
+        dispatch({ type: 'UPDATE_AGENT', payload: { agent: { id: agentId, score_given: updatedAgent.score_given } } });
+        toast({ title: 'Score Saved', description: 'The agent\'s score has been updated.' });
+        return true;
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Error Saving Score',
+            description: error.message,
+        });
+        return false;
     }
   }, [toast]);
   
@@ -591,6 +630,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       fetchAgents,
       addAgent,
       deleteAgent,
+      updateAgentScore,
       fetchAllCallHistory,
       loginAsAgent,
       logout,

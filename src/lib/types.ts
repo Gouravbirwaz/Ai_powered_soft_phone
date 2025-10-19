@@ -39,6 +39,7 @@ export interface Call {
   callAttemptNumber?: number;
   action_taken?: ActionTaken;
   contactName?: string;
+  score_given?: number;
 }
 
 export interface Lead {
@@ -64,7 +65,8 @@ export interface Agent {
     phone: string;
     status: string;
     role?: 'agent' | 'admin';
+    score_given?: number;
 }
 
-export type NewAgent = Omit<Agent, 'id' | 'status' | 'role'>;
+export type NewAgent = Omit<Agent, 'id' | 'status' | 'role' | 'score_given'>;
     
