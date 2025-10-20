@@ -245,8 +245,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         console.error("Cannot create or update call log on backend: call data is null.");
         return null;
     }
-    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
     const agentId = call.agentId || currentAgentRef.current?.id;
+
+    // Prevent sending logs for hardcoded admin users
+    if (agentId && [998, 999].includes(Number(agentId))) {
+        console.log(`Bypassing call log for admin user ${agentId}.`);
+        return call; // Return the call data without saving to backend
+    }
+    
+    const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
     
     if (!agentId || !phoneNumber) {
         console.error("Cannot create call log: agentId or phoneNumber is missing.", { agentId, phoneNumber });
