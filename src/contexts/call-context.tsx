@@ -214,6 +214,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const fetchAllCallHistory = useCallback(async () => {
+    // Admin always re-fetches. Agent data is filtered later.
     if (state.allCallHistory.length > 0 && currentAgentRef.current?.role === 'admin') {
       return state.allCallHistory;
     }
@@ -226,12 +227,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       const formattedCalls: Call[] = (data.call_logs || []).map(mapCallLog);
       dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: formattedCalls });
-      // For agent view, we still filter. For admin, this is the full list.
-      if (currentAgentRef.current?.role !== 'admin') {
-         dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls.filter(c => String(c.agentId) === String(currentAgentRef.current?.id)) });
-      } else {
-         dispatch({ type: 'SET_CALL_HISTORY', payload: formattedCalls });
-      }
       return formattedCalls;
     } catch (error: any) {
       console.error("Fetch all call history error:", error);
@@ -369,7 +364,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast]);
   
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
-    // This function will now only be called once due to login page retry logic
+    if (state.agents.length > 0) {
+      return state.agents;
+    }
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
@@ -387,7 +384,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       console.error("Fetch agents error:", error);
       return [];
     }
-  }, []);
+  }, [state.agents]);
 
   const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
     try {
@@ -402,10 +399,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             throw new Error(error.details || error.error || 'Failed to add agent.');
         }
 
-        const { agent_id } = await response.json();
-        const newAgent: Agent = { id: agent_id, ...agentData, status: 'active' };
-
-        dispatch({ type: 'ADD_AGENT', payload: newAgent });
+        const { agent } = await response.json();
+        
+        dispatch({ type: 'ADD_AGENT', payload: agent });
         toast({ title: 'Success', description: 'New agent has been added.' });
         return true;
 
@@ -503,8 +499,13 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         await updateAgent(agent.id, { status: 'active' });
     }
     
+    // Refresh all data on login
+    dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
+    dispatch({ type: 'SET_AGENTS', payload: [] });
     await fetchAllCallHistory();
-  }, [fetchAllCallHistory, updateAgent]);
+    await fetchAgents();
+
+  }, [fetchAllCallHistory, fetchAgents, updateAgent]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -686,3 +687,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    

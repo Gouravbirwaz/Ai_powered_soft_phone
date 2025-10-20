@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useCall } from '@/contexts/call-context';
@@ -27,7 +28,7 @@ import {
 import Image from 'next/image';
 import type { Agent, Call } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff, Star, Edit, Crown } from 'lucide-react';
+import { Loader2, User, RefreshCw, BarChart, FileText, Phone, Wand2, PlusCircle, Trash2, Users, Timer, TimerOff, Star, Edit, Crown, AlertCircle } from 'lucide-react';
 import { evaluateAgentPerformanceAction } from '@/lib/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AddAgentDialog from '@/components/add-agent-dialog';
@@ -49,6 +50,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [agentStats, setAgentStats] = useState<AgentStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempts, setAttempts] = useState(0);
   const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
   const [agentToGrade, setAgentToGrade] = useState<Agent | null>(null);
@@ -60,27 +63,46 @@ export default function DashboardPage() {
     }
   }, [state.currentAgent, router]);
   
-  useEffect(() => {
-    if (state.currentAgent && state.currentAgent.role === 'admin') {
-      const loadData = async () => {
-        setIsLoading(true);
-        // fetchAgents is now cached, so this is fine to call
+  const loadData = useCallback(async () => {
+    if (attempts >= 5) {
+      setError("Could not load dashboard data. Please check the backend or try refreshing.");
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    
+    try {
         const agents = await fetchAgents();
         const calls = await fetchAllCallHistory();
+
+        if ((!agents || agents.length === 0) && (!calls || calls.length === 0)) {
+            setTimeout(() => setAttempts(prev => prev + 1), 2000);
+            return;
+        }
         
-        const stats: AgentStats[] = agents.map(agent => ({
+        const stats: AgentStats[] = (agents || []).map((agent: Agent) => ({
           ...agent,
-          calls: calls.filter((c: Call) => String(c.agentId) === String(agent.id)),
+          calls: (calls || []).filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
           aiSuggestedScore: 0,
           isEvaluating: false,
         }));
+
         setAgentStats(stats);
         setIsLoading(false);
-      }
+
+    } catch (e) {
+        setTimeout(() => setAttempts(prev => prev + 1), 2000);
+    }
+  }, [attempts, fetchAgents, fetchAllCallHistory]);
+
+  useEffect(() => {
+    if (state.currentAgent && state.currentAgent.role === 'admin') {
       loadData();
     }
-  }, [state.currentAgent, state.agents, fetchAgents, fetchAllCallHistory]); // Depend on state.agents
+  }, [state.currentAgent, attempts, loadData]);
 
   const sortedAgentStats = useMemo(() => {
     return [...agentStats].sort((a, b) => (b.score_given || 0) - (a.score_given || 0));
@@ -130,9 +152,9 @@ export default function DashboardPage() {
     router.replace('/login');
   }
 
-  const handleAgentAdded = () => {
-    // The context will handle updating the state, and the useEffect will trigger a re-render
+  const handleAgentAdded = async () => {
     setIsAddAgentOpen(false);
+    await loadData(); // Reload all data
   }
 
   const handleDeleteConfirm = async () => {
@@ -257,6 +279,17 @@ export default function DashboardPage() {
         {isLoading ? (
             <div className="flex justify-center items-center h-48">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="ml-4 text-muted-foreground">Loading dashboard data...</p>
+            </div>
+        ) : error ? (
+            <div className="text-destructive text-center p-8 flex items-center gap-2 justify-center h-48">
+                <AlertCircle className="h-5 w-5" />
+                <p>{error}</p>
+            </div>
+        ) : agentStats.length === 0 ? (
+            <div className="text-muted-foreground text-center p-8 flex items-center gap-2 justify-center h-48">
+                <Users className="h-5 w-5" />
+                <p>No agents found. You can add one using the "Add Agent" button.</p>
             </div>
         ) : (
           <Accordion type="single" collapsible className="w-full space-y-4">
@@ -410,5 +443,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
 
     
