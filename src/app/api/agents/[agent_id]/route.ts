@@ -97,7 +97,7 @@ export async function PATCH(
 
 
     const response = await fetch(`${AGENTS_API_ENDPOINT}/${agent_id}`, {
-      method: 'PATCH',
+      method: 'PUT', // Changed from PATCH to PUT
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
