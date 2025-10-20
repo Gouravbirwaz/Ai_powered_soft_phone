@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useCall } from '@/contexts/call-context';
 import type { Agent } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
 import { Loader2, User, AlertCircle, ShieldCheck, Phone } from 'lucide-react';
 import Image from 'next/image';
@@ -19,19 +21,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-
-const MAX_FETCH_ATTEMPTS = 5;
 
 function AgentLoginTab() {
   const { loginAsAgent, state, fetchAgents } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null); // Store agentId
+  const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempts, setAttempts] = useState(0);
   const router = useRouter();
-  const [fetchAttempt, setFetchAttempt] = useState(0);
 
   useEffect(() => {
     if (state.currentAgent && state.currentAgent.role === 'agent') {
@@ -39,58 +37,66 @@ function AgentLoginTab() {
     }
   }, [state.currentAgent, router]);
 
-  useEffect(() => {
-    const loadAgents = async () => {
-      if (fetchAttempt >= MAX_FETCH_ATTEMPTS) {
-        setError('No agents found. Please check the backend connection or add agents.');
-        setIsLoading(false);
-        return;
-      }
-      
-      const fetchedAgents = await fetchAgents();
-
-      if (fetchedAgents && fetchedAgents.length > 0) {
-        const filteredAgents = fetchedAgents.filter(a => a.role !== 'admin');
-        if (filteredAgents.length > 0) {
-            setAgents(filteredAgents);
-            setIsLoading(false);
-        } else {
-             // Found only admins, try again in case agents are still loading
-             setTimeout(() => setFetchAttempt(prev => prev + 1), 1000);
-        }
-      } else {
-        // No agents found, try again
-        setTimeout(() => setFetchAttempt(prev => prev + 1), 1000);
-      }
-    };
-
-    if (isLoading) {
-        loadAgents();
+  const loadAgents = useCallback(async () => {
+    if (attempts >= 5) {
+      setError('No agents found. Please check the backend configuration.');
+      setIsLoading(false);
+      return;
     }
-  }, [fetchAgents, fetchAttempt, isLoading]);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedAgents = await fetchAgents();
+      if (fetchedAgents && fetchedAgents.length > 0) {
+        setAgents(fetchedAgents.filter(a => a.name !== 'Zackary Beckham' && a.name !== 'Kevin Hong'));
+        setIsLoading(false);
+      } else {
+        // If fetchAgents returns empty, it might be a temporary issue.
+        setTimeout(() => {
+            setAttempts(prev => prev + 1);
+        }, 2000); // Wait 2 seconds before retrying
+      }
+    } catch (e: any) {
+       setTimeout(() => {
+            setAttempts(prev => prev + 1);
+        }, 2000);
+    }
+  }, [fetchAgents, attempts]);
+
+  useEffect(() => {
+    loadAgents();
+  }, [attempts, loadAgents]);
 
   const handleLogin = async (agent: Agent) => {
     setIsLoggingIn(agent.id);
     await loginAsAgent(agent, 'agent');
-    // Navigation is handled by the main page useEffect
   };
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return (
-      <div className="flex flex-col justify-center items-center p-8 text-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="text-sm text-muted-foreground mt-2">
-            Connecting to agent service...
-        </p>
+      <div className="flex justify-center items-center p-8 h-64">
+        <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <p className="text-sm text-muted-foreground">Loading agents...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-muted-foreground text-center p-4 flex items-center gap-2 justify-center">
+      <div className="text-destructive text-center p-4 flex items-center gap-2 justify-center h-64">
         <AlertCircle className="h-5 w-5" />
         <p>{error}</p>
+      </div>
+    );
+  }
+  
+  if (agents.length === 0) {
+     return (
+      <div className="text-muted-foreground text-center p-4 flex items-center gap-2 justify-center h-64">
+        <User className="h-5 w-5" />
+        <p>No agents available to log in.</p>
       </div>
     );
   }
@@ -134,7 +140,17 @@ function AgentLoginTab() {
 
 
 function AdminLoginTab() {
-  const { loginAsAgent, state, fetchAgents } = useCall();
+  const { loginAsAgent, state } = useCall();
+  
+  const hardcodedAdmins: Agent[] = [
+    { id: 999, name: 'Zackary Beckham', email: 'zack@capraecapital.com', phone: '', status: 'admin', role: 'admin' },
+    { id: 998, name: 'Kevin Hong', email: 'kevin@capraecapital.com', phone: '', status: 'admin', role: 'admin' }
+  ];
+  const adminCredentials: { [email: string]: string } = {
+    'zack@capraecapital.com': 'zack@caprae123',
+    'kevin@capraecapital.com': 'kevin@caprae123',
+  };
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -147,32 +163,27 @@ function AdminLoginTab() {
     }
   }, [state.currentAgent, router]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setIsLoggingIn(true);
-
-    const validCredentials: { [email: string]: string } = {
-        'zack@capraecapital.com': 'zack@caprae123',
-        'kevin@capraecapital.com': 'kevin@caprae123',
-    };
+    setError(null);
 
     const lowerCaseEmail = email.toLowerCase();
+    const expectedPassword = adminCredentials[lowerCaseEmail];
 
-    if (validCredentials[lowerCaseEmail] && validCredentials[lowerCaseEmail] === password) {
-        const allAgents = await fetchAgents();
-        // Find the user by email, don't rely on role from the backend for this check
-        const adminUser = allAgents.find(a => a.email.toLowerCase() === lowerCaseEmail);
-        
-        if (adminUser) {
-            await loginAsAgent(adminUser, 'admin');
-        } else {
-            setError('Admin user profile not found. Please contact support.');
-            setIsLoggingIn(false);
-        }
-    } else {
-        setError('Invalid email or password.');
+    if (expectedPassword && password === expectedPassword) {
+      const adminUser = hardcodedAdmins.find(a => a.email.toLowerCase() === lowerCaseEmail);
+      if (adminUser) {
+        await loginAsAgent(adminUser, 'admin');
+        // useEffect will handle navigation
+      } else {
+        // This case should theoretically not happen if credentials are correct
+        setError('An unexpected error occurred. Admin profile mismatch.');
         setIsLoggingIn(false);
+      }
+    } else {
+      setError('Invalid email or password.');
+      setIsLoggingIn(false);
     }
   };
   
@@ -202,13 +213,14 @@ function AdminLoginTab() {
         />
       </div>
       {error && (
-        <div className="flex items-center gap-2 text-sm text-destructive">
+        <div className="text-destructive text-sm flex items-center gap-2">
           <AlertCircle className="h-4 w-4" />
-          <p>{error}</p>
+          {error}
         </div>
       )}
       <Button type="submit" className="w-full" disabled={isLoggingIn}>
-        {isLoggingIn ? <Loader2 className="animate-spin" /> : 'Login as Admin'}
+        {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Login as Admin
       </Button>
     </form>
   );
