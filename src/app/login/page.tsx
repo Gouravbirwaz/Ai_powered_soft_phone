@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useCall } from '@/contexts/call-context';
 import type { Agent } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+const MAX_FETCH_ATTEMPTS = 10;
+
 function AgentLoginTab() {
   const { loginAsAgent, state, fetchAgents } = useCall();
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -29,6 +31,7 @@ function AgentLoginTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [fetchAttempt, setFetchAttempt] = useState(0);
 
   useEffect(() => {
     if (state.currentAgent && state.currentAgent.role === 'agent') {
@@ -38,30 +41,47 @@ function AgentLoginTab() {
 
   useEffect(() => {
     const loadAgents = async () => {
-      setIsLoading(true);
-      setError(null);
-      // No try-catch needed as fetchAgents now handles errors gracefully
-      const fetchedAgents = await fetchAgents();
-      if (fetchedAgents && fetchedAgents.length > 0) {
-        setAgents(fetchedAgents.filter(a => a.name !== 'Zackary Beckham' && a.name !== 'Kevin Hong'));
-      } else {
+      if (fetchAttempt >= MAX_FETCH_ATTEMPTS) {
         setError('No agents found. Please check the backend connection or add agents.');
+        setIsLoading(false);
+        return;
       }
-      setIsLoading(false);
+      
+      const fetchedAgents = await fetchAgents();
+
+      if (fetchedAgents && fetchedAgents.length > 0) {
+        const filteredAgents = fetchedAgents.filter(a => a.role !== 'admin');
+        if (filteredAgents.length > 0) {
+            setAgents(filteredAgents);
+            setIsLoading(false);
+        } else {
+             // Found only admins, try again in case agents are still loading
+             setTimeout(() => setFetchAttempt(prev => prev + 1), 1000);
+        }
+      } else {
+        // No agents found, try again
+        setTimeout(() => setFetchAttempt(prev => prev + 1), 1000);
+      }
     };
-    loadAgents();
-  }, [fetchAgents]);
+
+    if (isLoading) {
+        loadAgents();
+    }
+  }, [fetchAgents, fetchAttempt, isLoading]);
 
   const handleLogin = async (agent: Agent) => {
     setIsLoggingIn(agent.id);
     await loginAsAgent(agent, 'agent');
-    // Navigation is now handled by the useEffect hook watching currentAgent
+    // Navigation is handled by the main page useEffect
   };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center p-8">
+      <div className="flex flex-col justify-center items-center p-8 text-center">
         <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm text-muted-foreground mt-2">
+            Connecting to agent service... (Attempt {fetchAttempt + 1}/{MAX_FETCH_ATTEMPTS})
+        </p>
       </div>
     );
   }
@@ -114,23 +134,12 @@ function AgentLoginTab() {
 
 
 function AdminLoginTab() {
-  const { loginAsAgent, state } = useCall();
+  const { loginAsAgent, state, fetchAgents } = useCall();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-
-  const admins: { [email: string]: { agent: Agent, pass: string } } = {
-    'zack@capraecapital.com': { 
-      agent: { id: 999, name: 'Zackary Beckham', email: 'zack@capraecapital.com', phone: '', status: 'admin' },
-      pass: 'zack@caprae123'
-    },
-    'kevin@capraecapital.com': {
-      agent: { id: 998, name: 'Kevin Hong', email: 'kevin@capraecapital.com', phone: '', status: 'admin' },
-      pass: 'kevin@caprae123'
-    }
-  };
 
   useEffect(() => {
     if (state.currentAgent && state.currentAgent.role === 'admin') {
@@ -142,12 +151,15 @@ function AdminLoginTab() {
     e.preventDefault();
     setError(null);
     setIsLoggingIn(true);
-
-    // Correcting the email comparison to ignore case and use the right key
-    const adminUser = admins[email.toLowerCase().replace('capare@gmail.com', 'capraecapital.com')];
     
-    if (adminUser && adminUser.pass === password) {
-      await loginAsAgent(adminUser.agent, 'admin');
+    // Fetch agents to find the admin user
+    const allAgents = await fetchAgents();
+    const adminUser = allAgents.find(a => a.role === 'admin' && a.email.toLowerCase() === email.toLowerCase());
+
+    // This is a simplified, insecure password check for demo purposes.
+    // In a real app, you would send the credentials to a backend for verification.
+    if (adminUser && password === `${adminUser.name.split(' ')[0].toLowerCase()}@caprae123`) {
+      await loginAsAgent(adminUser, 'admin');
     } else {
       setError('Invalid email or password.');
       setIsLoggingIn(false);
