@@ -84,6 +84,7 @@ export default function DashboardPage() {
         
         const stats: AgentStats[] = (agents || []).map((agent: Agent) => ({
           ...agent,
+          score_given: agent.score_given,
           calls: (calls || []).filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
           aiSuggestedScore: 0,
@@ -102,7 +103,7 @@ export default function DashboardPage() {
     if (state.currentAgent && state.currentAgent.role === 'admin') {
       loadData();
     }
-  }, [state.currentAgent, attempts, loadData]);
+  }, [state.currentAgent, loadData]);
 
   const sortedAgentStats = useMemo(() => {
     return [...agentStats].sort((a, b) => (b.score_given || 0) - (a.score_given || 0));
@@ -443,7 +444,5 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
 
     
