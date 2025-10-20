@@ -212,11 +212,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       score: log.score,
     };
   }, []);
-
-  const fetchAllCallHistory = useCallback(async () => {
-    if (state.allCallHistory.length > 0) {
-        return state.allCallHistory;
-    }
+  
+  const forceFetchAllCallHistory = useCallback(async () => {
     try {
       const url = '/api/twilio/call_logs';
       const response = await fetch(url, { method: 'GET' });
@@ -236,7 +233,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return [];
     }
-  }, [toast, mapCallLog, state.allCallHistory]);
+  }, [toast, mapCallLog]);
+
+
+  const fetchAllCallHistory = useCallback(async () => {
+    if (state.allCallHistory.length > 0) {
+        return state.allCallHistory;
+    }
+    return forceFetchAllCallHistory();
+  }, [state.allCallHistory, forceFetchAllCallHistory]);
 
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call | null) => {
@@ -365,10 +370,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [toast]);
   
-  const fetchAgents = useCallback(async (): Promise<Agent[]> => {
-    if (state.agents.length > 0) {
-        return state.agents;
-    }
+  const forceFetchAgents = useCallback(async () => {
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
@@ -394,7 +396,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return [];
     }
-  }, [toast, state.agents]);
+  }, [toast]);
+
+  const fetchAgents = useCallback(async (): Promise<Agent[]> => {
+    if (state.agents.length > 0) {
+        return state.agents;
+    }
+    return forceFetchAgents();
+  }, [state.agents, forceFetchAgents]);
 
   const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
     try {
@@ -408,11 +417,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             const error = await response.json();
             throw new Error(error.details || error.error || 'Failed to add agent.');
         }
-
-        const { agent } = await response.json();
         
-        dispatch({ type: 'ADD_AGENT', payload: agent });
         toast({ title: 'Success', description: 'New agent has been added.' });
+        forceFetchAgents(); // Refresh the list
         return true;
 
     } catch (error: any) {
@@ -423,7 +430,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         return false;
     }
-}, [toast]);
+}, [toast, forceFetchAgents]);
 
   const deleteAgent = useCallback(async (agentId: number): Promise<boolean> => {
     try {
@@ -436,8 +443,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(error?.details || `Failed to delete agent. Status: ${response.status}`);
       }
 
-      dispatch({ type: 'REMOVE_AGENT', payload: { agentId } });
       toast({ title: 'Success', description: 'Agent has been deleted.' });
+      forceFetchAgents(); // Refresh the list
       return true;
 
     } catch (error: any) {
@@ -448,7 +455,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return false;
     }
-  }, [toast]);
+  }, [toast, forceFetchAgents]);
 
   const updateAgent = useCallback(async (agentId: number, data: Partial<Agent>): Promise<boolean> => {
     try {
@@ -486,9 +493,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             throw new Error(error.details || `Failed to update score. Status: ${response.status}`);
         }
 
-        const updatedAgent = await response.json();
-        dispatch({ type: 'UPDATE_AGENT', payload: { agent: { id: agentId, score: updatedAgent.new_score } } });
         toast({ title: 'Score Saved', description: 'The agent\'s score has been updated.' });
+        forceFetchAgents(); // Refresh the agent list
         return true;
     } catch (error: any) {
         toast({
@@ -498,7 +504,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         return false;
     }
-  }, [toast]);
+  }, [toast, forceFetchAgents]);
   
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
@@ -510,12 +516,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     }
     
     // Refresh all data on login
-    dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
-    dispatch({ type: 'SET_AGENTS', payload: [] });
-    await fetchAllCallHistory();
-    await fetchAgents();
+    await forceFetchAllCallHistory();
+    await forceFetchAgents();
 
-  }, [fetchAllCallHistory, fetchAgents, updateAgent]);
+  }, [forceFetchAllCallHistory, forceFetchAgents, updateAgent]);
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -532,13 +536,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       if (savedCall) {
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
         toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
+        forceFetchAllCallHistory(); // Refresh call history
       }
       
     } else {
       console.error("Could not find call to update notes for:", callId);
       toast({ title: 'Error', description: 'Could not find the call to update.', variant: 'destructive' });
     }
-  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
+  }, [state.allCallHistory, createOrUpdateCallOnBackend, toast, forceFetchAllCallHistory]);
 
   const logout = useCallback(async () => {
     if (currentAgentRef.current && currentAgentRef.current.role === 'agent') {
@@ -591,13 +596,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     .then(savedLog => {
         if (savedLog) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
+            forceFetchAllCallHistory(); // Refresh
         }
     })
     .catch(error => {
         console.error('Error sending voicemail:', error);
         toast({ title: 'Voicemail Failed', description: error.message, variant: 'destructive' });
     });
-  }, [toast, createOrUpdateCallOnBackend]);
+  }, [toast, createOrUpdateCallOnBackend, forceFetchAllCallHistory]);
   
   const sendMissedCallEmail = useCallback((lead: Lead) => {
     const agent = currentAgentRef.current;
@@ -637,13 +643,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     .then(savedLog => {
         if (savedLog) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
+            forceFetchAllCallHistory(); // Refresh
         }
     })
     .catch(error => {
         console.error('Error sending email:', error);
         toast({ title: 'Email Failed', description: error.message, variant: 'destructive' });
     });
-  }, [createOrUpdateCallOnBackend, toast]);
+  }, [createOrUpdateCallOnBackend, toast, forceFetchAllCallHistory]);
   
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
       const { activeCall } = state;
@@ -661,9 +668,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           if (savedCall) {
               dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
               dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
+              forceFetchAllCallHistory(); // Refresh
           }
       });
-  }, [state.activeCall, createOrUpdateCallOnBackend]);
+  }, [state.activeCall, createOrUpdateCallOnBackend, forceFetchAllCallHistory]);
 
 
   return (
@@ -697,3 +705,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
