@@ -263,6 +263,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
         const combinedNotes = call.summary ? `SUMMARY: ${call.summary}\n---\nNOTES: ${call.notes || ''}` : call.notes || '';
 
+        const leadIdInt = call.leadId ? parseInt(call.leadId, 10) : undefined;
+
         const body: { [key: string]: any } = {
             call_log_id: call.id.startsWith('temp-') ? undefined : call.id,
             agent_id: agentId ? parseInt(String(agentId), 10) : undefined,
@@ -278,7 +280,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
             call_attempt_number: call.callAttemptNumber,
             direction: call.direction,
             contact_name: call.contactName,
-            lead_id: call.leadId,
+            lead_id: leadIdInt && !isNaN(leadIdInt) ? leadIdInt : undefined,
         };
         
         const response = await fetch('/api/twilio/call_logs', {
