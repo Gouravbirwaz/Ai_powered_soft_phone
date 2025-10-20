@@ -66,8 +66,8 @@ export async function DELETE(
   }
 }
 
-// PATCH handler to update an agent
-export async function PATCH(
+// PUT handler to update an agent
+export async function PUT(
   req: NextRequest,
   { params }: { params: { agent_id: string } }
 ) {
@@ -88,16 +88,22 @@ export async function PATCH(
     let body;
     const contentType = req.headers.get('content-type');
     
-    // navigator.sendBeacon sends data as text/plain by default
-    if (contentType?.includes('text/plain')) {
-      body = JSON.parse(await req.text());
+    // navigator.sendBeacon sends data as text/plain or application/json in a Blob
+    if (contentType?.includes('text/plain') || contentType?.includes('application/json')) {
+       try {
+        body = await req.json();
+      } catch (e) {
+        // Fallback for pure text/plain that isn't JSON formatted
+        body = JSON.parse(await req.text());
+      }
     } else {
+      // Default to JSON for standard fetch requests
       body = await req.json();
     }
 
 
     const response = await fetch(`${AGENTS_API_ENDPOINT}/${agent_id}`, {
-      method: 'PUT', // Changed from PATCH to PUT
+      method: 'PUT',
       headers: {
         'ngrok-skip-browser-warning': 'true',
         'Content-Type': 'application/json',
@@ -113,7 +119,7 @@ export async function PATCH(
         errorDetails = errorJson.message || errorJson.error || errorText;
       } catch (e) { /* Not a JSON response */ }
       
-      console.error(`Error from external patch agent API (ID: ${agent_id}):`, errorDetails);
+      console.error(`Error from external update agent API (ID: ${agent_id}):`, errorDetails);
       return NextResponse.json(
         { error: `Failed to update agent. Status: ${response.status}`, details: errorDetails },
         { status: response.status }
@@ -124,9 +130,9 @@ export async function PATCH(
     return NextResponse.json(data);
 
   } catch (error) {
-    console.error(`Error proxying patch agent request (ID: ${agent_id}):`, error);
+    console.error(`Error proxying update agent request (ID: ${agent_id}):`, error);
     return NextResponse.json(
-      { error: 'Failed to proxy patch request to the agents API.' },
+      { error: 'Failed to proxy update request to the agents API.' },
       { status: 500 }
     );
   }

@@ -12,18 +12,33 @@ import VoicemailDialog from './voicemail-dialog';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 function AppShell({ children }: { children: React.ReactNode }) {
-  const { state, updateAgent } = useCall();
-  const postCall = state.showPostCallSheetForId ? state.callHistory.find(c => c.id === state.showPostCallSheetForId) : null;
+  const { state } = useCall();
+  const postCall = state.showPostCallSheetForId ? state.allCallHistory.find(c => c.id === state.showPostCallSheetForId) : null;
   const pathname = usePathname();
 
-  const showSoftphone = state.currentAgent && pathname !== '/login';
+  const showSoftphone = state.currentAgent && state.currentAgent.role === 'agent' && pathname !== '/login';
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (state.currentAgent && updateAgent) {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (state.currentAgent && state.currentAgent.role === 'agent') {
         const url = `/api/agents/${state.currentAgent.id}`;
         const data = JSON.stringify({ status: 'inactive' });
-        navigator.sendBeacon(url, data);
+        
+        // Use sendBeacon for reliable background sync on unload
+        // Must use Blob for PUT/POST with sendBeacon
+        const blob = new Blob([data], { type: 'application/json' });
+        
+        // Note: The actual method is determined by the browser, but we send a Blob
+        // Our API route will handle this.
+        if (!navigator.sendBeacon(url, blob)) {
+           // Fallback for browsers that don't fully support beacon with blobs or complex requests
+            fetch(url, {
+                method: 'PUT',
+                body: data,
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true
+            });
+        }
       }
     };
 
@@ -32,7 +47,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [state.currentAgent, updateAgent]);
+  }, [state.currentAgent]);
 
   return (
     <>
@@ -42,7 +57,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
       {state.showIncomingCall && state.activeCall && <IncomingCallDialog call={state.activeCall} />}
       {postCall && <PostCallSheet call={postCall} />}
       <VoicemailDialog />
-
     </>
   );
 }

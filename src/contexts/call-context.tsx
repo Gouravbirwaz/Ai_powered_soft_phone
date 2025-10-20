@@ -443,7 +443,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const updateAgent = useCallback(async (agentId: number, data: Partial<Agent>): Promise<boolean> => {
     try {
         const response = await fetch(`/api/agents/${agentId}`, {
-            method: 'PATCH',
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
@@ -687,5 +687,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
