@@ -40,18 +40,14 @@ function AgentLoginTab() {
     const loadAgents = async () => {
       setIsLoading(true);
       setError(null);
-      try {
-        const fetchedAgents = await fetchAgents();
-        if (fetchedAgents && fetchedAgents.length > 0) {
-          setAgents(fetchedAgents.filter(a => a.name !== 'Zackary Beckham' && a.name !== 'Kevin Hong'));
-        } else {
-          setError('No agents found. Please check the backend configuration.');
-        }
-      } catch (e: any) {
-        setError(e.message || 'Failed to fetch agents.');
-      } finally {
-        setIsLoading(false);
+      // No try-catch needed as fetchAgents now handles errors gracefully
+      const fetchedAgents = await fetchAgents();
+      if (fetchedAgents && fetchedAgents.length > 0) {
+        setAgents(fetchedAgents.filter(a => a.name !== 'Zackary Beckham' && a.name !== 'Kevin Hong'));
+      } else {
+        setError('No agents found. Please check the backend connection or add agents.');
       }
+      setIsLoading(false);
     };
     loadAgents();
   }, [fetchAgents]);
@@ -72,7 +68,7 @@ function AgentLoginTab() {
 
   if (error) {
     return (
-      <div className="text-destructive text-center p-4 flex items-center gap-2 justify-center">
+      <div className="text-muted-foreground text-center p-4 flex items-center gap-2 justify-center">
         <AlertCircle className="h-5 w-5" />
         <p>{error}</p>
       </div>
@@ -248,5 +244,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    

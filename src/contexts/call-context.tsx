@@ -375,7 +375,9 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
-        throw new Error(`Failed to fetch agents. Status: ${response.status}`);
+        // Any non-2xx response is considered an issue, but we'll handle it gracefully.
+        console.warn(`Failed to fetch agents. Status: ${response.status}`);
+        return [];
       }
       const data = await response.json();
       const agents = (data.agents || []).map((agent: any) => ({
@@ -385,15 +387,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_AGENTS', payload: agents });
       return agents;
     } catch (error: any) {
+      // Network errors or JSON parsing errors
       console.error("Fetch agents error:", error);
-      toast({
-        variant: 'destructive',
-        title: 'API Error',
-        description: error.message || 'Could not fetch agents.'
-      });
       return [];
     }
-  }, [toast, state.agents]);
+  }, [state.agents]);
 
   const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
     try {
