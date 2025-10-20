@@ -369,13 +369,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast]);
   
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
-    if (state.agents.length > 0) {
-      return state.agents;
-    }
+    // This function will now only be called once due to login page retry logic
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
-        // Any non-2xx response is considered an issue, but we'll handle it gracefully.
         console.warn(`Failed to fetch agents. Status: ${response.status}`);
         return [];
       }
@@ -387,11 +384,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       dispatch({ type: 'SET_AGENTS', payload: agents });
       return agents;
     } catch (error: any) {
-      // Network errors or JSON parsing errors
       console.error("Fetch agents error:", error);
       return [];
     }
-  }, [state.agents]);
+  }, []);
 
   const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
     try {
@@ -457,8 +453,8 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         });
         
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ details: "Failed to update agent." }));
-            throw new Error(error.details || `Failed to update agent. Status: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(errorText || `Failed to update agent. Status: ${response.status}`);
         }
         
         const updatedAgent = await response.json();
@@ -501,7 +497,12 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   const loginAsAgent = useCallback(async (agent: Agent, role: LoginRole) => {
     const agentWithRole = { ...agent, role };
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
-    await updateAgent(agent.id, { status: 'active' });
+    
+    // Only update status for real agents, not hardcoded admins
+    if (role === 'agent') {
+        await updateAgent(agent.id, { status: 'active' });
+    }
+    
     await fetchAllCallHistory();
   }, [fetchAllCallHistory, updateAgent]);
 
@@ -529,7 +530,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [state.allCallHistory, createOrUpdateCallOnBackend, toast]);
 
   const logout = useCallback(async () => {
-    if (currentAgentRef.current) {
+    if (currentAgentRef.current && currentAgentRef.current.role === 'agent') {
       await updateAgent(currentAgentRef.current.id, { status: 'inactive' });
     }
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
