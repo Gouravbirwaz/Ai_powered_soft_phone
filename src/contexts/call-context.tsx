@@ -215,9 +215,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchAllCallHistory = useCallback(async () => {
     // Admin always re-fetches. Agent data is filtered later.
-    if (state.allCallHistory.length > 0 && currentAgentRef.current?.role === 'admin') {
-      return state.allCallHistory;
-    }
     try {
       const url = '/api/twilio/call_logs';
       const response = await fetch(url, { method: 'GET' });
@@ -237,7 +234,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return [];
     }
-  }, [toast, mapCallLog, state.allCallHistory]);
+  }, [toast, mapCallLog]);
 
 
  const createOrUpdateCallOnBackend = useCallback(async (call: Call | null) => {
@@ -693,3 +690,5 @@ export const useCall = () => {
   }
   return context;
 };
+
+    
