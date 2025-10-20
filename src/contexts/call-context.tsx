@@ -373,9 +373,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast]);
   
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
-    if (state.agents.length > 0) {
-      return state.agents;
-    }
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
@@ -393,7 +390,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       console.error("Fetch agents error:", error);
       return [];
     }
-  }, [state.agents]);
+  }, []);
 
   const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
     try {
