@@ -23,6 +23,7 @@ import type { Lead } from '@/lib/types';
 import { Mail, Phone, Voicemail, RefreshCw } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from './ui/badge';
 
 const LEADS_PER_PAGE = 5;
 
@@ -93,6 +94,10 @@ export default function LeadsDialog({
     onRefreshLeads();
   }
 
+  const isLeadContacted = (leadId: string) => {
+    return state.allCallHistory.some(call => call.leadId === leadId);
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[70vh] flex flex-col pt-4">
@@ -114,50 +119,56 @@ export default function LeadsDialog({
             </TableHeader>
             <TableBody>
               {paginatedLeads.length > 0 ? (
-                paginatedLeads.map((lead) => (
-                  <TableRow key={lead.lead_id} className="h-16">
-                    <TableCell>
-                      <div className="font-medium">{lead.company}</div>
-                      <div className="text-sm text-muted-foreground">{lead.website}</div>
-                    </TableCell>
-                    <TableCell>{lead.phoneNumber || lead.companyPhone}</TableCell>
-                    <TableCell>{lead.email}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCall(lead)}
-                          disabled={!!state.activeCall}
-                          className="whitespace-nowrap"
-                        >
-                          <Phone className="mr-2 h-4 w-4" />
-                          Call
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleVoicemail(lead)}
-                           disabled={!!state.activeCall}
-                          className="whitespace-nowrap"
-                        >
-                          <Voicemail className="mr-2 h-4 w-4" />
-                          Voicemail
-                        </Button>
-                        <Button
+                paginatedLeads.map((lead) => {
+                  const contacted = isLeadContacted(lead.lead_id);
+                  return (
+                    <TableRow key={lead.lead_id} className="h-16">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{lead.company}</span>
+                          {contacted && <Badge variant="secondary">Contacted</Badge>}
+                        </div>
+                        <div className="text-sm text-muted-foreground">{lead.website}</div>
+                      </TableCell>
+                      <TableCell>{lead.phoneNumber || lead.companyPhone}</TableCell>
+                      <TableCell>{lead.email}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 justify-end">
+                          <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleEmail(lead)}
-                            disabled={!lead.email || !!state.activeCall}
+                            onClick={() => handleCall(lead)}
+                            disabled={!!state.activeCall || contacted}
                             className="whitespace-nowrap"
-                        >
-                            <Mail className="mr-2 h-4 w-4" />
-                            Email
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          >
+                            <Phone className="mr-2 h-4 w-4" />
+                            Call
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleVoicemail(lead)}
+                            disabled={!!state.activeCall || contacted}
+                            className="whitespace-nowrap"
+                          >
+                            <Voicemail className="mr-2 h-4 w-4" />
+                            Voicemail
+                          </Button>
+                          <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEmail(lead)}
+                              disabled={!lead.email || !!state.activeCall || contacted}
+                              className="whitespace-nowrap"
+                          >
+                              <Mail className="mr-2 h-4 w-4" />
+                              Email
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={4} className="h-24 text-center">
