@@ -20,24 +20,26 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Only run this for logged-in agents
       if (state.currentAgent && state.currentAgent.role === 'agent') {
         const url = `/api/agents/${state.currentAgent.id}`;
         const data = JSON.stringify({ status: 'inactive' });
-        
-        // Use sendBeacon for reliable background sync on unload
-        // Must use Blob for PUT/POST with sendBeacon
-        const blob = new Blob([data], { type: 'application/json' });
-        
-        // Note: The actual method is determined by the browser, but we send a Blob
-        // Our API route will handle this.
-        if (!navigator.sendBeacon(url, blob)) {
-           // Fallback for browsers that don't fully support beacon with blobs or complex requests
-            fetch(url, {
-                method: 'PUT',
-                body: data,
-                headers: { 'Content-Type': 'application/json' },
-                keepalive: true
-            });
+
+        // Use fetch with keepalive to ensure the request is sent
+        // even when the page is closing. This is more reliable than sendBeacon
+        // for PUT/POST requests.
+        try {
+          fetch(url, {
+            method: 'PUT',
+            body: data,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            keepalive: true,
+          });
+        } catch (error) {
+            // This might fail if the browser blocks it, but it's our best effort
+            console.error('Error sending final status update:', error);
         }
       }
     };
