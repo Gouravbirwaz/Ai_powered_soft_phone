@@ -78,8 +78,20 @@ const evaluateAgentPerformanceFlow = ai.defineFlow(
     outputSchema: EvaluateAgentPerformanceOutputSchema,
   },
   async (input) => {
-    // Filter out unnecessary fields to keep the prompt clean and focused
-    const cleanCalls = input.calls.map(call => ({
+    // Filter for actual phone calls, excluding logged emails or voicemails without interaction.
+    const actualCalls = input.calls.filter(call => 
+        call.status !== 'emailed' && call.status !== 'voicemail-dropped'
+    );
+
+    if (actualCalls.length === 0) {
+        return { 
+            evaluation: `No actual call data available for ${input.agentName}. AI analysis requires at least one completed phone call.`, 
+            score: 0 
+        };
+    }
+
+    // Further clean the data for the prompt
+    const cleanCalls = actualCalls.map(call => ({
         id: call.id,
         direction: call.direction,
         status: call.status,
@@ -87,10 +99,6 @@ const evaluateAgentPerformanceFlow = ai.defineFlow(
         notes: call.notes,
         summary: call.summary,
     }));
-
-    if (cleanCalls.length === 0) {
-        return { evaluation: `No call data available for ${input.agentName}. Unable to generate an evaluation.`, score: 0 };
-    }
 
     const { output } = await prompt({ agentName: input.agentName, callDataJson: JSON.stringify(cleanCalls) });
     return output!;
