@@ -161,7 +161,8 @@ function AdminLoginTab() {
 
     if (validCredentials[lowerCaseEmail] && validCredentials[lowerCaseEmail] === password) {
         const allAgents = await fetchAgents();
-        const adminUser = allAgents.find(a => a.role === 'admin' && a.email.toLowerCase() === lowerCaseEmail);
+        // Find the user by email, don't rely on role from the backend for this check
+        const adminUser = allAgents.find(a => a.email.toLowerCase() === lowerCaseEmail);
         
         if (adminUser) {
             await loginAsAgent(adminUser, 'admin');
