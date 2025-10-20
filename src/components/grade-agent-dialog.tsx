@@ -29,12 +29,12 @@ export default function GradeAgentDialog({
   onOpenChange,
   onSave,
 }: GradeAgentDialogProps) {
-  const [score, setScore] = useState(agent?.score_given || 5);
+  const [score, setScore] = useState(agent?.score || 5);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (agent) {
-      setScore(agent.score_given || 5);
+      setScore(agent.score || 5);
     }
   }, [agent]);
 

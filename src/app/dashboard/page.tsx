@@ -84,7 +84,7 @@ export default function DashboardPage() {
         
         const stats: AgentStats[] = (agents || []).map((agent: Agent) => ({
           ...agent,
-          score_given: agent.score_given,
+          score: agent.score,
           calls: (calls || []).filter((c: Call) => String(c.agentId) === String(agent.id)),
           evaluation: '',
           aiSuggestedScore: 0,
@@ -106,11 +106,11 @@ export default function DashboardPage() {
   }, [state.currentAgent, loadData]);
 
   const sortedAgentStats = useMemo(() => {
-    return [...agentStats].sort((a, b) => (b.score_given || 0) - (a.score_given || 0));
+    return [...agentStats].sort((a, b) => (b.score || 0) - (a.score || 0));
   }, [agentStats]);
 
   const topPerformerId = useMemo(() => {
-    if (sortedAgentStats.length > 0 && (sortedAgentStats[0].score_given || 0) > 0) {
+    if (sortedAgentStats.length > 0 && (sortedAgentStats[0].score || 0) > 0) {
       return sortedAgentStats[0].id;
     }
     return null;
@@ -141,7 +141,7 @@ export default function DashboardPage() {
         const success = await updateAgentScore(agentId, score);
         if (success) {
             setAgentStats(prevStats => prevStats.map(stat =>
-              stat.id === agentId ? { ...stat, score_given: score } : stat
+              stat.id === agentId ? { ...stat, score: score } : stat
             ));
             setAgentToGrade(null); // Close dialog on success
         }
@@ -322,7 +322,7 @@ export default function DashboardPage() {
                                 <div className="flex items-center gap-1 text-primary ml-4">
                                 <Star className="h-5 w-5" />
                                 <span className="text-lg font-bold">
-                                  {(agent.score_given || 0).toFixed(1)}
+                                  {(agent.score || 0).toFixed(1)}
                                 </span>
                                 </div>
                             </div>

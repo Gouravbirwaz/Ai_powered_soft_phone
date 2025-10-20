@@ -209,7 +209,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       contactName: log.contact_name,
       followUpRequired: log.follow_up_required || false,
       callAttemptNumber: log.call_attempt_number || 1,
-      score_given: log.score_given,
+      score: log.score,
     };
   }, []);
 
@@ -376,7 +376,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         email: agent.email,
         phone: agent.phone,
         status: agent.status,
-        score_given: agent.score_given,
+        score: agent.score,
       }));
       dispatch({ type: 'SET_AGENTS', payload: agents });
       return agents;
@@ -482,7 +482,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const updatedAgent = await response.json();
-        dispatch({ type: 'UPDATE_AGENT', payload: { agent: { id: agentId, score_given: updatedAgent.score_given } } });
+        dispatch({ type: 'UPDATE_AGENT', payload: { agent: { id: agentId, score: updatedAgent.new_score } } });
         toast({ title: 'Score Saved', description: 'The agent\'s score has been updated.' });
         return true;
     } catch (error: any) {
