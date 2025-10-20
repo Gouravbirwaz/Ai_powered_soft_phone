@@ -151,18 +151,27 @@ function AdminLoginTab() {
     e.preventDefault();
     setError(null);
     setIsLoggingIn(true);
-    
-    // Fetch agents to find the admin user
-    const allAgents = await fetchAgents();
-    const adminUser = allAgents.find(a => a.role === 'admin' && a.email.toLowerCase() === email.toLowerCase());
 
-    // This is a simplified, insecure password check for demo purposes.
-    // In a real app, you would send the credentials to a backend for verification.
-    if (adminUser && password === `${adminUser.name.split(' ')[0].toLowerCase()}@caprae123`) {
-      await loginAsAgent(adminUser, 'admin');
+    const validCredentials: { [email: string]: string } = {
+        'zack@capraecapital.com': 'zack@caprae123',
+        'kevin@capraecapital.com': 'kevin@caprae123',
+    };
+
+    const lowerCaseEmail = email.toLowerCase();
+
+    if (validCredentials[lowerCaseEmail] && validCredentials[lowerCaseEmail] === password) {
+        const allAgents = await fetchAgents();
+        const adminUser = allAgents.find(a => a.role === 'admin' && a.email.toLowerCase() === lowerCaseEmail);
+        
+        if (adminUser) {
+            await loginAsAgent(adminUser, 'admin');
+        } else {
+            setError('Admin user profile not found. Please contact support.');
+            setIsLoggingIn(false);
+        }
     } else {
-      setError('Invalid email or password.');
-      setIsLoggingIn(false);
+        setError('Invalid email or password.');
+        setIsLoggingIn(false);
     }
   };
   
@@ -186,7 +195,7 @@ function AdminLoginTab() {
           id="password"
           type="password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.targe.value)}
           required
           disabled={isLoggingIn}
         />
