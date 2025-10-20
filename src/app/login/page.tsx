@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-const MAX_FETCH_ATTEMPTS = 10;
+const MAX_FETCH_ATTEMPTS = 5;
 
 function AgentLoginTab() {
   const { loginAsAgent, state, fetchAgents } = useCall();
@@ -80,7 +80,7 @@ function AgentLoginTab() {
       <div className="flex flex-col justify-center items-center p-8 text-center">
         <Loader2 className="h-8 w-8 animate-spin" />
         <p className="text-sm text-muted-foreground mt-2">
-            Connecting to agent service... (Attempt {fetchAttempt + 1}/{MAX_FETCH_ATTEMPTS})
+            Connecting to agent service...
         </p>
       </div>
     );
