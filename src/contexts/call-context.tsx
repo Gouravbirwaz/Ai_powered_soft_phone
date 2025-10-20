@@ -243,12 +243,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         return null;
     }
     const agentId = call.agentId || currentAgentRef.current?.id;
-
-    // Prevent sending logs for hardcoded admin users
-    if (agentId && [998, 999].includes(Number(agentId))) {
-        console.log(`Bypassing call log for admin user ${agentId}.`);
-        return call; // Return the call data without saving to backend
-    }
     
     const phoneNumber = call.direction === 'outgoing' ? call.to : call.from;
     
@@ -373,21 +367,29 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     try {
       const response = await fetch('/api/agents');
       if (!response.ok) {
-        console.warn(`Failed to fetch agents. Status: ${response.status}`);
-        return [];
+        throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      const agents = (data.agents || []).map((agent: any) => ({
-        ...agent,
+      const agents: Agent[] = (data.agents || []).map((agent: any) => ({
+        id: agent.id,
+        name: agent.name,
+        email: agent.email,
+        phone: agent.phone,
+        status: agent.status,
         score_given: agent.score_given,
-      })) as Agent[];
+      }));
       dispatch({ type: 'SET_AGENTS', payload: agents });
       return agents;
     } catch (error: any) {
       console.error("Fetch agents error:", error);
+      toast({
+        variant: 'destructive',
+        title: 'API Error',
+        description: error.message || 'Could not fetch agents.'
+      });
       return [];
     }
-  }, []);
+  }, [toast]);
 
   const addAgent = useCallback(async (agentData: NewAgent): Promise<boolean> => {
     try {
@@ -690,5 +692,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
