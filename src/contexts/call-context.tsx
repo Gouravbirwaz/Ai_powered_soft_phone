@@ -704,8 +704,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // On success, save credentials
-      localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(creds));
-      dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: creds });
+      if (credentials) {
+        localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(credentials));
+        dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: credentials });
+      }
       dispatch({ type: 'SET_SHOW_CREDENTIALS_DIALOG', payload: false });
 
       const data = await response.json();
@@ -714,7 +716,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           company: draft.company,
           companyPhone: draft.phone,
           email: draft.email,
-          website: draft.website, // This may not exist in the response
+          website: draft.website,
       }));
 
       toast({ title: "Success", description: `Fetched ${leads.length} favorite leads.` });
