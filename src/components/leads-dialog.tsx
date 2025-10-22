@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useCall } from '@/contexts/call-context';
 import type { Lead } from '@/lib/types';
-import { Mail, Phone, Voicemail, RefreshCw } from 'lucide-react';
+import { Mail, Phone, Voicemail, RefreshCw, Loader2, Star } from 'lucide-react';
 import { useEffect, useState, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
@@ -38,9 +38,10 @@ export default function LeadsDialog({
   leads: Lead[];
   onRefreshLeads: () => void;
 }) {
-  const { startOutgoingCall, state, openVoicemailDialogForLead, sendMissedCallEmail } = useCall();
+  const { state, startOutgoingCall, openVoicemailDialogForLead, sendMissedCallEmail, fetchFavoriteLeads } = useCall();
   const [currentPage, setCurrentPage] = useState(1);
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const [isFetchingFavorites, setIsFetchingFavorites] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -50,8 +51,10 @@ export default function LeadsDialog({
   useEffect(() => {
     if(open) {
       setCurrentPage(1);
+      // Reset to initial leads when dialog opens, in case favorites were fetched before
+      setLeads(initialLeads);
     }
-  }, [open, leads]);
+  }, [open, initialLeads]);
 
   const totalPages = Math.ceil(leads.length / LEADS_PER_PAGE);
 
@@ -94,6 +97,16 @@ export default function LeadsDialog({
     onRefreshLeads();
   }
 
+  const handleFetchFavorites = async () => {
+    setIsFetchingFavorites(true);
+    const favoriteLeads = await fetchFavoriteLeads();
+    if (favoriteLeads) {
+      setLeads(favoriteLeads);
+      setCurrentPage(1); // Reset to first page of new leads
+    }
+    setIsFetchingFavorites(false);
+  }
+
   const isLeadContacted = (leadId: string) => {
     return state.allCallHistory.some(call => call.leadId === leadId);
   }
@@ -104,7 +117,7 @@ export default function LeadsDialog({
         <DialogHeader>
           <DialogTitle>Available Leads</DialogTitle>
           <DialogDescription>
-            Select a lead from the list to initiate an action.
+            Select a lead from the list to initiate an action, or fetch your favorite drafts.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-auto">
@@ -180,14 +193,25 @@ export default function LeadsDialog({
           </Table>
         </div>
         <DialogFooter className="pt-4 border-t flex justify-between w-full">
-          <Button
-              variant="outline"
+          <div className="flex gap-2">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Upload New CSV
+              </Button>
+            <Button
+              variant="default"
               size="sm"
-              onClick={handleRefresh}
+              onClick={handleFetchFavorites}
+              disabled={isFetchingFavorites}
             >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Upload New CSV
+              {isFetchingFavorites ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Star className="mr-2 h-4 w-4" />}
+              Fetch Favorite Drafts
             </Button>
+          </div>
           <div className="flex items-center justify-end space-x-2">
             <span className="text-sm text-muted-foreground">
               Page {currentPage} of {totalPages > 0 ? totalPages : 1}

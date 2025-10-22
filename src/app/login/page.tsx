@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useCall } from '@/contexts/call-context';
 import type { Agent } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -15,126 +15,72 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { Loader2, User, AlertCircle, ShieldCheck, Phone } from 'lucide-react';
+import { Loader2, AlertCircle, ShieldCheck, Phone } from 'lucide-react';
 import Image from 'next/image';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 function AgentLoginTab() {
-  const { loginAsAgent, state, fetchAgents } = useCall();
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { loginWithPassword } = useCall();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [attempts, setAttempts] = useState(0);
-  const router = useRouter();
+  const { toast } = useToast();
 
-  useEffect(() => {
-    if (state.currentAgent && state.currentAgent.role === 'agent') {
-      router.replace('/');
-    }
-  }, [state.currentAgent, router]);
-
-  const loadAgents = useCallback(async () => {
-    if (attempts >= 5) {
-      setError('No agents found. Please check the backend configuration.');
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsLoggingIn(true);
     setError(null);
-    try {
-      const fetchedAgents = await fetchAgents();
-      if (fetchedAgents && fetchedAgents.length > 0) {
-        setAgents(fetchedAgents.filter(a => a.name !== 'Zackary Beckham' && a.name !== 'Kevin Hong'));
-        setIsLoading(false);
-      } else {
-        // If fetchAgents returns empty, it might be a temporary issue.
-        setTimeout(() => {
-            setAttempts(prev => prev + 1);
-        }, 2000); // Wait 2 seconds before retrying
-      }
-    } catch (e: any) {
-       setTimeout(() => {
-            setAttempts(prev => prev + 1);
-        }, 2000);
+
+    const success = await loginWithPassword(email, password);
+    
+    if (success) {
+        toast({ title: "Login Successful", description: "Welcome back!" });
+        // The context will handle navigation via useEffect
+    } else {
+        setError('Invalid credentials or agent not found.');
+        setIsLoggingIn(false);
     }
-  }, [fetchAgents, attempts]);
-
-  useEffect(() => {
-    loadAgents();
-  }, [attempts, loadAgents]);
-
-  const handleLogin = async (agent: Agent) => {
-    setIsLoggingIn(agent.id);
-    await loginAsAgent(agent, 'agent');
   };
 
-  if (isLoading && !error) {
-    return (
-      <div className="flex justify-center items-center p-8 h-64">
-        <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <p className="text-sm text-muted-foreground">Loading agents...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-destructive text-center p-4 flex items-center gap-2 justify-center h-64">
-        <AlertCircle className="h-5 w-5" />
-        <p>{error}</p>
-      </div>
-    );
-  }
-  
-  if (agents.length === 0) {
-     return (
-      <div className="text-muted-foreground text-center p-4 flex items-center gap-2 justify-center h-64">
-        <User className="h-5 w-5" />
-        <p>No agents available to log in.</p>
-      </div>
-    );
-  }
-
   return (
-    <ScrollArea className="h-64">
-      <div className="space-y-2 pr-4">
-        {agents.map((agent) => (
-          <Card key={agent.id} className="p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <Avatar>
-                  <AvatarFallback>
-                      <User />
-                  </AvatarFallback>
-                 </Avatar>
-                 <div>
-                     <p className="font-semibold">{agent.name}</p>
-                     <p className="text-sm text-muted-foreground">{agent.email}</p>
-                 </div>
-              </div>
-              <Button
-                size="sm"
-                onClick={() => handleLogin(agent)}
-                disabled={isLoggingIn !== null}
-                className="w-24"
-              >
-                {isLoggingIn === agent.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Login'
-                )}
-              </Button>
-            </div>
-          </Card>
-        ))}
+     <form onSubmit={handleLogin} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="agent-email">Email</Label>
+        <Input
+          id="agent-email"
+          type="email"
+          placeholder="agent@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={isLoggingIn}
+        />
       </div>
-    </ScrollArea>
+      <div className="space-y-2">
+        <Label htmlFor="agent-password">Password</Label>
+        <Input
+          id="agent-password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={isLoggingIn}
+        />
+      </div>
+      {error && (
+        <div className="text-destructive text-sm flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          {error}
+        </div>
+      )}
+      <Button type="submit" className="w-full" disabled={isLoggingIn}>
+        {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Login as Agent
+      </Button>
+    </form>
   );
 }
 

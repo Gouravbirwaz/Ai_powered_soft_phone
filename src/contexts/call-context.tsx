@@ -34,6 +34,7 @@ interface CallState {
   showPostCallSheetForId: string | null;
   voicemailLeadTarget: Lead | null;
   currentAgent: Agent | null;
+  sessionCredentials: { email: string; password?: string; } | null;
 }
 
 type CallAction =
@@ -55,6 +56,7 @@ type CallAction =
   | { type: 'OPEN_VOICEMAIL_DIALOG'; payload: { lead: Lead } }
   | { type: 'CLOSE_VOICEMAIL_DIALOG' }
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } }
+  | { type: 'SET_SESSION_CREDENTIALS'; payload: { email: string; password?: string; } | null; }
   | { type: 'SHOW_INCOMING_CALL'; payload: boolean };
 
 const initialState: CallState = {
@@ -67,6 +69,7 @@ const initialState: CallState = {
   showPostCallSheetForId: null,
   voicemailLeadTarget: null,
   currentAgent: null,
+  sessionCredentials: null,
 };
 
 const callReducer = (state: CallState, action: CallAction): CallState => {
@@ -160,6 +163,8 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return { ...state, voicemailLeadTarget: null };
     case 'SET_CURRENT_AGENT':
         return { ...state, currentAgent: action.payload.agent };
+    case 'SET_SESSION_CREDENTIALS':
+        return { ...state, sessionCredentials: action.payload };
     case 'SHOW_INCOMING_CALL':
       return { ...state, showIncomingCall: action.payload };
     default:
@@ -237,6 +242,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
   const fetchAllCallHistory = useCallback(async () => {
+    // Caching logic
     if (state.allCallHistory.length > 0) {
         return state.allCallHistory;
     }
@@ -369,6 +375,15 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         dispatch({ type: 'SET_ACTIVE_CALL', payload: { call: failedCall } });
     }
   }, [toast]);
+
+  const mapAgent = useCallback((agent: any): Agent => ({
+    id: agent.id,
+    name: agent.name,
+    email: agent.email,
+    phone: agent.phone,
+    status: agent.status,
+    score: agent.score,
+  }), []);
   
   const forceFetchAgents = useCallback(async () => {
     try {
@@ -377,14 +392,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`Failed to fetch agents. Status: ${response.status}`);
       }
       const data = await response.json();
-      const agents: Agent[] = (data.agents || []).map((agent: any) => ({
-        id: agent.id,
-        name: agent.name,
-        email: agent.email,
-        phone: agent.phone,
-        status: agent.status,
-        score: agent.score,
-      }));
+      const agents: Agent[] = (data.agents || []).map(mapAgent);
       dispatch({ type: 'SET_AGENTS', payload: agents });
       return agents;
     } catch (error: any) {
@@ -396,9 +404,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
       return [];
     }
-  }, [toast]);
+  }, [toast, mapAgent]);
 
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
+    // Caching logic
     if (state.agents.length > 0) {
         return state.agents;
     }
@@ -521,6 +530,29 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
   }, [forceFetchAllCallHistory, forceFetchAgents, updateAgent]);
 
+  const loginWithPassword = useCallback(async (email: string, password_provided: string): Promise<boolean> => {
+      // Find agent from the fetched list
+      let agents = state.agents;
+      if (agents.length === 0) {
+          agents = await forceFetchAgents();
+      }
+      
+      const agent = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
+
+      if (agent) {
+          // This is a mock authentication check. In a real app, you'd send
+          // the password to the backend to be verified.
+          // For now, we just check if an agent with the email exists.
+          dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: { email, password: password_provided } });
+          await loginAsAgent(agent, 'agent');
+          return true;
+      }
+
+      return false;
+
+  }, [state.agents, forceFetchAgents, loginAsAgent]);
+
+
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
     
@@ -550,6 +582,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       await updateAgent(currentAgentRef.current.id, { status: 'inactive' });
     }
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
+    dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: null });
     dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_ALL_CALL_HISTORY', payload: [] });
     dispatch({ type: 'SET_AGENTS', payload: [] });
@@ -651,6 +684,44 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Email Failed', description: error.message, variant: 'destructive' });
     });
   }, [createOrUpdateCallOnBackend, toast, forceFetchAllCallHistory]);
+
+    const fetchFavoriteLeads = useCallback(async (): Promise<Lead[]> => {
+    if (!state.sessionCredentials?.email || !state.sessionCredentials?.password) {
+      toast({ title: "Authentication Error", description: "No user credentials found for fetching favorite leads.", variant: 'destructive' });
+      return [];
+    }
+
+    try {
+      const response = await fetch('/api/leads/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.sessionCredentials),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.details || error.error || 'Failed to fetch favorite leads.');
+      }
+
+      const data = await response.json();
+      
+      const leads = (data.drafts || []).map((draft: any) => ({
+          lead_id: draft.draft_id,
+          company: draft.name,
+          companyPhone: draft.phone_number,
+          email: draft.email,
+          website: draft.website,
+      }));
+
+      toast({ title: "Success", description: `Fetched ${leads.length} favorite leads.` });
+      return leads;
+
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Fetch Failed', description: error.message });
+      return [];
+    }
+  }, [state.sessionCredentials, toast]);
+
   
   const endActiveCall = useCallback((status: CallStatus = 'completed') => {
       const { activeCall } = state;
@@ -685,6 +756,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       updateAgentScore,
       fetchAllCallHistory,
       loginAsAgent,
+      loginWithPassword,
       logout,
       startOutgoingCall,
       endActiveCall,
@@ -692,6 +764,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       openVoicemailDialogForLead,
       sendVoicemail,
       sendMissedCallEmail,
+      fetchFavoriteLeads,
     }}>
       {children}
     </CallContext.Provider>
@@ -705,5 +778,3 @@ export const useCall = () => {
   }
   return context;
 };
-
-    
