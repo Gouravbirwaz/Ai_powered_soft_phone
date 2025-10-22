@@ -15,72 +15,95 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, ShieldCheck, Phone } from 'lucide-react';
+import { Loader2, AlertCircle, ShieldCheck, Phone, User } from 'lucide-react';
 import Image from 'next/image';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 function AgentLoginTab() {
-  const { loginWithPassword } = useCall();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { loginAsAgent, state, fetchAgents } = useCall();
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [isLoggingIn, setIsLoggingIn] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
 
-  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsLoggingIn(true);
-    setError(null);
+  useEffect(() => {
+    const loadAgents = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        if (fetchAgents) {
+            const fetchedAgents = await fetchAgents();
+            if (fetchedAgents && fetchedAgents.length > 0) {
+              setAgents(fetchedAgents);
+            } else {
+              setError('No agents found. Please check the backend configuration.');
+            }
+        }
+      } catch (e: any) {
+        setError(e.message || 'Failed to fetch agents.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadAgents();
+  }, [fetchAgents]);
 
-    const success = await loginWithPassword(email, password);
-    
-    if (success) {
-        toast({ title: "Login Successful", description: "Welcome back!" });
-        // The context will handle navigation via useEffect
-    } else {
-        setError('Invalid credentials or agent not found.');
-        setIsLoggingIn(false);
+  const handleLogin = async (agent: Agent) => {
+    setIsLoggingIn(agent.id);
+    if(loginAsAgent) {
+        await loginAsAgent(agent, 'agent');
     }
   };
 
   return (
-     <form onSubmit={handleLogin} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="agent-email">Email</Label>
-        <Input
-          id="agent-email"
-          type="email"
-          placeholder="agent@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          disabled={isLoggingIn}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="agent-password">Password</Label>
-        <Input
-          id="agent-password"
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          disabled={isLoggingIn}
-        />
-      </div>
-      {error && (
-        <div className="text-destructive text-sm flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
-          {error}
+    <div className="space-y-4">
+      {isLoading ? (
+        <div className="flex justify-center items-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
+      ) : error ? (
+        <div className="text-destructive text-center p-4 flex items-center gap-2 justify-center">
+          <AlertCircle className="h-5 w-5" />
+          <p>{error}</p>
+        </div>
+      ) : (
+        <ScrollArea className="h-64">
+          <div className="space-y-2 pr-4">
+            {agents.map((agent) => (
+              <Card key={agent.id} className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                     <Avatar>
+                      <AvatarFallback>
+                          <User />
+                      </AvatarFallback>
+                     </Avatar>
+                     <div>
+                         <p className="font-semibold">{agent.name}</p>
+                         <p className="text-sm text-muted-foreground">{agent.email}</p>
+                     </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleLogin(agent)}
+                    disabled={isLoggingIn !== null}
+                    className="w-24"
+                  >
+                    {isLoggingIn === agent.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Login'
+                    )}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </ScrollArea>
       )}
-      <Button type="submit" className="w-full" disabled={isLoggingIn}>
-        {isLoggingIn && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Login as Agent
-      </Button>
-    </form>
+    </div>
   );
 }
 
@@ -120,7 +143,9 @@ function AdminLoginTab() {
     if (expectedPassword && password === expectedPassword) {
       const adminUser = hardcodedAdmins.find(a => a.email.toLowerCase() === lowerCaseEmail);
       if (adminUser) {
-        await loginAsAgent(adminUser, 'admin');
+        if(loginAsAgent) {
+            await loginAsAgent(adminUser, 'admin');
+        }
         // useEffect will handle navigation
       } else {
         // This case should theoretically not happen if credentials are correct

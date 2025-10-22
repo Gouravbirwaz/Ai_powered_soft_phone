@@ -748,23 +748,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       });
   }, [state.activeCall, createOrUpdateCallOnBackend, forceFetchAllCallHistory]);
 
-  const loginWithPassword = useCallback(async (email: string, password: string): Promise<boolean> => {
-    // This is a simplified login. In a real app, this would involve a server call.
-    // We'll find the agent from the fetched list.
-    const agents = await forceFetchAgents();
-    const agent = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
-
-    if (agent) {
-        // Here you would typically verify the password against a backend.
-        // For this demo, we'll assume any password is correct if the email exists.
-        await loginAsAgent(agent, 'agent');
-        return true;
-    }
-    
-    return false;
-}, [forceFetchAgents, loginAsAgent]);
-
-
   return (
     <CallContext.Provider value={{
       state,
@@ -776,7 +759,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       updateAgentScore,
       fetchAllCallHistory,
       loginAsAgent,
-      loginWithPassword,
       logout,
       startOutgoingCall,
       endActiveCall,
