@@ -711,10 +711,10 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       const data = await response.json();
       const leads = (data.drafts || []).map((draft: any) => ({
           lead_id: String(draft.draft_id),
-          company: draft.name,
-          companyPhone: draft.phone_number,
+          company: draft.company,
+          companyPhone: draft.phone,
           email: draft.email,
-          website: draft.website,
+          website: draft.website, // This may not exist in the response
       }));
 
       toast({ title: "Success", description: `Fetched ${leads.length} favorite leads.` });

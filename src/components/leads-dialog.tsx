@@ -134,6 +134,7 @@ export default function LeadsDialog({
               {paginatedLeads.length > 0 ? (
                 paginatedLeads.map((lead) => {
                   const contacted = isLeadContacted(String(lead.lead_id));
+                  const phoneNumber = lead.companyPhone || lead.phoneNumber;
                   return (
                     <TableRow key={lead.lead_id} className="h-16">
                       <TableCell>
@@ -143,7 +144,7 @@ export default function LeadsDialog({
                         </div>
                         <div className="text-sm text-muted-foreground">{lead.website}</div>
                       </TableCell>
-                      <TableCell>{lead.phoneNumber || lead.companyPhone}</TableCell>
+                      <TableCell>{phoneNumber}</TableCell>
                       <TableCell>{lead.email}</TableCell>
                       <TableCell>
                         <div className="flex gap-2 justify-end">
@@ -240,5 +241,3 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
-
-    
