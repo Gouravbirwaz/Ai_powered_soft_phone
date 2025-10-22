@@ -14,6 +14,7 @@ import React, {
 import { useToast } from '@/hooks/use-toast';
 import { formatUSPhoneNumber } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import CredentialsDialog from '@/components/credentials-dialog';
 
 type TwilioDeviceStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
 type LoginRole = 'agent' | 'admin';
@@ -35,6 +36,7 @@ interface CallState {
   voicemailLeadTarget: Lead | null;
   currentAgent: Agent | null;
   sessionCredentials: { email: string; password?: string; } | null;
+  showCredentialsDialog: boolean;
 }
 
 type CallAction =
@@ -57,7 +59,8 @@ type CallAction =
   | { type: 'CLOSE_VOICEMAIL_DIALOG' }
   | { type: 'SET_CURRENT_AGENT'; payload: { agent: Agent | null } }
   | { type: 'SET_SESSION_CREDENTIALS'; payload: { email: string; password?: string; } | null; }
-  | { type: 'SHOW_INCOMING_CALL'; payload: boolean };
+  | { type: 'SHOW_INCOMING_CALL'; payload: boolean }
+  | { type: 'SET_SHOW_CREDENTIALS_DIALOG'; payload: boolean };
 
 const initialState: CallState = {
   callHistory: [],
@@ -70,6 +73,7 @@ const initialState: CallState = {
   voicemailLeadTarget: null,
   currentAgent: null,
   sessionCredentials: null,
+  showCredentialsDialog: false,
 };
 
 const callReducer = (state: CallState, action: CallAction): CallState => {
@@ -167,12 +171,16 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         return { ...state, sessionCredentials: action.payload };
     case 'SHOW_INCOMING_CALL':
       return { ...state, showIncomingCall: action.payload };
+    case 'SET_SHOW_CREDENTIALS_DIALOG':
+        return { ...state, showCredentialsDialog: action.payload };
     default:
       return state;
   }
 };
 
 const CallContext = createContext<any>(null);
+
+const CREDENTIALS_STORAGE_KEY = 'saasquatch-credentials';
 
 export const CallProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(callReducer, initialState);
@@ -182,6 +190,18 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     currentAgentRef.current = state.currentAgent;
   }, [state.currentAgent]);
+  
+  useEffect(() => {
+    try {
+      const storedCreds = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
+      if (storedCreds) {
+        dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: JSON.parse(storedCreds) });
+      }
+    } catch (error) {
+      console.error("Failed to read credentials from localStorage", error);
+      localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
+    }
+  }, []);
 
   const mapCallLog = useCallback((log: any): Call => {
     let summary = log.summary || '';
@@ -242,7 +262,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
 
 
   const fetchAllCallHistory = useCallback(async () => {
-    // Caching logic
     if (state.allCallHistory.length > 0) {
         return state.allCallHistory;
     }
@@ -407,7 +426,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
   }, [toast, mapAgent]);
 
   const fetchAgents = useCallback(async (): Promise<Agent[]> => {
-    // Caching logic
     if (state.agents.length > 0) {
         return state.agents;
     }
@@ -428,7 +446,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
         
         toast({ title: 'Success', description: 'New agent has been added.' });
-        forceFetchAgents(); // Refresh the list
+        forceFetchAgents();
         return true;
 
     } catch (error: any) {
@@ -453,7 +471,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       }
 
       toast({ title: 'Success', description: 'Agent has been deleted.' });
-      forceFetchAgents(); // Refresh the list
+      forceFetchAgents();
       return true;
 
     } catch (error: any) {
@@ -483,7 +501,6 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         dispatch({ type: 'UPDATE_AGENT', payload: { agent: { id: agentId, ...updatedAgent } } });
         return true;
     } catch (error: any) {
-        // Don't show toast for background updates like status changes
         console.error(`Failed to update agent ${agentId}:`, error.message);
         return false;
     }
@@ -503,7 +520,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         }
 
         toast({ title: 'Score Saved', description: 'The agent\'s score has been updated.' });
-        forceFetchAgents(); // Refresh the agent list
+        forceFetchAgents();
         return true;
     } catch (error: any) {
         toast({
@@ -519,39 +536,14 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     const agentWithRole = { ...agent, role };
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: agentWithRole } });
     
-    // Only update status for real agents, not hardcoded admins
     if (role === 'agent') {
         await updateAgent(agent.id, { status: 'active' });
     }
     
-    // Refresh all data on login
     await forceFetchAllCallHistory();
     await forceFetchAgents();
 
   }, [forceFetchAllCallHistory, forceFetchAgents, updateAgent]);
-
-  const loginWithPassword = useCallback(async (email: string, password_provided: string): Promise<boolean> => {
-      // Find agent from the fetched list
-      let agents = state.agents;
-      if (agents.length === 0) {
-          agents = await forceFetchAgents();
-      }
-      
-      const agent = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
-
-      if (agent) {
-          // This is a mock authentication check. In a real app, you'd send
-          // the password to the backend to be verified.
-          // For now, we just check if an agent with the email exists.
-          dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: { email, password: password_provided } });
-          await loginAsAgent(agent, 'agent');
-          return true;
-      }
-
-      return false;
-
-  }, [state.agents, forceFetchAgents, loginAsAgent]);
-
 
   const updateNotesAndSummary = useCallback(async (callId: string, notes: string, summary?: string) => {
     const callToUpdate = state.allCallHistory.find(c => c.id === callId);
@@ -568,7 +560,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       if (savedCall) {
         dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
         toast({ title: 'Notes Saved', description: 'Your call notes have been saved.' });
-        forceFetchAllCallHistory(); // Refresh call history
+        forceFetchAllCallHistory();
       }
       
     } else {
@@ -581,6 +573,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     if (currentAgentRef.current && currentAgentRef.current.role === 'agent') {
       await updateAgent(currentAgentRef.current.id, { status: 'inactive' });
     }
+    localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
     dispatch({ type: 'SET_CURRENT_AGENT', payload: { agent: null } });
     dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: null });
     dispatch({ type: 'SET_CALL_HISTORY', payload: [] });
@@ -629,7 +622,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     .then(savedLog => {
         if (savedLog) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
-            forceFetchAllCallHistory(); // Refresh
+            forceFetchAllCallHistory();
         }
     })
     .catch(error => {
@@ -676,7 +669,7 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
     .then(savedLog => {
         if (savedLog) {
             dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedLog } });
-            forceFetchAllCallHistory(); // Refresh
+            forceFetchAllCallHistory();
         }
     })
     .catch(error => {
@@ -684,29 +677,40 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: 'Email Failed', description: error.message, variant: 'destructive' });
     });
   }, [createOrUpdateCallOnBackend, toast, forceFetchAllCallHistory]);
-
-    const fetchFavoriteLeads = useCallback(async (): Promise<Lead[]> => {
-    if (!state.sessionCredentials?.email || !state.sessionCredentials?.password) {
-      toast({ title: "Authentication Error", description: "No user credentials found for fetching favorite leads.", variant: 'destructive' });
-      return [];
+  
+  const fetchFavoriteLeads = useCallback(async (credentials?: {email: string, password?: string}): Promise<Lead[] | undefined> => {
+    const creds = credentials || state.sessionCredentials;
+    if (!creds?.email || !creds?.password) {
+      dispatch({ type: 'SET_SHOW_CREDENTIALS_DIALOG', payload: true });
+      return;
     }
 
     try {
       const response = await fetch('/api/leads/favorites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state.sessionCredentials),
+        body: JSON.stringify(creds),
       });
 
       if (!response.ok) {
         const error = await response.json();
+        // If auth fails, clear stored creds and re-prompt
+        if (response.status === 401 || response.status === 404) {
+            localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
+            dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: null });
+            dispatch({ type: 'SET_SHOW_CREDENTIALS_DIALOG', payload: true });
+        }
         throw new Error(error.details || error.error || 'Failed to fetch favorite leads.');
       }
 
+      // On success, save credentials
+      localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(creds));
+      dispatch({ type: 'SET_SESSION_CREDENTIALS', payload: creds });
+      dispatch({ type: 'SET_SHOW_CREDENTIALS_DIALOG', payload: false });
+
       const data = await response.json();
-      
       const leads = (data.drafts || []).map((draft: any) => ({
-          lead_id: draft.draft_id,
+          lead_id: String(draft.draft_id),
           company: draft.name,
           companyPhone: draft.phone_number,
           email: draft.email,
@@ -739,10 +743,26 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
           if (savedCall) {
               dispatch({ type: 'UPDATE_IN_HISTORY', payload: { call: savedCall } });
               dispatch({ type: 'OPEN_POST_CALL_SHEET', payload: { callId: savedCall.id } });
-              forceFetchAllCallHistory(); // Refresh
+              forceFetchAllCallHistory();
           }
       });
   }, [state.activeCall, createOrUpdateCallOnBackend, forceFetchAllCallHistory]);
+
+  const loginWithPassword = useCallback(async (email: string, password: string): Promise<boolean> => {
+    // This is a simplified login. In a real app, this would involve a server call.
+    // We'll find the agent from the fetched list.
+    const agents = await forceFetchAgents();
+    const agent = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
+
+    if (agent) {
+        // Here you would typically verify the password against a backend.
+        // For this demo, we'll assume any password is correct if the email exists.
+        await loginAsAgent(agent, 'agent');
+        return true;
+    }
+    
+    return false;
+}, [forceFetchAgents, loginAsAgent]);
 
 
   return (
@@ -767,6 +787,11 @@ export const CallProvider = ({ children }: { children: ReactNode }) => {
       fetchFavoriteLeads,
     }}>
       {children}
+      <CredentialsDialog
+        open={state.showCredentialsDialog}
+        onClose={() => dispatch({ type: 'SET_SHOW_CREDENTIALS_DIALOG', payload: false })}
+        onConfirm={fetchFavoriteLeads}
+      />
     </CallContext.Provider>
   );
 };

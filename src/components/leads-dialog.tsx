@@ -133,7 +133,7 @@ export default function LeadsDialog({
             <TableBody>
               {paginatedLeads.length > 0 ? (
                 paginatedLeads.map((lead) => {
-                  const contacted = isLeadContacted(lead.lead_id);
+                  const contacted = isLeadContacted(String(lead.lead_id));
                   return (
                     <TableRow key={lead.lead_id} className="h-16">
                       <TableCell>
@@ -240,3 +240,5 @@ export default function LeadsDialog({
     </Dialog>
   );
 }
+
+    

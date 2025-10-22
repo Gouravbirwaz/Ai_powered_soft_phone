@@ -12,7 +12,7 @@ import VoicemailDialog from './voicemail-dialog';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 function AppShell({ children }: { children: React.ReactNode }) {
-  const { state } = useCall();
+  const { state, updateAgent } = useCall();
   const postCall = state.showPostCallSheetForId ? state.allCallHistory.find(c => c.id === state.showPostCallSheetForId) : null;
   const pathname = usePathname();
 
@@ -21,24 +21,22 @@ function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       // Only run this for logged-in agents
-      if (state.currentAgent && state.currentAgent.role === 'agent') {
+      if (state.currentAgent && state.currentAgent.role === 'agent' && updateAgent) {
+        // Use navigator.sendBeacon for reliability on unload
         const url = `/api/agents/${state.currentAgent.id}`;
         const data = JSON.stringify({ status: 'inactive' });
-
-        // Use fetch with keepalive to ensure the request is sent
-        // even when the page is closing. This is more reliable than sendBeacon
-        // for PUT/POST requests.
+        
+        // sendBeacon is ideal for this, but it only supports POST and specific content types.
+        // A dedicated beacon endpoint on the backend would be best.
+        // As a fallback, we use fetch with keepalive.
         try {
           fetch(url, {
             method: 'PUT',
             body: data,
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             keepalive: true,
           });
         } catch (error) {
-            // This might fail if the browser blocks it, but it's our best effort
             console.error('Error sending final status update:', error);
         }
       }
@@ -49,7 +47,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [state.currentAgent]);
+  }, [state.currentAgent, updateAgent]);
 
   return (
     <>
@@ -73,3 +71,5 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     </CallProvider>
   );
 }
+
+    
