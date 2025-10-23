@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const AGENTS_API_ENDPOINT = `${process.env.BASE_URL}/api/v1/agents`;
+const AGENTS_API_ENDPOINT = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/agents`;
 
 // DELETE handler to remove an agent
 export async function DELETE(
@@ -10,7 +10,7 @@ export async function DELETE(
 ) {
   const { agent_id } = params;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Agents API endpoint is not configured.' },
       { status: 500 }
@@ -73,7 +73,7 @@ export async function PUT(
 ) {
   const { agent_id } = params;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Agents API endpoint is not configured.' },
       { status: 500 }

@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const getFavLeadsEndpoint = `${process.env.BASE_URL}/get_fav_lead`;
+  const getFavLeadsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/get_fav_lead`;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Backend API endpoint is not configured.' },
       { status: 500 }

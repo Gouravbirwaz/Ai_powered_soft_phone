@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Handle GET requests to fetch call logs
 export async function GET(req: NextRequest) {
-  const getCallLogsEndpoint = `${process.env.BASE_URL}/api/v1/get_call_logs`;
+  const getCallLogsEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/get_call_logs`;
   
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Call logs endpoint is not configured in environment variables.' },
       { status: 500 }
@@ -38,9 +38,9 @@ export async function GET(req: NextRequest) {
 
 // Handles POST requests to create or update a call log
 export async function POST(req: NextRequest) {
-    const postCallLogEndpoint = `${process.env.BASE_URL}/api/v1/call_logs`;
+    const postCallLogEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/call_logs`;
   
-    if (!process.env.BASE_URL) {
+    if (!process.env.NEXT_PUBLIC_BASE_URL) {
       return NextResponse.json(
         { error: 'Call logs endpoint is not configured.' },
         { status: 500 }

@@ -1,11 +1,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const AGENTS_API_ENDPOINT = `${process.env.BASE_URL}/api/v1/agents`;
+const AGENTS_API_ENDPOINT = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/agents`;
 
 // GET handler to fetch all agents
 export async function GET(req: NextRequest) {
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Agents API endpoint is not configured.' },
       { status: 500 }
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
 // POST handler to add a new agent
 export async function POST(req: NextRequest) {
-    if (!process.env.BASE_URL) {
+    if (!process.env.NEXT_PUBLIC_BASE_URL) {
         return NextResponse.json(
           { error: 'Agents API endpoint is not configured.' },
           { status: 500 }

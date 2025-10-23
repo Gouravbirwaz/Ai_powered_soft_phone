@@ -2,9 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const sendEmailEndpoint = `${process.env.BASE_URL}/api/v1/send_email`;
+  const sendEmailEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/send_email`;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Email endpoint is not configured.' },
       { status: 500 }

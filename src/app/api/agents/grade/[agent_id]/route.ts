@@ -7,9 +7,9 @@ export async function POST(
   { params }: { params: { agent_id: string } }
 ) {
   const { agent_id } = params;
-  const gradeAgentEndpoint = `${process.env.BASE_URL}/api/v1/grade_agents/${agent_id}`;
+  const gradeAgentEndpoint = `${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/grade_agents/${agent_id}`;
 
-  if (!process.env.BASE_URL) {
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
     return NextResponse.json(
       { error: 'Backend API endpoint is not configured.' },
       { status: 500 }
